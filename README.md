@@ -5,8 +5,8 @@ modes are two-player **Draw**, two-player **Block** and four-player **Partnershi
 played solo against AI or by two humans sharing one device. It runs entirely in
 the browser, with no backend, accounts or online play.
 
-> **Status:** Stage 1 (foundation). The app shows an illustrated placeholder
-> screen; dealing and play come in the next stages. See
+> **Status:** Stage 2. The pure rules engine is complete and tested. The app
+> still shows the Stage 1 placeholder screen, and table UI comes next. See
 > [docs/BUILD_STATUS.md](docs/BUILD_STATUS.md).
 
 ## Setup
@@ -46,10 +46,11 @@ No deployment workflow is set up yet.
 
 ```
 assets/art/        Owner's source art (unaltered, see assets/art/README.md)
-docs/              RULES.md, ASSETS.md, BUILD_STATUS.md
+docs/              RULES.md, ENGINE.md, ASSETS.md, BUILD_STATUS.md
 scripts/           Asset verification + measurement, dist check
 src/engine/        Pure, deterministic, serializable game engine (no DOM)
   rules/presets.ts Versioned rules presets ("Cousin's House Rules" v1)
+  match.ts         Command → state + events state machine (see docs/ENGINE.md)
 src/assets/        Typed asset manifest, runtime URL registry
 src/ui/            Presentation (SVG tiles, sprites, placeholder screen)
 ```

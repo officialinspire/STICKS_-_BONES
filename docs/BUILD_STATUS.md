@@ -79,13 +79,105 @@
   pagat.com pages (checked 2026-11-15) for comparison only.
 - No deployment workflow yet (deploying wasn't authorized for this stage).
 
-## Next stage — Stage 2: Rules engine
+## Stage 2 — Pure rules engine ✅ (2026-11-15)
 
-Build the deterministic hand/match state machine on top of the presets: board
-line with two open ends and crosswise doubles, legal-move generation, forced
-play, draw-until-playable / pass, opening selection for each preset rule (including
-the partnership block-tie and teammate tie-break), out and block detection,
-exactly-once scoring, match target and winner, serializable state with event log,
-and per-seat redacted views (no hidden info). Add exhaustive rule tests plus
-seeded full-game property tests (tile conservation, scoring totals). Leave UI
-wiring, AI and pass-and-play for later stages.
+### Completed
+
+- **State machine** (`src/engine/match.ts`): `createMatch` (validated config +
+  seed → shuffle/deal → opener), `createMatchWithDeal` (explicit deals for tests
+  and tutorials), and `applyCommand(state, command)`, which returns either a
+  validated next state plus presentation events or the untouched state plus a
+  typed error. Also `legalMoves`, `legalMovesForHand`, `availableAction`.
+  Commands: `play`, `draw`, `pass`, `resolve-hand`, `start-next-hand`, each
+  carrying `seq` to guard against stale turns.
+- **Logical line** (`line.ts`): head → tail chain, two open ends, crosswise
+  doubles (never spinners), one placement per matching end (both-end choices
+  stay distinct), canonical tile id kept when flipped (`isFlipped` is a
+  display hint only).
+- **Opening** (`opening.ts`): highest double, else heaviest tile with ties
+  broken by the higher end; double-six holder; previous winner; rotation;
+  seat that went out; lowest member of the winning team with a turn-order
+  tie-break; tie fallbacks. All driven by preset data.
+- **Draw/pass/block/out**: draw one tile at a time only without a legal move,
+  must play a drawn playable tile, pass only with an empty boneyard. Block
+  when every seat passes in a row; plays reset the counter; draws can't trigger
+  a block.
+- **Resolution and scoring** (`scoring.ts`): final hands and totals are collected
+  before anything is cleared, scored exactly once (duplicate resolves are
+  rejected), and the target is checked → `match-over`. `start-next-hand` deals
+  from the persisted RNG and picks the next opener.
+- **Views/events** (`view.ts`, `events.ts`): per-seat redacted `seatView`.
+  `redactEventsForSeat` hides drawn tiles and the opener's required tile from
+  other seats.
+- **Persistence/safety** (`serialize.ts`, `invariants.ts`, `simulate.ts`): JSON
+  save/restore with full re-validation, whole-state invariants, and a bounded
+  seeded simulator whose errors report the seeds needed to replay.
+- **Docs:** new `docs/ENGINE.md` (flow, commands, line model, rule details,
+  hidden information).
+
+### Tests (`npm test` → 123 tests in 9 files, all passing)
+
+- `line.test.ts` (8): opening placement, head/tail growth, both-end choices
+  (different and equal pips), flip identity, crosswise doubles, blanks and the
+  double-blank, illegal placement and broken-chain detection.
+- `match.test.ts` (47): deal uniqueness/conservation and determinism; opening with
+  the highest double, with no dealt doubles (6‑3 beats 5‑4), Block first hand,
+  partnership double-six; every later-hand opener rule including teammate
+  tie-breaks and tie fallbacks; both-end plays via commands; pass reset and
+  counterclockwise order; forced draw until playable, can't draw/pass with a legal
+  tile, exhausted boneyard with no premature block, no draw in Block; 14
+  command-rejection cases plus replayed/stale commands and no input mutation;
+  Draw out/block, Draw blocked tie, Block out/block/tie, partner going out,
+  partnership block with the opener tie-break, partnership tie → double-six;
+  exactly-once resolution; threshold crossing, exact target, falling short, and
+  a 100-point partnership target; hidden-information views and event redaction.
+- `simulate.test.ts` (12): **7 configs** (all modes; solo, two humans as
+  partners/opponents; 100 and 200 targets) × 120 seeded matches. An **independent
+  oracle** re-derives scoring and next opener straight from RULES.md and checks
+  every hand. Invariants are checked after every command, with caps of 20,000
+  commands per match and 400 hands; every outcome kind (out, block win, tie) is
+  covered. Also: replay determinism, save → JSON → restore mid-hand at 3 points per
+  mode continuing byte-identically, tampered-save rejection, deep-frozen inputs
+  surviving a full match, and the simulator's cap error carrying both seeds.
+
+### Commands run and results
+
+| Command | Result |
+| --- | --- |
+| `npm run typecheck` | pass |
+| `npm run lint` | pass (engine purity rules: no DOM/timers/`Math.random`/UI-asset-audio imports) |
+| `npm test` | pass, 123 tests, ~4 s |
+| `SIM_SEEDS=600 npx vitest run src/engine/simulate.test.ts` | pass, 4,200 matches, ~16 s |
+| `npm run assets:verify`, `npm run build` | pass (no runtime change; bundle unchanged) |
+| Fault injection (temporary, reverted) | Changing Block block-scoring in the preset, flipping the teammate tie-break, or dropping the pass-counter reset each made tests fail (oracle, opener and invariant checks respectively). |
+
+### Decisions recorded
+
+- `resolve-hand` is a separate command, so the UI can reveal hands before scores
+  apply, and so "score once" is enforced by state, not by caller discipline.
+- One `draw` command draws one tile, so the UI can animate each draw. The
+  simulator and AI loop on `availableAction`.
+- On an empty line either end is accepted and recorded as `head`.
+- The opener's required tile is hidden from other seats until it's played. It's
+  public in practice a moment later, but hiding it is the safe default for
+  pass-and-play.
+- Invariants enforce realism in no-draw modes (no hand larger than dealt; hands
+  + line = 28).
+
+### Known issues
+
+- Payload, the large-atlas bleed, the dev-only `minimatch` audit advisory and the
+  missing deploy workflow carry over from Stage 1.
+- `HandResult.finalHands` keeps every hand in `history`. That's fine for local
+  saves, but the UI must only show them after a hand ends (they're public then).
+- Nothing is connected to the UI yet: the screen is still the Stage 1 placeholder.
+
+## Next stage — Stage 3: Table UI and local play
+
+Wire the engine into an accessible table screen: mode/seat/target menu,
+SVG board laid out from the logical chain (crosswise doubles, wrapping), the
+player's hand with legal-move highlighting and end choice when a tile fits
+both ends, draw/pass controls driven by `availableAction`, an event-driven
+animation queue, hand-end reveal and score screen, match end, local save via
+`serializeMatch`, and pass-and-play handoff screens that show no hidden
+information. A simple fair AI (reading `seatView` only) fills AI seats.

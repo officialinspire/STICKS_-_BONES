@@ -1,6 +1,6 @@
 # Agent / contributor notes
 
-Read this file, `docs/BUILD_STATUS.md`, `docs/RULES.md` and `docs/ASSETS.md`
+Read this file, `docs/BUILD_STATUS.md`, `docs/RULES.md`, `docs/ENGINE.md` and `docs/ASSETS.md`
 before you change anything.
 
 ## Ground rules
@@ -17,7 +17,8 @@ before you change anything.
   rules or values from artwork.
 - **Secrets:** hands, stock, seeds and RNG state must never appear in URLs, logs,
   analytics, DOM labels/attributes for hidden tiles, or pass-and-play handoff screens.
-- **Fair AI:** AI receives only its own hand and public information.
+- **Fair AI:** AI receives only `seatView(state, seat)`: its own hand and public information.
+- **State changes only through `applyCommand`.** UI callbacks never edit MatchState.
 - **Source art is immutable:** never edit, re-encode, rename or overwrite files in
   `assets/art/`. Derivatives are new files with their own manifest entries.
   `npm run assets:verify` must pass.
