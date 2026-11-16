@@ -261,11 +261,76 @@
 - Payload is still ≈ 8 MB of PNGs. WebP derivatives are still pending.
 - Carried over: large-atlas bleed, dev-only `minimatch` advisory, no deploy workflow.
 
-## Next stage — Stage 4: Partnership table, persistence and polish
+## Stage 4 — Fair AI (Easy / Normal / Hard) and solo Partnership ✅ (2026-11-16)
 
-Four-seat table (partner opposite, two AI or human seats, team scores), local
-save/resume via `serializeMatch`/`restoreMatch` (stored locally only), an
-event-driven animation queue (slide-in, draw, pass, host gestures from the
-6-frame strips), smarter AI difficulty, settings (table setting picker from
-the seven environments, reduced motion), WebP derivatives, and a GitHub Pages
-deploy workflow if authorized.
+### Completed
+
+- **Sanitized observation** (`src/ai/observation.ts`): own hand, legal moves,
+  public chain and ends, public turn history, tile counts, mode/team/partner info,
+  public rules, scores. It is deep-copied and frozen. Nothing hidden: no other
+  hands, stock, boneyard order, seed or RNG state. ESLint blocks policy code from
+  importing authoritative engine or app modules.
+- **Engine: public action log** (`HandState.log`, state schema v2). Plays, passes
+  with the ends at the time, and who drew (never which tile). Exposed through
+  `SeatView`, and checked by invariants.
+- **Policies** (`src/ai/`):
+  - **Easy:** weighted random.
+  - **Normal:** one-ply heuristic using pip disposal, doubles, suit coverage,
+    opponents' pass voids, partner awareness, endgame weighting and lock-pip
+    estimates.
+  - **Hard:** determinized Monte Carlo, 64 worlds sampled consistently with pass
+    voids and opening exclusions, with greedy rollouts.
+  - Methods are reported honestly (`Decision.method`); see `docs/AI.md`.
+- **Independent AI randomness:** one RNG stream per AI seat from a separate AI
+  seed, never shared with the shuffle.
+- **Runner** (`src/ai/runner.ts`, `worker.ts`): Web Worker in the browser, inline
+  fallback.
+- **GameSession:**
+  - Async AI with `{epoch, seq, seat}` tokens. Reset/exit, pause, load and hand
+    completion invalidate in-flight decisions.
+  - A move applies only when both the decision and the presentation delay are
+    done.
+  - AI commands go through `applyCommand` exactly like human commands.
+  - `pause()` / `resume()` / `load()` added. The table pauses while a confirmation
+    dialog is open or the tab is hidden.
+- **Solo play wired up** against Cousin in Draw and Block, and **solo Partnership**
+  with three AI seats (Luz as your partner, against Cousin and Tío Rafa). Easy /
+  Normal / Hard is chosen in the menu.
+- **4-seat table UI:** partner opposite, opponents left and right, seat chips with
+  counts, turn highlight and "passed / drew / thinking…" badges, team scores and
+  team names, 4-hand results with team pip totals.
+- Dev tools: an independent AI seed field and a "fast AI" delay toggle (dev only).
+- `npm run ai:tournament`: mirrored seeded duels plus decision timing.
+
+### Commands run and results
+
+| Command | Result |
+| --- | --- |
+| `npm run typecheck` / `npm run lint` | pass (including the new AI import restrictions) |
+| `npm test` | pass, **166 tests in 13 files**. New `src/ai/ai.test.ts` (16): observation whitelist with no hidden ids or RNG; **identical decisions after reshuffling all hidden tiles** (60+ positions × 3 difficulties); inference soundness against the real hands; sampled worlds respect sizes/voids/exclusions (relaxed < 2%); determinism; AI seed changes choices but not the deal; 9 full matches (3 modes × 3 pairings) with only legal commands; difficulties disagree on real positions; Normal > Easy and Hard > Normal in every mode (mirrored, fixed seeds); Hard < 500 ms; Normal uses an opponent's pass, and in Partnership treats a partner's void and an opponent's void oppositely. Session tests (15) now include full matches in all modes and difficulties, **reset during an AI turn cannot place a ghost tile**, pause/resume moves exactly once, load discards an in-flight decision, and requests carry no hidden data. Engine test for the public log |
+| `npm run ai:tournament` (20 deals) | Normal vs Easy +2.9 / +3.3 / +13.5; Hard vs Normal +10.1 / +0.8 / +1.7; Hard vs Easy +15.2 / +3.6 / +20.2 points per hand (Draw / Block / Partnership). Hard decision time mean 0.9–1.6 ms, worst 15 ms |
+| `npm run assets:verify` / `npm run build` | pass. The worker is emitted as its own chunk |
+| `npm run e2e` | pass. Rounds completed: Draw vs Easy, Block vs Normal, Partnership vs Hard (phone), Partnership vs Normal (desktop), pass-and-play, dev-both. AI ran in a **Web Worker**, with **0 ms** of main-thread long tasks during play. **Restart during Cousin's thinking**: the restarted match stayed at seq 0 with 0 tiles. **Pause**: 0 tiles while the confirmation was open, exactly 1 AI lead after resuming. Every Stage 3 check still passes (pips at all rotations, fixtures, keyboard, hidden tiles) |
+
+### Decisions recorded
+
+- A draw isn't used as evidence (can't separate held from drawn tiles), so the inference stays sound.
+- Partnership is solo-only in the menu for now. The session already supports two humans as partners.
+- The AI seed is separate from the shuffle seed, both in production (two `crypto` seeds) and in the dev panel.
+- State schema bumped to v2 for the public log. No v1 saves exist.
+
+### Known issues
+
+- Hard's sampler is approximately uniform. Rollouts are greedy and assume every seat
+  plays the same simple policy. The edge over Normal is small in Block.
+- No local save/resume UI yet (`GameSession.load` exists). No animation queue, no audio.
+- Partnership with two humans and pass-and-play isn't exposed in the menu.
+- Carried over: ≈ 8 MB PNG payload, large-atlas bleed, dev-only `minimatch` advisory, no deploy workflow.
+
+## Next stage — Stage 5: Persistence, presentation and polish
+
+Local save/resume (`serializeMatch` → localStorage, restored through
+`GameSession.load`), an event-driven animation queue (slide-in, draw, pass, host
+gestures from the 6-frame strips, effect sprites), settings (table setting picker
+from the seven environments, reduced motion, AI speed), two-human Partnership,
+WebP derivatives, and a GitHub Pages deploy workflow if authorized.

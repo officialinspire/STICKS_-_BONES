@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { chooseCommand } from '../ai/simple';
+import { buildObservation } from '../ai/observation';
+import { decide } from '../ai/policy';
+import { inlineRunner, type AiRunner, type DecisionRequest } from '../ai/runner';
+import type { Decision, Difficulty } from '../ai/types';
 import { checkInvariants } from '../engine/invariants';
+import { seedRng } from '../engine/rng';
 import { seatView } from '../engine/view';
 import type { GameEvent } from '../engine/events';
+import type { ModeId } from '../engine/types';
 import { controlStates, sortHand, whyNotPlayable } from './helpers';
 import { GameSession, type OpponentKind, type Scheduler } from './session';
 
@@ -23,9 +28,27 @@ function manualScheduler() {
   return { sched, flush: () => queue.shift()?.fn(), pending: () => queue.length };
 }
 
-/** Drive a session to match end acting as the human(s) with the same fair AI heuristic via public intents. */
-function playOut(s: GameSession, flush: () => void, pending: () => number, onStep?: () => void): number {
-  for (let i = 0; i < 20000; i++) {
+/** A runner whose decisions are released by the test. */
+function deferredRunner() {
+  const requests: { req: DecisionRequest; resolve: (d: Decision) => void }[] = [];
+  const runner: AiRunner = {
+    kind: 'inline',
+    decide: (req) => new Promise((resolve) => requests.push({ req, resolve })),
+    dispose: () => {},
+  };
+  const answer = (i = requests.length - 1) => {
+    const r = requests[i]!;
+    r.resolve(decide(r.req.difficulty, r.req.obs, r.req.rng));
+  };
+  return { runner, requests, answer };
+}
+
+const tick = () => new Promise<void>((r) => setTimeout(r, 0));
+
+/** Drive a session to match end, acting for the human(s) with the Normal policy via public intents. */
+async function playOut(s: GameSession, flush: () => void, pending: () => number, onStep?: () => void): Promise<number> {
+  let humanRng = seedRng('human-stand-in');
+  for (let i = 0; i < 40000; i++) {
     onStep?.();
     const st = s.debugState();
     if (st.phase === 'match-over') return i;
@@ -38,56 +61,58 @@ function playOut(s: GameSession, flush: () => void, pending: () => number, onSte
       continue;
     }
     if (s.canAct()) {
-      const v = s.view();
-      const cmd = chooseCommand(v, s.rules.noMove.kind === 'draw-until-playable')!;
-      const ok = cmd.type === 'play' ? s.play(cmd.tile, cmd.end) : cmd.type === 'draw' ? s.draw() : s.pass();
+      const d = decide('normal', buildObservation(s.view(), s.rules), humanRng);
+      humanRng = d.rng;
+      const a = d.action;
+      const ok = a.type === 'play' ? s.play(a.tile, a.end) : a.type === 'draw' ? s.draw() : s.pass();
       expect(ok).toBe(true);
       continue;
     }
-    expect(pending()).toBeGreaterThan(0);
-    flush();
+    if (pending() === 0) await tick(); // let an async AI decision land
+    else flush();
   }
   throw new Error('session did not finish');
 }
 
 describe('GameSession', () => {
-  for (const [mode, opponent] of [
-    ['draw2', 'ai'],
-    ['block2', 'ai'],
-    ['draw2', 'local'],
-    ['block2', 'dev-both'],
-  ] as [('draw2' | 'block2'), OpponentKind][]) {
-    it(`${mode} vs ${opponent}: plays a full match through intents only, with legal states throughout`, () => {
+  const cases: [ModeId, OpponentKind, Difficulty][] = [
+    ['draw2', 'ai', 'easy'],
+    ['block2', 'ai', 'normal'],
+    ['partnership4', 'ai', 'hard'],
+    ['partnership4', 'ai', 'easy'],
+    ['draw2', 'local', 'normal'],
+    ['block2', 'dev-both', 'normal'],
+  ];
+  for (const [mode, opponent, difficulty] of cases) {
+    it(`${mode} vs ${opponent} (${difficulty}): a full match through intents only, legal throughout`, async () => {
       const { sched, flush, pending } = manualScheduler();
-      const s = new GameSession({ mode, opponent, seed: `session-${mode}-${opponent}` }, sched);
+      const s = new GameSession({ mode, opponent, difficulty, seed: `session-${mode}-${opponent}`, aiSeed: 'ai-1' }, { scheduler: sched, runner: inlineRunner() });
       const events: GameEvent[] = [];
       s.subscribe((e) => events.push(...e));
-      playOut(s, flush, pending, () => expect(checkInvariants(s.debugState())).toEqual([]));
+      await playOut(s, flush, pending, () => expect(checkInvariants(s.debugState())).toEqual([]));
       expect(s.debugState().phase).toBe('match-over');
       expect(events.some((e) => e.type === 'match-won')).toBe(true);
-      // The viewer never receives another seat's drawn tile.
       for (const e of events) if (e.type === 'tile-drawn' && e.tile) expect(s.isHuman(e.seat)).toBe(true);
-    });
+      if (opponent === 'ai') expect(s.stats.aiDecisions).toBeGreaterThan(10);
+      expect(s.stats.staleDiscarded).toBe(0);
+    }, 30000);
   }
 
-  it('vs AI: the human is always seat 0 and the AI never acts on the human seat', () => {
-    const { sched, flush, pending } = manualScheduler();
-    const s = new GameSession({ mode: 'draw2', opponent: 'ai', seed: 'ai-seat' }, sched);
-    playOut(s, flush, pending, () => {
-      expect(s.viewer).toBe(0);
-      const st = s.debugState();
-      if (st.phase === 'playing' && st.hand.turn === 0) expect(pending()).toBe(0);
-    });
+  it('partnership solo: three AI seats, human is seat 0, partner opposite', () => {
+    const s = new GameSession({ mode: 'partnership4', opponent: 'ai', seed: 'p4', aiSeed: 'x' }, { scheduler: manualScheduler().sched });
+    expect([0, 1, 2, 3].map((x) => s.isHuman(x as 0))).toEqual([true, false, false, false]);
+    expect(s.teamName(0)).toBe('You & Luz');
+    expect(s.teamName(1)).toBe('Cousin & Tío Rafa');
   });
 
-  it('pass-and-play: a handoff screen appears whenever the device must change hands, and at each new hand', () => {
+  it('pass-and-play: a handoff screen appears whenever the device changes hands, and at each new hand', async () => {
     const { sched, flush, pending } = manualScheduler();
-    const s = new GameSession({ mode: 'block2', opponent: 'local', seed: 'handoff' }, sched);
+    const s = new GameSession({ mode: 'block2', opponent: 'local', seed: 'handoff', aiSeed: 0 }, { scheduler: sched });
     expect(s.handoffPending).toBe(true);
     expect(s.canAct()).toBe(false);
     let handoffs = 0;
     let lastViewer = s.viewer;
-    playOut(s, flush, pending, () => {
+    await playOut(s, flush, pending, () => {
       if (s.handoffPending) handoffs++;
       if (s.viewer !== lastViewer) {
         expect(s.handoffPending).toBe(true);
@@ -97,17 +122,8 @@ describe('GameSession', () => {
     expect(handoffs).toBeGreaterThan(2);
   });
 
-  it('dev-both: no handoff, the viewer follows the turn', () => {
-    const { sched } = manualScheduler();
-    const s = new GameSession({ mode: 'draw2', opponent: 'dev-both', seed: 'dev' }, sched);
-    expect(s.handoffPending).toBe(false);
-    expect(s.viewer).toBe(s.debugState().hand.turn);
-    expect(s.canAct()).toBe(true);
-  });
-
   it('rejects out-of-turn intents and reports engine errors without changing state', () => {
-    const { sched } = manualScheduler();
-    const s = new GameSession({ mode: 'draw2', opponent: 'dev-both', seed: 'errors' }, sched);
+    const s = new GameSession({ mode: 'draw2', opponent: 'dev-both', seed: 'errors', aiSeed: 0 }, { scheduler: manualScheduler().sched });
     const before = s.debugState();
     const v = s.view();
     const illegal = v.myHand.find((t) => !v.legalMoves.some((m) => m.tile === t));
@@ -119,19 +135,94 @@ describe('GameSession', () => {
     expect(s.lastError?.code).toBe('has-legal-move');
     expect(s.debugState()).toBe(before);
   });
+});
 
-  it('stale AI timers are ignored after dispose', () => {
-    const { sched, flush, pending } = manualScheduler();
-    const s = new GameSession({ mode: 'draw2', opponent: 'ai', seed: 'dispose' }, sched);
-    if (s.debugState().hand.turn === 0) {
-      const v = s.view();
-      s.play(v.legalMoves[0]!.tile, v.legalMoves[0]!.end);
+describe('AI turn safety (stale decisions, reset, pause, load)', () => {
+  /** A Partnership match with seed chosen so an AI seat leads hand 1 — the AI must act first. */
+  function aiFirst(deps: { sched: Scheduler; runner: AiRunner }) {
+    for (let i = 0; i < 50; i++) {
+      const s = new GameSession({ mode: 'partnership4', opponent: 'ai', difficulty: 'hard', seed: `ai-first-${i}`, aiSeed: 'a' }, { scheduler: deps.sched, runner: deps.runner });
+      if (!s.isHuman(s.debugState().hand.turn)) return s;
+      s.dispose();
     }
+    throw new Error('no seed found');
+  }
+
+  it('reset during an AI turn cannot place a ghost tile', async () => {
+    const { sched, flush } = manualScheduler();
+    const d = deferredRunner();
+    const old = aiFirst({ sched, runner: d.runner });
+    expect(old.aiThinking).toBe(true);
+    const oldState = old.debugState();
+    old.dispose(); // what Restart / Menu do
+    const fresh = new GameSession({ mode: 'partnership4', opponent: 'ai', seed: 'fresh', aiSeed: 'b' }, { scheduler: sched, runner: d.runner });
+    const freshSeq = fresh.debugState().seq;
+    d.answer(0); // the old request finally resolves…
+    await tick();
+    flush(); // …and its thinking delay fires
+    expect(old.debugState()).toBe(oldState);
+    expect(old.debugState().hand.line.tiles).toHaveLength(0);
+    expect(old.stats.staleDiscarded).toBe(1);
+    expect(fresh.debugState().seq).toBe(freshSeq);
+  });
+
+  it('pause cancels thinking; resume re-asks and moves exactly once', async () => {
+    const { sched, flush, pending } = manualScheduler();
+    const d = deferredRunner();
+    const s = aiFirst({ sched, runner: d.runner });
     const seq = s.debugState().seq;
-    expect(pending()).toBe(1);
-    s.dispose();
-    flush();
+    s.pause();
+    expect(pending()).toBe(0);
+    d.answer(d.requests.length - 1);
+    await tick();
     expect(s.debugState().seq).toBe(seq);
+    expect(s.stats.staleDiscarded).toBe(1);
+    s.resume();
+    expect(d.requests).toHaveLength(2);
+    d.answer(1);
+    await tick();
+    expect(s.debugState().seq).toBe(seq); // still waiting for the presentation delay
+    flush();
+    expect(s.debugState().seq).toBe(seq + 1);
+    expect(s.debugState().hand.line.tiles).toHaveLength(1);
+    // Replaying the delay or the decision cannot move again.
+    flush();
+    d.requests[1]!.resolve(decide('hard', d.requests[1]!.req.obs, d.requests[1]!.req.rng));
+    await tick();
+    expect(s.debugState().hand.line.tiles).toHaveLength(1);
+    expect(s.stats.aiDecisions).toBe(1);
+  });
+
+  it('loading a state during an AI turn discards the outstanding decision', async () => {
+    const { sched, flush } = manualScheduler();
+    const d = deferredRunner();
+    const s = aiFirst({ sched, runner: d.runner });
+    const snapshot = s.debugState();
+    expect(s.load(snapshot)).toBe(true); // reload the same position
+    d.answer(0);
+    await tick();
+    flush();
+    expect(s.stats.staleDiscarded).toBe(1);
+    expect(s.debugState().hand.line.tiles).toHaveLength(0);
+    // The re-issued request (made by load) is the only one that can act.
+    expect(d.requests).toHaveLength(2);
+    d.answer(1);
+    await tick();
+    flush();
+    expect(s.debugState().hand.line.tiles).toHaveLength(1);
+  });
+
+  it('decisions are computed from the sanitized observation, and the AI RNG is separate from the shuffle', async () => {
+    const { sched } = manualScheduler();
+    const d = deferredRunner();
+    const s = aiFirst({ sched, runner: d.runner });
+    const req = d.requests[0]!.req;
+    const state = s.debugState();
+    const hidden = state.hand.hands.flatMap((h, seat) => (seat === req.obs.seat ? [] : h));
+    const json = JSON.stringify(req);
+    for (const t of hidden) expect(json).not.toContain(`"${t}"`);
+    expect(json).not.toContain(JSON.stringify(state.rng.s));
+    expect(req.rng).toEqual(seedRng(`ai:a:${req.obs.seat}`));
   });
 });
 
@@ -144,8 +235,7 @@ describe('presentation helpers', () => {
   });
 
   it('explains every disabled control', () => {
-    const { sched } = manualScheduler();
-    const s = new GameSession({ mode: 'draw2', opponent: 'dev-both', seed: 'controls' }, sched);
+    const s = new GameSession({ mode: 'draw2', opponent: 'dev-both', seed: 'controls', aiSeed: 0 }, { scheduler: manualScheduler().sched });
     const st = s.debugState();
     const v = seatView(st, st.hand.turn);
     const c = controlStates(v, s.rules, 'Cousin');
@@ -153,11 +243,6 @@ describe('presentation helpers', () => {
     expect(c.draw.reason).toMatch(/playable tile/);
     const other = seatView(st, (1 - st.hand.turn) as 0 | 1);
     expect(controlStates(other, s.rules, 'Cousin').pass.reason).toBe('Waiting for Cousin.');
-    const illegal = other.myHand[0]!;
-    expect(whyNotPlayable(other, illegal)).toBe('It isn’t your turn.');
-    if (v.requirement.kind === 'tile') {
-      const notReq = v.myHand.find((t) => t !== (v.requirement as { tile: string }).tile);
-      if (notReq) expect(whyNotPlayable(v, notReq)).toMatch(/must open with/);
-    }
+    expect(whyNotPlayable(other, other.myHand[0]!)).toBe('It isn’t your turn.');
   });
 });

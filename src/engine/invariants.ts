@@ -68,6 +68,20 @@ export function checkInvariants(state: MatchState): string[] {
   if (h.end?.kind === 'out' && h.hands[h.end.seat]!.length !== 0) p.push('out seat still holds tiles');
   if (h.end?.kind === 'blocked' && h.consecutivePasses !== rules.seatCount) p.push('blocked without a full round of passes');
 
+  // Public log agrees with the line and the pass counter, and never names a drawn tile.
+  if (!Array.isArray(h.log)) p.push('public log missing');
+  else {
+    const plays = h.log.filter((a) => a.kind === 'play');
+    const byIndex = [...h.line.tiles].sort((a, b) => a.playIndex - b.playIndex);
+    if (plays.length !== byIndex.length || plays.some((a, i) => a.kind === 'play' && (a.tile !== byIndex[i]!.tile || a.seat !== byIndex[i]!.seat)))
+      p.push('public log plays differ from the line');
+    let trailing = 0;
+    for (let i = h.log.length - 1; i >= 0 && h.log[i]!.kind !== 'play'; i--) if (h.log[i]!.kind === 'pass') trailing++;
+    if (trailing !== h.consecutivePasses) p.push('public log passes differ from the pass counter');
+    if (h.log.some((a) => a.kind === 'draw' && 'tile' in a)) p.push('public log names a drawn tile');
+    if (h.stockKind !== 'boneyard' && h.log.some((a) => a.kind === 'draw')) p.push('draw logged in a no-draw mode');
+  }
+
   // Scores.
   if (state.scores.length !== rules.teams.length || state.scores.some((s) => !Number.isInteger(s) || s < 0)) p.push('scores');
   const last = state.history[state.history.length - 1];

@@ -35,4 +35,24 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // AI policies may only see the sanitized observation: no route to authoritative state.
+    files: ['src/ai/**/*.ts'],
+    // observation.ts builds the observation; testing.ts drives matches for tests/tournaments.
+    ignores: ['src/ai/**/*.test.ts', 'src/ai/observation.ts', 'src/ai/testing.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/engine/match', '**/engine/view', '**/engine/deal', '**/engine/simulate', '**/engine/serialize', '**/engine/invariants', '**/engine/index', '**/app/**', '**/ui/**'],
+              message: 'AI code must decide from AiObservation only.',
+            },
+            { group: ['**/engine/state'], allowTypeImports: true, message: 'Only types may be imported from engine/state.' },
+          ],
+        },
+      ],
+    },
+  },
 );

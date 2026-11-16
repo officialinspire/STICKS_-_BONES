@@ -1,6 +1,7 @@
 /** Start menu: mode, opponent, target. Dev tools appear only in development builds. */
 import { assetUrl, getAsset, getFrame } from '../assets';
 import type { OpponentKind } from '../app/session';
+import type { Difficulty } from '../ai/types';
 import { DEFAULT_RULES_PRESET, type ModeId, type TargetScore } from '../engine';
 import { dominoSvg } from './domino';
 import { spriteSvg } from './sprite';
@@ -10,12 +11,15 @@ export interface MenuChoice {
   mode: ModeId;
   opponent: OpponentKind;
   targetScore: TargetScore;
+  difficulty: Difficulty;
   devSeed?: string;
+  devAiSeed?: string;
   devFixture?: string;
   devForceSvg?: boolean;
+  devFastAi?: boolean;
 }
 
-const PLAYABLE: ModeId[] = ['draw2', 'block2'];
+const PLAYABLE: ModeId[] = ['draw2', 'block2', 'partnership4'];
 
 export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, onStart: (c: MenuChoice) => void, dev: boolean): void {
   const preset = DEFAULT_RULES_PRESET;
@@ -33,9 +37,11 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, onSt
     .join('');
   const devPanel = import.meta.env.DEV && dev
     ? `<details class="dev-panel"><summary>Developer tools</summary>
-        <label class="field">Seed (dev only) <input name="seed" type="text" autocomplete="off" placeholder="random"></label>
+        <label class="field">Shuffle seed (dev only) <input name="seed" type="text" autocomplete="off" placeholder="random"></label>
+        <label class="field">AI seed (dev only, independent) <input name="aiSeed" type="text" autocomplete="off" placeholder="random"></label>
         <label class="check"><input type="radio" name="opponent" value="dev-both"> Control both seats (no handoff)</label>
         <label class="check"><input type="checkbox" name="forceSvg"> Force SVG tile fallback</label>
+        <label class="check"><input type="checkbox" name="fastAi"> Fast AI (short thinking delays)</label>
         <div class="dev-fixtures"><span>Layout fixtures:</span>
           <button type="button" class="btn-ghost small" data-fixture="max-board">Max board</button>
           <button type="button" class="btn-ghost small" data-fixture="max-hand">21-tile hand</button>
@@ -59,8 +65,16 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, onSt
         <h2 id="modes-heading">New game</h2>
         <fieldset><legend>Game</legend><div class="choice-grid">${modeCards}</div></fieldset>
         <fieldset><legend>Opponent</legend><div class="row">
-          <label class="check"><input type="radio" name="opponent" value="ai" ${initial.opponent !== 'local' ? 'checked' : ''}> Play Cousin (computer)</label>
-          <label class="check"><input type="radio" name="opponent" value="local" ${initial.opponent === 'local' ? 'checked' : ''}> Two players, one device</label>
+          <label class="check"><input type="radio" name="opponent" value="ai" ${initial.opponent !== 'local' ? 'checked' : ''}> Play the computer</label>
+          <label class="check" data-local><input type="radio" name="opponent" value="local" ${initial.opponent === 'local' ? 'checked' : ''}> Two players, one device</label>
+        </div><p class="note" data-p4-note hidden>Partnership: you and Luz (computer) against Cousin and Tío Rafa (computer).</p></fieldset>
+        <fieldset><legend>Computer skill</legend><div class="row">
+          ${(['easy', 'normal', 'hard'] as Difficulty[])
+            .map(
+              (d) =>
+                `<label class="check"><input type="radio" name="difficulty" value="${d}" ${(initial.difficulty ?? 'normal') === d ? 'checked' : ''}> ${d === 'easy' ? 'Easy' : d === 'normal' ? 'Normal' : 'Hard'}</label>`,
+            )
+            .join('')}
         </div></fieldset>
         <fieldset><legend>Play to</legend><div class="row">
           <label class="check"><input type="radio" name="target" value="100" checked> 100 points</label>
@@ -79,10 +93,24 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, onSt
       mode: (fd.get('mode') as ModeId) ?? 'draw2',
       opponent: (fd.get('opponent') as OpponentKind) ?? 'ai',
       targetScore: Number(fd.get('target')) === 200 ? 200 : 100,
+      difficulty: (fd.get('difficulty') as Difficulty) ?? 'normal',
       ...(dev && seed ? { devSeed: seed } : {}),
-      ...(dev ? { devForceSvg: fd.get('forceSvg') === 'on' } : {}),
+      ...(dev && String(fd.get('aiSeed') ?? '').trim() ? { devAiSeed: String(fd.get('aiSeed')).trim() } : {}),
+      ...(dev ? { devForceSvg: fd.get('forceSvg') === 'on', devFastAi: fd.get('fastAi') === 'on' } : {}),
     };
   };
+  // Partnership is solo-only for now: three computer seats.
+  const syncMode = () => {
+    const p4 = (form.querySelector('input[name="mode"]:checked') as HTMLInputElement | null)?.value === 'partnership4';
+    const local = form.querySelector('input[name="opponent"][value="local"]') as HTMLInputElement;
+    local.disabled = p4;
+    if (p4 && local.checked) (form.querySelector('input[name="opponent"][value="ai"]') as HTMLInputElement).checked = true;
+    (form.querySelector('[data-p4-note]') as HTMLElement).hidden = !p4;
+    const target = Number((form.querySelector(`input[name="mode"]:checked`) as HTMLInputElement | null)?.value === 'partnership4' ? 200 : 100);
+    (form.querySelector(`input[name="target"][value="${target}"]`) as HTMLInputElement).checked = true;
+  };
+  form.querySelectorAll('input[name="mode"]').forEach((i) => i.addEventListener('change', syncMode));
+  syncMode();
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     onStart(read());

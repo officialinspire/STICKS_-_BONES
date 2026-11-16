@@ -7,7 +7,8 @@ import { requirementFor, type VisibleRequirement } from './events';
 import type { LineState, OpenEnds, Placement } from './line';
 import { openEnds } from './line';
 import { legalMovesForHand, rulesOf } from './match';
-import type { HandEnd, HandResult, MatchState, Phase } from './state';
+import type { OpeningRule } from './rules/presets';
+import type { HandEnd, HandResult, MatchState, Phase, PublicAction } from './state';
 import type { ModeId, SeatIndex, TileId } from './types';
 
 export interface SeatView {
@@ -35,6 +36,13 @@ export interface SeatView {
   readonly result: HandResult | null;
   readonly history: readonly HandResult[];
   readonly winnerTeam: number | null;
+  readonly seatCount: 2 | 4;
+  /** Sides, as in the preset (partners share a side). */
+  readonly teams: readonly (readonly SeatIndex[])[];
+  /** Which opening rule chose this hand's opener (public). */
+  readonly openingRule: OpeningRule['kind'];
+  /** Public action log for the current hand. */
+  readonly log: readonly PublicAction[];
 }
 
 export function seatView(state: MatchState, viewer: SeatIndex): SeatView {
@@ -64,5 +72,9 @@ export function seatView(state: MatchState, viewer: SeatIndex): SeatView {
     result: h.result,
     history: state.history,
     winnerTeam: state.winnerTeam,
+    seatCount: rules.seatCount,
+    teams: rules.teams,
+    openingRule: h.openingRule,
+    log: h.log,
   };
 }

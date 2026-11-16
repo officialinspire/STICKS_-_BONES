@@ -49,13 +49,16 @@ async function newPage(viewport: { width: number; height: number }, dsf = 1): Pr
   return page;
 }
 
-async function startMatch(page: Page, o: { mode?: string; opponent?: string; seed?: string; fixture?: string; svg?: boolean }) {
+async function startMatch(page: Page, o: { mode?: string; opponent?: string; seed?: string; aiSeed?: string; difficulty?: string; fast?: boolean; fixture?: string; svg?: boolean }) {
   await page.goto(BASE);
   await page.locator('details.dev-panel summary').click();
   if (o.seed) await page.fill('input[name="seed"]', o.seed);
+  if (o.aiSeed) await page.fill('input[name="aiSeed"]', o.aiSeed);
+  if (o.fast) await page.check('input[name="fastAi"]');
   if (o.svg) await page.check('input[name="forceSvg"]');
   if (o.mode) await page.check(`input[name="mode"][value="${o.mode}"]`);
   if (o.opponent) await page.check(`input[name="opponent"][value="${o.opponent}"]`);
+  if (o.difficulty) await page.check(`input[name="difficulty"][value="${o.difficulty}"]`);
   if (o.fixture) await page.click(`[data-fixture="${o.fixture}"]`);
   else await page.click('.btn-start');
   await page.waitForSelector('.table-screen');
@@ -192,20 +195,41 @@ try {
   }
 
   // 2. Complete rounds in every two-player setup, then the next hand.
-  for (const [mode, opponent, vp] of [
-    ['draw2', 'ai', { width: 390, height: 844 }],
-    ['block2', 'ai', { width: 1366, height: 900 }],
-    ['draw2', 'local', { width: 820, height: 1180 }],
-    ['block2', 'dev-both', { width: 390, height: 844 }],
+  for (const [mode, opponent, difficulty, vp] of [
+    ['draw2', 'ai', 'easy', { width: 390, height: 844 }],
+    ['block2', 'ai', 'normal', { width: 1366, height: 900 }],
+    ['partnership4', 'ai', 'hard', { width: 390, height: 844 }],
+    ['partnership4', 'ai', 'normal', { width: 1366, height: 900 }],
+    ['draw2', 'local', 'normal', { width: 820, height: 1180 }],
+    ['block2', 'dev-both', 'normal', { width: 390, height: 844 }],
   ] as const) {
-    const label = `${mode}-${opponent}`;
+    const label = `${mode}-${opponent}-${difficulty}-${vp.width}`;
     const page = await newPage(vp, 2);
-    await startMatch(page, { mode, opponent, seed: `e2e-${label}` });
+    await page.addInitScript(() => {
+      const w = window as unknown as { __lt: number[] };
+      w.__lt = [];
+      try {
+        new PerformanceObserver((l) => l.getEntries().forEach((e) => w.__lt.push(e.duration))).observe({ type: 'longtask', buffered: true });
+      } catch {
+        /* longtask API unavailable */
+      }
+    });
+    await startMatch(page, { mode, opponent, difficulty, seed: `e2e-${label}`, aiSeed: `e2e-ai-${label}`, fast: true });
+    // Measure gameplay only: drop long tasks from page start-up (dev-server module loading, image decode).
+    await page.waitForTimeout(400);
+    await page.evaluate(() => ((window as unknown as { __lt: number[] }).__lt.length = 0));
+    if (opponent === 'ai') {
+      const kind = await page.evaluate(() => (window as unknown as { __sb: { runnerKind: string } }).__sb.runnerKind);
+      check(kind === 'worker', `${label}: AI runs in ${kind}, expected a Web Worker`);
+    }
     if (opponent === 'local') check((await page.locator('.handoff:not([hidden])').count()) === 1, `${label}: no handoff screen at start`);
     const actions = await playRound(page, label, { checkHidden: opponent === 'ai' });
     await page.screenshot({ path: join(outDir, `${label}-results.png`) });
     const title = await page.textContent('#results-title');
-    notes.push(`${label}: round finished after ${actions} human actions — "${title}"`);
+    const longest = await page.evaluate(() => Math.max(0, ...(window as unknown as { __lt: number[] }).__lt));
+    const stats = await page.evaluate(() => (window as unknown as { __sb: { session: { stats: { aiDecisions: number; staleDiscarded: number } } } }).__sb.session.stats);
+    check(longest < 250, `${label}: main thread blocked for ${longest.toFixed(0)} ms`);
+    notes.push(`${label}: round finished after ${actions} human actions, ${stats.aiDecisions} AI decisions, longest main-thread task ${longest.toFixed(0)} ms — "${title}"`);
     await page.click('[data-act="next-hand"], [data-act="new-match"]');
     await page.waitForTimeout(300);
     const meta = await page.textContent('.score-meta');
@@ -214,6 +238,42 @@ try {
     await page.screenshot({ path: join(outDir, `${label}-hand2.png`) });
     await assertNoOverlap(page, label);
     await page.context().close();
+  }
+
+  // 2b. Reset during an AI turn cannot place a ghost tile; pause stops thinking (real delays, not fast AI).
+  {
+    const page = await newPage({ width: 390, height: 844 });
+    await startMatch(page, { mode: 'partnership4', opponent: 'ai', difficulty: 'hard', seed: 'e2e-p4-0', aiSeed: 'ghost' });
+    const legal = page.locator('.hand-tile.is-legal');
+    await legal.first().click();
+    await page.locator('.end-slot.is-legal').first().click();
+    await page.waitForTimeout(150); // Cousin (seat 1) is now thinking
+    const thinking = await page.evaluate(() => (window as unknown as { __sb: { session: { aiThinking: boolean } } }).__sb.session.aiThinking);
+    check(thinking, 'ghost test: expected the AI to be thinking after the human lead');
+    await page.click('[data-act="restart"]');
+    await page.click('[data-act="confirm-yes"]');
+    await page.waitForTimeout(2500);
+    const after = await page.evaluate(() => {
+      const s = (window as unknown as { __sb: { session: { debugState(): { seq: number; hand: { line: { tiles: unknown[] }; turn: number } } } } }).__sb.session.debugState();
+      return { seq: s.seq, tiles: s.hand.line.tiles.length, turn: s.hand.turn };
+    });
+    const domTiles = await page.locator('.board-tile').count();
+    check(after.seq === 0 && after.tiles === 0 && domTiles === 0 && after.turn === 0, `ghost test: restarted match was touched (${JSON.stringify(after)}, DOM ${domTiles})`);
+    notes.push(`ghost test: restart during Cousin's thinking left the new match untouched (seq ${after.seq}, ${domTiles} tiles)`);
+    await page.context().close();
+
+    const p2 = await newPage({ width: 390, height: 844 });
+    await startMatch(p2, { mode: 'partnership4', opponent: 'ai', difficulty: 'hard', seed: 'e2e-p4-2', aiSeed: 'pause' });
+    await p2.click('[data-act="menu"]'); // opening the confirmation pauses the table
+    await p2.waitForTimeout(2200);
+    const whilePaused = await p2.locator('.board-tile').count();
+    await p2.click('[data-act="confirm-no"]');
+    await p2.waitForTimeout(2200);
+    const afterResume = await p2.locator('.board-tile').count();
+    check(whilePaused === 0, `pause test: AI moved while paused (${whilePaused} tiles)`);
+    check(afterResume === 1, `pause test: expected exactly one AI lead after resuming, saw ${afterResume}`);
+    notes.push(`pause test: 0 tiles while the confirmation was open, ${afterResume} after resuming`);
+    await p2.context().close();
   }
 
   // 3. Pips at every rotation, atlas and SVG, on the 27-tile board.

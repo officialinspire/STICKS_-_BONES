@@ -66,6 +66,15 @@ same pip. On an empty line either end is accepted and recorded as `head`.
   `config.targetScore` (≥). Only one side scores per hand, so there's never a
   simultaneous finish.
 
+## Public action log
+
+`HandState.log` (state schema **v2**) records every play, every pass (with the open
+ends at the time) and every draw (**who** drew, never which tile). `seatView`
+exposes it as `log`. It is the AI's turn history and drives the seat badges
+("passed", "drew"). Invariants check that it agrees with the line and the pass
+counter, and that it never names a drawn tile. Saves from schema v1 are rejected
+on restore; none were ever persisted.
+
 ## Hidden information
 
 `MatchState` contains every hand, the stock and the RNG state, so treat it as

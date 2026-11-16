@@ -80,6 +80,18 @@ export class TableScreen {
     this.#unsub.push(onBackendChange(() => this.render()));
     // Layout depends only on the board's width; height changes (e.g. a status line) must not re-render it.
     let lastWidth = -1;
+    // Presentation pause: a hidden tab or an open confirmation stops AI thinking.
+    const onVis = () => {
+      if (document.hidden) this.#s.pause();
+      else if (!this.#pendingConfirm) this.#s.resume();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    this.#unsub.push(() => document.removeEventListener('visibilitychange', onVis));
+    const confirmDlg = this.#q<HTMLDialogElement>('confirm');
+    confirmDlg.addEventListener('cancel', () => {
+      this.#pendingConfirm = null;
+      this.#s.resume();
+    });
     this.#ro = new ResizeObserver(() => {
       const w = this.#q('board-wrap')?.clientWidth ?? 0;
       if (w === lastWidth) return;
@@ -111,10 +123,6 @@ export class TableScreen {
 
   #name(seat: SeatIndex): string {
     return this.#s.seatName(seat);
-  }
-
-  #opponentOf(seat: SeatIndex): SeatIndex {
-    return ((seat + 1) % 2) as SeatIndex;
   }
 
   render(): void {
@@ -156,10 +164,40 @@ export class TableScreen {
     this.#q('host').innerHTML = `<div class="host-avatar"><span class="host-fallback" aria-hidden="true">R</span>${portrait}</div><p class="bubble">${esc(this.#message)}</p>`;
   }
 
+  /** Other seats in table order from the viewer: left, top (partner in Partnership), right. */
+  #otherSeats(v: SeatView): { seat: SeatIndex; pos: 'left' | 'top' | 'right' }[] {
+    const n = v.seatCount;
+    if (n === 2) return [{ seat: ((v.viewer + 1) % 2) as SeatIndex, pos: 'top' }];
+    return [
+      { seat: ((v.viewer + 3) % 4) as SeatIndex, pos: 'left' },
+      { seat: ((v.viewer + 2) % 4) as SeatIndex, pos: 'top' },
+      { seat: ((v.viewer + 1) % 4) as SeatIndex, pos: 'right' },
+    ];
+  }
+
   #renderOpponent(v: SeatView): void {
-    const opp = this.#opponentOf(v.viewer);
-    const n = v.handSizes[opp] ?? 0;
-    const backs = Array.from({ length: n }, () => `<span class="mini-back">${faceHtml('back')}</span>`).join('');
+    const team = v.teams[v.myTeam]!;
+    const chips = this.#otherSeats(v)
+      .map(({ seat, pos }) => {
+        const n = v.handSizes[seat] ?? 0;
+        const shown = Math.min(n, 21);
+        const backs = Array.from({ length: shown }, () => `<span class="mini-back">${faceHtml('back')}</span>`).join('');
+        const role = v.seatCount === 4 ? (team.includes(seat) ? 'Partner' : 'Opponent') : 'Opponent';
+        let last = '';
+        for (let i = v.log.length - 1; i >= 0; i--) {
+          const a = v.log[i]!;
+          if (a.seat !== seat) continue;
+          last = a.kind === 'pass' ? 'passed' : a.kind === 'draw' ? 'drew' : '';
+          break;
+        }
+        const turn = v.phase === 'playing' && v.turn === seat;
+        return `<div class="seat-chip seat-${pos}${turn ? ' is-turn' : ''}${role === 'Partner' ? ' is-partner' : ''}" data-seat-pos="${pos}">
+          <div class="opp-head"><strong>${esc(this.#name(seat))}</strong> <span class="role">${role}</span></div>
+          <div class="opp-meta"><span>${n} tile${n === 1 ? '' : 's'}</span>${last ? `<span class="badge">${last}</span>` : ''}${turn && this.#s.aiThinking ? '<span class="badge think">thinking…</span>' : ''}</div>
+          <div class="opp-backs" aria-hidden="true">${backs}</div>
+        </div>`;
+      })
+      .join('');
     const stockKind = this.#s.rules.stock.kind;
     const stock =
       stockKind === 'boneyard'
@@ -167,11 +205,7 @@ export class TableScreen {
         : stockKind === 'unused'
           ? `<div class="stock"><span>${this.#s.rules.stock.size} set aside (not used)</span></div>`
           : '';
-    this.#q('opponent').innerHTML = `
-      <div class="opp-head"><strong>${esc(this.#name(opp))}</strong> · <span>${n} tile${n === 1 ? '' : 's'}</span></div>
-      <div class="opp-backs" aria-hidden="true">${backs}</div>
-      ${stock}
-      <div class="my-count">${esc(this.#name(v.viewer))}: ${v.myHand.length} tile${v.myHand.length === 1 ? '' : 's'}</div>`;
+    this.#q('opponent').innerHTML = `<div class="seats seats-${v.seatCount}">${chips}</div>${stock}<div class="my-count">${esc(this.#name(v.viewer))}: ${v.myHand.length} tile${v.myHand.length === 1 ? '' : 's'}</div>`;
   }
 
   #renderTurn(v: SeatView): void {
@@ -180,7 +214,8 @@ export class TableScreen {
     else if (v.phase !== 'playing') text = 'Hand over';
     else if (this.#s.handoffPending) text = `Waiting for ${this.#name(v.turn)}`;
     else if (v.turn === v.viewer) text = this.#s.opponent === 'ai' ? 'Your turn' : `${this.#name(v.turn)} — your turn`;
-    else text = `${this.#name(v.turn)}’s turn`;
+    else text = `${this.#name(v.turn)}’s turn${this.#s.aiThinking ? ' — thinking…' : ''}`;
+    if (this.#s.paused && v.phase === 'playing') text = 'Paused';
     const el = this.#q('turn');
     el.textContent = text;
     el.classList.toggle('is-mine', v.phase === 'playing' && v.turn === v.viewer && !this.#s.handoffPending);
@@ -316,18 +351,20 @@ export class TableScreen {
       title = `${name(r.end.seat)} went out — ¡Dominó!`;
       why = 'First to empty their hand wins the hand.';
     } else if (r.winnerSeat !== null) {
-      title = `¡Tranque! ${name(r.winnerSeat)} win${this.#s.opponent === 'ai' && r.winnerSeat === 0 ? '' : 's'} the block`;
-      why = 'Nobody could play, so the lower pip count wins.';
+      title = v.seatCount === 4 ? `¡Tranque! ${this.#s.teamName(r.winnerTeam!)} win the block` : `¡Tranque! ${name(r.winnerSeat)} win${this.#s.opponent === 'ai' && r.winnerSeat === 0 ? '' : 's'} the block`;
+      why = v.seatCount === 4 ? 'Nobody could play, so the team with fewer pips wins.' : 'Nobody could play, so the lower pip count wins.';
     } else {
       title = '¡Tranque! It’s a tie';
-      why = 'Nobody could play and both hands hold the same pips — no points.';
+      why = v.seatCount === 4 ? 'Nobody could play and both teams hold the same pips — no points.' : 'Nobody could play and both hands hold the same pips — no points.';
     }
     const hands = r.finalHands
       .map((h, seat) => {
         const faces = h.length ? h.map((id) => `<span class="result-tile" role="img" aria-label="${esc(tileLabel(id))}">${faceHtml(id)}</span>`).join('') : '<em>no tiles left</em>';
-        return `<div class="result-hand"><div class="result-who"><strong>${esc(name(seat as SeatIndex))}</strong><span>${r.seatTotals[seat]} pips</span></div><div class="result-tiles">${faces}</div></div>`;
+        return `<div class="result-hand"><div class="result-who"><strong>${esc(name(seat as SeatIndex))}</strong><span>${r.seatTotals[seat]} pip${r.seatTotals[seat] === 1 ? '' : 's'}</span></div><div class="result-tiles">${faces}</div></div>`;
       })
       .join('');
+    const teamLine =
+      v.seatCount === 4 ? `<p class="scores-line">Team pips: ${this.#s.rules.teams.map((_, t) => `${esc(this.#s.teamName(t))} ${r.teamTotals[t]}`).join(' · ')}</p>` : '';
     const pts =
       r.winnerTeam === null
         ? 'No points this hand.'
@@ -340,13 +377,14 @@ export class TableScreen {
     const buttons = over
       ? `<button type="button" class="btn" data-act="new-match">Play again</button><button type="button" class="btn-ghost" data-act="menu-now">Menu</button>`
       : `<button type="button" class="btn" data-act="next-hand">Next hand</button>`;
-    dlg.innerHTML = `<h2 id="results-title">${esc(title)}</h2><p class="why">${esc(why)}</p>${hands}<p class="points">${pts}</p><p class="scores-line">${scores} · to ${v.targetScore}</p>${matchLine}<div class="sheet-actions">${buttons}</div>`;
+    dlg.innerHTML = `<h2 id="results-title">${esc(title)}</h2><p class="why">${esc(why)}</p>${hands}${teamLine}<p class="points">${pts}</p><p class="scores-line">${scores} · to ${v.targetScore}</p>${matchLine}<div class="sheet-actions">${buttons}</div>`;
     if (!dlg.open) dlg.showModal();
     (dlg.querySelector('.btn') as HTMLElement).focus();
   }
 
   #showConfirm(kind: 'menu' | 'restart'): void {
     this.#pendingConfirm = kind;
+    this.#s.pause();
     const dlg = this.#q<HTMLDialogElement>('confirm');
     const text = kind === 'menu' ? ['Leave this match?', 'Your progress in this match will be lost.', 'Leave'] : ['Restart the match?', 'Scores go back to zero and new tiles are dealt.', 'Restart'];
     dlg.innerHTML = `<h2 id="confirm-title">${text[0]}</h2><p>${text[1]}</p><div class="sheet-actions"><button type="button" class="btn-ghost" data-act="confirm-no">Keep playing</button><button type="button" class="btn danger" data-act="confirm-yes">${text[2]}</button></div>`;
@@ -498,6 +536,7 @@ export class TableScreen {
       case 'confirm-no':
         this.#pendingConfirm = null;
         this.#q<HTMLDialogElement>('confirm').close();
+        this.#s.resume();
         break;
       case 'confirm-yes': {
         const kind = this.#pendingConfirm;

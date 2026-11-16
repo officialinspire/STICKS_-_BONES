@@ -249,6 +249,35 @@ describe('placement through commands', () => {
   });
 });
 
+describe('public action log', () => {
+  it('records plays, passes with the ends at the time, and who drew — never which tile', () => {
+    const s0 = craft({
+      mode: 'draw2',
+      line: [['t66', 6, 6]],
+      hands: [
+        ['t55', 't54', 't53', 't52', 't51', 't50', 't44'],
+        ['t65', 't64', 't63', 't62', 't60', 't43'],
+      ],
+      stock: ['t21', 't30', 't61'],
+      turn: 0,
+      opener: 1,
+    });
+    let s = s0;
+    for (let i = 0; i < 3; i++) s = ok(s, drawCmd(0)).state;
+    s = ok(s, play(0, 't61', 'tail')).state;
+    const tail = s.hand.log.slice(-4);
+    expect(tail).toEqual([
+      { kind: 'draw', seat: 0, endsAtDraw: { head: 6, tail: 6 } },
+      { kind: 'draw', seat: 0, endsAtDraw: { head: 6, tail: 6 } },
+      { kind: 'draw', seat: 0, endsAtDraw: { head: 6, tail: 6 } },
+      { kind: 'play', seat: 0, tile: 't61', end: 'tail', endsAfter: { head: 6, tail: 1 } },
+    ]);
+    expect(JSON.stringify(s.hand.log)).not.toMatch(/t21|t30/);
+    const v = seatView(s, 1);
+    expect(v.log).toBe(s.hand.log);
+  });
+});
+
 describe('draw mode: forced draw and exhausted boneyard', () => {
   const base = () =>
     craft({

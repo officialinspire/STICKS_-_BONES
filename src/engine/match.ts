@@ -130,6 +130,7 @@ function newHand(rules: ModeRules, number: number, d: PresetDeal, previous: { re
     turn: opener.seat,
     consecutivePasses: 0,
     drawsThisTurn: 0,
+    log: [],
     end: null,
     result: null,
   };
@@ -282,6 +283,8 @@ function play(state: MatchState, rules: ModeRules, c: Extract<Command, { type: '
 
   const { line, placed } = placeTile(h.line, c.tile, c.end, c.seat);
   const remaining = hand.filter((id) => id !== c.tile);
+  const ends = openEnds(line)!;
+  const log = [...h.log, { kind: 'play', seat: c.seat, tile: c.tile, end: line.tiles.length === 1 ? 'head' : c.end, endsAfter: { head: ends.head, tail: ends.tail } } as const];
   const hands = setSeatHand(h.hands, c.seat, remaining);
   const events: GameEvent[] = [
     { type: 'tile-played', seat: c.seat, tile: c.tile, end: line.tiles.length === 1 ? 'head' : c.end, placed, openEnds: openEnds(line)!, handSize: remaining.length },
@@ -289,11 +292,11 @@ function play(state: MatchState, rules: ModeRules, c: Extract<Command, { type: '
   if (remaining.length === 0) {
     const end = { kind: 'out', seat: c.seat } as const;
     events.push({ type: 'hand-ended', end });
-    return { ok: true, state: { ...withHand(state, { ...h, hands, line, consecutivePasses: 0, drawsThisTurn: 0, end }), phase: 'hand-ended' }, events };
+    return { ok: true, state: { ...withHand(state, { ...h, hands, line, log, consecutivePasses: 0, drawsThisTurn: 0, end }), phase: 'hand-ended' }, events };
   }
   const turn = nextSeat(rules, c.seat);
   events.push({ type: 'turn', seat: turn });
-  return { ok: true, state: withHand(state, { ...h, hands, line, turn, consecutivePasses: 0, drawsThisTurn: 0 }), events };
+  return { ok: true, state: withHand(state, { ...h, hands, line, log, turn, consecutivePasses: 0, drawsThisTurn: 0 }), events };
 }
 
 function draw(state: MatchState, rules: ModeRules, seat: SeatIndex): ApplyResult {
@@ -307,7 +310,9 @@ function draw(state: MatchState, rules: ModeRules, seat: SeatIndex): ApplyResult
   const nextHand = [...h.hands[seat]!, tile];
   const playable = placementsFor(h.line, tile).length > 0;
   // Drawing never changes turn and never counts toward a block.
-  const next = withHand(state, { ...h, hands: setSeatHand(h.hands, seat, nextHand), stock, drawsThisTurn: h.drawsThisTurn + 1 });
+  const at = openEnds(h.line);
+  const log = [...h.log, { kind: 'draw', seat, endsAtDraw: at ? { head: at.head, tail: at.tail } : null } as const];
+  const next = withHand(state, { ...h, hands: setSeatHand(h.hands, seat, nextHand), stock, log, drawsThisTurn: h.drawsThisTurn + 1 });
   return { ok: true, state: next, events: [{ type: 'tile-drawn', seat, tile, playable, stockCount: stock.length, handSize: nextHand.length }] };
 }
 
@@ -318,15 +323,17 @@ function pass(state: MatchState, rules: ModeRules, seat: SeatIndex): ApplyResult
   if (rules.noMove.kind === 'draw-until-playable' && h.stockKind === 'boneyard' && h.stock.length > 0)
     return reject(state, 'must-draw', 'You must draw from the boneyard before passing');
   const consecutivePasses = h.consecutivePasses + 1;
+  const at = openEnds(h.line);
+  const log = [...h.log, { kind: 'pass', seat, endsAtPass: at ? { head: at.head, tail: at.tail } : null } as const];
   const events: GameEvent[] = [{ type: 'passed', seat, consecutivePasses }];
   if (consecutivePasses >= rules.seatCount) {
     const end = { kind: 'blocked' } as const;
     events.push({ type: 'hand-ended', end });
-    return { ok: true, state: { ...withHand(state, { ...h, consecutivePasses, drawsThisTurn: 0, end }), phase: 'hand-ended' }, events };
+    return { ok: true, state: { ...withHand(state, { ...h, consecutivePasses, log, drawsThisTurn: 0, end }), phase: 'hand-ended' }, events };
   }
   const turn = nextSeat(rules, seat);
   events.push({ type: 'turn', seat: turn });
-  return { ok: true, state: withHand(state, { ...h, consecutivePasses, turn, drawsThisTurn: 0 }), events };
+  return { ok: true, state: withHand(state, { ...h, consecutivePasses, log, turn, drawsThisTurn: 0 }), events };
 }
 
 function resolveHand(state: MatchState, rules: ModeRules): ApplyResult {

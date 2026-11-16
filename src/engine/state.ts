@@ -8,7 +8,7 @@ import type { RngState } from './rng';
 import type { OpeningRule, StockRule } from './rules/presets';
 import type { SeatIndex, TileId } from './types';
 
-export const MATCH_STATE_SCHEMA_VERSION = 1;
+export const MATCH_STATE_SCHEMA_VERSION = 2;
 export const ENGINE_ID = 'sticks-and-bones-rules/1' as const;
 
 /**
@@ -21,6 +21,15 @@ export const ENGINE_ID = 'sticks-and-bones-rules/1' as const;
 export type Phase = 'playing' | 'hand-ended' | 'hand-resolved' | 'match-over';
 
 export type OpeningRequirement = { readonly kind: 'tile'; readonly tile: TileId } | { readonly kind: 'any' };
+
+/**
+ * Public record of what every seat did this hand, in order. Contains nothing
+ * hidden: draws record only who drew, never which tile.
+ */
+export type PublicAction =
+  | { readonly kind: 'play'; readonly seat: SeatIndex; readonly tile: TileId; readonly end: 'head' | 'tail'; readonly endsAfter: { readonly head: number; readonly tail: number } }
+  | { readonly kind: 'draw'; readonly seat: SeatIndex; readonly endsAtDraw: { readonly head: number; readonly tail: number } | null }
+  | { readonly kind: 'pass'; readonly seat: SeatIndex; readonly endsAtPass: { readonly head: number; readonly tail: number } | null };
 
 export type HandEnd = { readonly kind: 'out'; readonly seat: SeatIndex } | { readonly kind: 'blocked' };
 
@@ -55,6 +64,8 @@ export interface HandState {
   readonly consecutivePasses: number;
   /** Tiles drawn by the current seat during this turn. */
   readonly drawsThisTurn: number;
+  /** Public action log for this hand (plays, passes, and who drew). */
+  readonly log: readonly PublicAction[];
   readonly end: HandEnd | null;
   readonly result: HandResult | null;
 }

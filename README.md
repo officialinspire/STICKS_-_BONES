@@ -5,8 +5,9 @@ modes are two-player **Draw**, two-player **Block** and four-player **Partnershi
 played solo against AI or by two humans sharing one device. It runs entirely in
 the browser, with no backend, accounts or online play.
 
-> **Status:** Stage 3. Two-player Draw and Block are playable against Cousin
-> (computer) or by two players on one device. Partnership is next. See
+> **Status:** Stage 4. Draw and Block can be played solo against Cousin or by two
+> players on one device. Partnership can be played solo with three computer seats.
+> The computer has Easy, Normal and Hard levels; see [docs/AI.md](docs/AI.md). See
 > [docs/BUILD_STATUS.md](docs/BUILD_STATUS.md).
 
 ## Setup
@@ -34,6 +35,7 @@ npm run dev
 | `npm run assets:verify` | Re-measure all source art against the typed manifest (bytes, SHA-256, dimensions, frame rects) |
 | `npm run assets:measure` | Print freshly measured asset data as JSON |
 | `npm run atlas:build` | Regenerate the double-six tile atlas + JSON from the verified material sheet |
+| `npm run ai:tournament` | Mirrored seeded AI duels per mode plus decision timing |
 | `npm run e2e` | Browser acceptance checks (needs the machine's Playwright + Chromium; not part of `check`) |
 | `npm run check` | All of the above in sequence |
 
@@ -55,7 +57,7 @@ No deployment workflow is set up yet.
 
 ```
 assets/art/        Owner's source art (unaltered, see assets/art/README.md)
-docs/              RULES.md, ENGINE.md, ASSETS.md, BUILD_STATUS.md
+docs/              RULES.md, ENGINE.md, AI.md, ASSETS.md, BUILD_STATUS.md
 scripts/           Asset verification + measurement, dist check
 src/engine/        Pure, deterministic, serializable game engine (no DOM)
   rules/presets.ts Versioned rules presets ("Cousin's House Rules" v1)
@@ -64,7 +66,7 @@ src/assets/        Typed asset manifest, runtime URL registry
 src/board/         Pure board layout (wrapping view of the logical chain)
 src/render/        Shared pip geometry, atlas/SVG tile renderer
 src/app/           GameSession (applies commands, schedules AI), UI helpers
-src/ai/            Fair AI (reads SeatView only)
+src/ai/            Fair AI: sanitized observation, Easy/Normal/Hard policies, worker runner
 src/ui/            Menu, table screen, dialogs
 src/dev/           Dev-only fixtures and tile contact sheet (not in production)
 assets/generated/  Generated derivatives (tile atlas + JSON)

@@ -67,6 +67,17 @@ export function craft(spec: CraftSpec): MatchState {
       turn: spec.turn as SeatIndex,
       consecutivePasses: spec.consecutivePasses ?? 0,
       drawsThisTurn: 0,
+      log: [
+        ...lineTiles.map((t, i) => {
+          const tail = lineTiles[lineTiles.length - 1]!;
+          return { kind: 'play' as const, seat: t.seat, tile: t.tile, end: 'tail' as const, endsAfter: i === lineTiles.length - 1 ? { head: lineTiles[0]!.headPip, tail: tail.tailPip } : { head: lineTiles[0]!.headPip, tail: t.tailPip } };
+        }),
+        ...Array.from({ length: spec.consecutivePasses ?? 0 }, (_, k) => ({
+          kind: 'pass' as const,
+          seat: ((((spec.turn - (spec.consecutivePasses ?? 0) + k) % rules.seatCount) + rules.seatCount) % rules.seatCount) as SeatIndex,
+          endsAtPass: lineTiles.length ? { head: lineTiles[0]!.headPip, tail: lineTiles[lineTiles.length - 1]!.tailPip } : null,
+        })),
+      ],
     },
   };
   const problems = checkInvariants(state);
@@ -99,8 +110,18 @@ export function chain(tiles: readonly string[], startPip: number): [string, numb
     } else out.push(stack.pop()!);
   }
   if (unused.size) throw new Error(`chain: ${unused.size} tiles could not be chained from ${startPip}`);
-  out.reverse();
+  // The reversed pop order of edges is a valid trail; orient tiles by walking it
+  // (stored pips can be stale where Hierholzer spliced in a sub-circuit).
+  const tilesInOrder = out.reverse().slice(1).map((e) => e.tile!);
   const result: [string, number, number][] = [];
-  for (let i = 1; i < out.length; i++) result.push([out[i]!.tile!, out[i - 1]!.pip, out[i]!.pip]);
+  let pip = startPip;
+  for (const t of tilesInOrder) {
+    const a = Number(t[1]);
+    const b = Number(t[2]);
+    if (a !== pip && b !== pip) throw new Error(`chain: ${t} does not continue from ${pip}`);
+    const other = a === pip ? b : a;
+    result.push([t, pip, other]);
+    pip = other;
+  }
   return result;
 }
