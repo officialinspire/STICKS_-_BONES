@@ -54,6 +54,7 @@ const failures: string[] = [];
 const warnings: string[] = [];
 const report: Record<string, Record<string, unknown>> = {};
 const bleedNotes: string[] = [];
+const textNotes: string[] = [];
 
 const server = await createServer({ root, logLevel: 'error', server: { port: 5198, strictPort: true } });
 await server.listen();
@@ -280,7 +281,7 @@ function judge(where: string, m: Measure, opts: { pageMayScroll?: boolean }) {
   if (m.uncomfortable.length) warnings.push(`${where}: under ${LIMITS.targetComfortable}px: ${m.uncomfortable.join(' | ')}`);
 }
 
-const SCREENS = ['startup', 'menu', 'setup', 'longest-chain', 'largest-hand', 'partnership', 'handoff', 'pause', 'results'] as const;
+const SCREENS = ['startup', 'menu', 'setup', 'story-home', 'story-scene', 'longest-chain', 'largest-hand', 'partnership', 'handoff', 'pause', 'results'] as const;
 type Screen = (typeof SCREENS)[number];
 
 async function capture(vp: (typeof VIEWPORTS)[number], screen: Screen, page: Page, opts: { pageMayScroll?: boolean } = {}) {
@@ -312,6 +313,22 @@ try {
     await page.click('[data-go="setup"]');
     await page.check('input[name="mode"][value="partnership4"]');
     await capture(vp, 'setup', page, { pageMayScroll: true });
+
+    // Story: case file, then the Prologue scene player (real script text).
+    await page.click('[data-act="home"]');
+    await page.waitForSelector('[data-act="story"]');
+    await page.evaluate(() => localStorage.removeItem('sticks-and-bones.story'));
+    await page.click('[data-act="story"]');
+    await page.waitForSelector('.story-shell');
+    await capture(vp, 'story-home', page, { pageMayScroll: true });
+    await page.click('[data-act="story-new"]');
+    await page.waitForSelector('.story-stage');
+    for (let k = 0; k < 2; k++) await page.click('[data-act="story-next"]');
+    await capture(vp, 'story-scene', page);
+    await page.click('[data-act="story-file"]');
+    await page.waitForSelector('.story-shell');
+    await page.click('[data-act="story-home"]');
+    await page.waitForSelector('[data-go="setup"]');
 
     await setup(page, { fixture: 'max-board' });
     await waitHumanTurn(page);
@@ -389,6 +406,73 @@ try {
     await ctx.close();
   }
 
+  // Text scaling (browser text size / zoom): 150% and 200% root font size on reading screens.
+  // Vertical scrolling is fine; horizontal overflow, clipped text or clipped controls are not.
+  if (!only || only.some((o) => 'text-scale'.includes(o) || o === 'all')) {
+    for (const pct of [150, 200]) {
+      const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+      const page = await ctx.newPage();
+      // The browser's own default text size (what a player changes in settings), via DevTools.
+      const cdp = await ctx.newCDPSession(page);
+      await cdp.send('Page.enable');
+      await cdp.send('Page.setFontSizes', { fontSizes: { standard: Math.round((16 * pct) / 100), fixed: Math.round((13 * pct) / 100) } });
+      await page.goto(BASE);
+      const rootPx = (await page.evaluate('getComputedStyle(document.documentElement).fontSize')) as string;
+      if (rootPx !== `${Math.round((16 * pct) / 100)}px`) failures.push(`text ${pct}%: browser text size did not apply (root ${rootPx})`);
+      await page.click('.start-button');
+      await page.waitForSelector('[data-act="story"]');
+      const grab = async (label: string) => {
+        await page.waitForTimeout(450); // let entrance transitions settle
+        const m = (await page.evaluate(MEASURE)) as Measure;
+        const f = (ok: boolean, msg: string) => ok || failures.push(`text ${pct}% ${label}: ${msg}`);
+        f(m.pageScrollX <= 0, `page scrolls horizontally by ${m.pageScrollX}px`);
+        f(m.clipped.length === 0, `controls clipped: ${m.clipped.join(' | ')}`);
+        f(m.textCut.length === 0, `text clipped: ${m.textCut.join(' | ')}`);
+        await page.screenshot({ path: join(outDir, `text-${pct}-${label}.png`) });
+      };
+      await grab('menu');
+      await page.click('[data-act="story"]');
+      await page.waitForSelector('.story-shell');
+      await grab('story-home');
+      await page.click('[data-act="story-new"], [data-act="story-continue"]');
+      await page.waitForSelector('.story-stage');
+      await page.click('[data-act="story-next"]');
+      await grab('story-scene');
+      await page.click('[data-act="story-file"]');
+      await page.waitForSelector('[data-act="story-home"]');
+      await page.click('[data-act="story-home"]');
+      await page.click('[data-go="setup"]');
+      await grab('setup');
+      textNotes.push(`${pct}% browser text size (root ${rootPx}): menu, story case file, story scene, setup`);
+      await ctx.close();
+    }
+    // Typography facts: tabular score digits, and layout shift while the web fonts swap in.
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const page = await ctx.newPage();
+    await page.addInitScript(`window.__cls = 0; new PerformanceObserver((l) => l.getEntries().forEach((e) => { if (!e.hadRecentInput) window.__cls += e.value; })).observe({ type: 'layout-shift', buffered: true });`);
+    await page.goto(BASE);
+    await page.click('.start-button');
+    await page.waitForSelector('[data-act="story"]');
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForTimeout(500);
+    const typo = (await page.evaluate(`(() => {
+      const probe = document.createElement('span');
+      probe.className = 'score-val';
+      probe.style.position = 'absolute';
+      document.body.append(probe);
+      const widths = [...'0123456789'].map((d) => { probe.textContent = d.repeat(4); return probe.getBoundingClientRect().width.toFixed(2); });
+      const family = getComputedStyle(probe).fontFamily;
+      probe.remove();
+      const loaded = [...document.fonts].filter((f) => f.status === 'loaded').map((f) => f.family.replace(/"/g, ''));
+      return { widths, family, loaded, cls: window.__cls };
+    })()`)) as { widths: string[]; family: string; loaded: string[]; cls: number };
+    if (new Set(typo.widths).size !== 1) failures.push(`score digits are not tabular: ${typo.widths.join(',')} (${typo.family})`);
+    if (!typo.loaded.includes('DM Sans') || !typo.loaded.includes('Bricolage Grotesque')) failures.push(`web fonts not loaded: ${typo.loaded.join(', ')}`);
+    if (typo.cls > 0.1) failures.push(`layout shift during load/font swap: CLS ${typo.cls.toFixed(3)}`);
+    textNotes.push(`score digits ${typo.widths[0]} px each (tabular, ${typo.family.split(',')[0]}); fonts loaded: ${typo.loaded.join(', ')}; CLS to menu ${typo.cls.toFixed(4)}`);
+    await ctx.close();
+  }
+
   // Contact sheets: one image per screen across viewports (small, for review).
   for (const s of SCREENS) {
     const files = VIEWPORTS.filter((v) => !only || only.some((o) => v.name.includes(o))).map((v) => join(outDir, `${s}--${v.name}.png`));
@@ -400,11 +484,12 @@ try {
     }
   }
 } finally {
-  writeFileSync(join(outDir, 'report.json'), JSON.stringify({ limits: LIMITS, dpr: DPR, failures, warnings, atlasBleed: bleedNotes, report }, null, 1));
+  writeFileSync(join(outDir, 'report.json'), JSON.stringify({ limits: LIMITS, dpr: DPR, failures, warnings, atlasBleed: bleedNotes, typography: textNotes, report }, null, 1));
   await browser.close();
   await server.close();
 }
 console.log(`atlas bleed: ${bleedNotes.join(', ')}`);
+for (const n of textNotes) console.log(`text/typography: ${n}`);
 console.log(`QA: ${failures.length} failures, ${warnings.length} comfort warnings → ${outDir}`);
 for (const f of failures) console.log('  ✗ ' + f);
 for (const w of warnings.slice(0, 60)) console.log('  ! ' + w);

@@ -775,12 +775,110 @@ The list is in `docs/RELEASE_HANDOFF.md` §3:
 - Firefox, WebKit and real devices untested;
 - platform PWA limits.
 
+## Stage 12 — Visual identity, responsive interface and the Story shell ✅ (2026-11-16)
+
+Story tracking: `docs/STORY_BUILD_STATUS.md`. Design system: `docs/DESIGN.md`.
+
+### Completed
+
+- **Owner inputs merged from `main` without overwriting:**
+  - the approved script, `docs/STORY_SCRIPT.md` v0.2;
+  - four story-cast atlases, catalogued under `assets/art/characters/` with their
+    original filenames: Vale, Luz, Marisol, Rafa (variants).
+- **Scope:** `AGENTS.md` now records the owner's approval of NO REST FOR COUSIN,
+  replacing the old no-campaign rule. Every architectural requirement is kept.
+- **Design tokens:** six colours plus an explicit allowlist of pairings, contrast-tested
+  (including disabled states, a two-tone focus ring and scrims over the worst-case
+  backdrop). Gold on ivory (1.65:1) is forbidden for text. Destructive buttons became
+  outlined ivory.
+- **Fonts:**
+  - Bricolage Grotesque (61 KB) and DM Sans (21 KB), self-hosted WOFF2 subsets;
+    OFL 1.1 verified, with no Reserved Font Name; licenses shipped in `licenses/`.
+  - Spanish accents, ñ, ¿, ¡ and typographic quotes included.
+  - Metric-matched fallbacks: measured CLS 0.0199.
+  - Tabular scores via Bricolage's `tnum` (this DM Sans build has none).
+  - The base font is now `1rem`, which fixes a bug where the player's browser
+    text-size setting was ignored.
+- **Wordmark:** vector master, monochrome and compact variants, with a domino-linked
+  ampersand and accessible text. It's used on the start screen, the menu and Story,
+  where the subtitle reads NO REST FOR COUSIN.
+- **Destinations:** Story / Quick Play / Two Players, with How to Play · Settings ·
+  Statistics. Quick Play and Two Players preselect their opponent. Every existing
+  mode still works (8 complete matches).
+- **Story shell:**
+  - New Case / Continue Case, a two-tap start-over that resets Story only.
+  - Chapter selection for all seven chapters (titles, locations and hands come from
+    the script).
+  - A notebook and evidence panel.
+  - **The Prologue plays from the verbatim script** with captions, transcript, text
+    size, skip, back and keyboard control.
+  - Story progress is a separate versioned record.
+  - Chapter play and replay are labelled "next build stage".
+- **Script pipeline:** `npm run story:build` turns section 4 into `src/story/script.json`
+  (492 blocks), loaded as a lazy 76 KB chunk. A test proves it reproduces section 4
+  line for line.
+- **Components:** speaker labels, dialogue and caption panels, chapter cards, evidence
+  panel, notebook entries, cinematic controls. Sheets and covers are re-skinned.
+- **Layouts:**
+  - portrait stacked;
+  - short landscape split (compact wordmark, nothing below the fold);
+  - tablet balanced;
+  - desktop composed (max 1080 px, no stretched panels).
+- **Hand targets:** gap-split `::before` hit areas give ≥ 44 px without overlapping
+  neighbours (40 + 4, 38 + 6). The QA comfort warnings are gone.
+- **Prologue backdrop:** the cave is now a runtime WebP derivative (292 KB), warmed
+  only when Story opens.
+- **Found and fixed during QA:**
+  - the vignette layer painted over the scene player;
+  - a generic positioning rule broke the privacy cover's fixed position (page scroll
+    under the cover);
+  - chapter-location text was clamped and hidden;
+  - axe: a label-content mismatch on Back, a nested `<main>`, a missing `h1` in the
+    scene.
+- **Earlier findings:**
+  - Save failures now show a persistent "Not saved" banner (autosave and Story); the
+    update-time retry is still open.
+  - The PWA base-path build warning was rechecked: it's an intentional runtime
+    resolution, now annotated, and the build is warning-free.
+  - Music recovery, AI worker resilience and version alignment remain open (see
+    `docs/STORY_BUILD_STATUS.md`).
+- **Budgets restructured from measurements:** core code 268/300 KB, story script
+  75/100, fonts 80/100, images 1,703/2,000, startup 868/900 KB. Fonts and the script
+  chunk are now precached for offline play.
+
+### Commands run and results (Chromium only)
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | pass: **278 tests in 30 files**. New: tokens/contrast, the script's verbatim round-trip and structure (3 Draw, 2 Block, 2 Partnership), story progress, speaker labels. Asset verify and build budgets pass. |
+| `npm run qa` | **0 failures, 0 comfort warnings**: 6 viewports × 11 screens (new: story case file, story scene); atlas bleed 0/27; browser text size 150% and 200% on menu, story and setup; tabular digits; CLS 0.0199 |
+| `npm run a11y` | **0 failures**: axe clean on 15 screens and dialogs, including the story case file, scene and transcript; keyboard Enter advances; the transcript traps Tab and closes on Escape |
+| `npm run e2e` | pass (all earlier stages, including the 400-tap rapid-action burst). The first attempt failed only because I edited a source file mid-run and the dev server hot-reloaded the page; the re-run without edits passed. |
+| `npm run matches` | pass: complete matches in all 8 arrangements, clean console |
+| `npm run pwa` | pass: offline cache **2,188,958 B** (10-file shell, 435 KB, now including both fonts and the lazy script chunk; plus 7 images, 1,702.5 KB). Offline hand, interrupted downloads (now "2 of 7"), quota, update A → B and repair/erase all pass. The test's hard-coded "of 6" was replaced by the build's own image count. |
+| `npm run build` + `npm run smoke` | pass (production subpath, offline restart, clean console) |
+
+### Known issues
+
+- **Not tested:** Firefox, WebKit and real devices; safe areas are emulated only.
+- **Cast portraits** need expression labels before they can be used.
+- **Story chapters 1–7 and the epilogue** aren't playable yet (labelled in the UI).
+- **The total dist is 9.58 MB of a 9.8 MB budget**, mostly music. The next story
+  backdrops will need a deliberate raise.
+
 ## Next stage
 
-Owner actions:
-1. Supply the analytics contract.
-2. Enable Pages (Source: GitHub Actions) and authorize the merge to `main`; the
-   deploy runs on that push.
-3. Confirm the live URL.
-4. Run `docs/PLAYTEST.md` on real devices.
-5. Supply final SFX and the intro video, and audition the music loops.
+**Stage 13: Story chapter play.** The detailed list is in `docs/STORY_BUILD_STATUS.md`:
+- one guarded hand per chapter, with outcome inserts, notebook/evidence progression,
+  chapter replay and the epilogue;
+- the interrupted resilience items: update-time save retry, music recovery, AI worker
+  timeouts;
+- version alignment.
+
+Still waiting on the owner:
+- the analytics contract;
+- enabling Pages and authorising the merge;
+- the intro video;
+- cast expression labels;
+- the sound bank;
+- real-device and Firefox/WebKit playtests.

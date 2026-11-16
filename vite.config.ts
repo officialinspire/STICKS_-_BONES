@@ -38,7 +38,7 @@ export function pwaPlugin(): Plugin {
     enforce: 'post', // after Vite's HTML plugin, so index.html is in the bundle and in the hash
     generateBundle(_options, bundle) {
       const files = Object.keys(bundle).sort();
-      const shell = ['index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-maskable-192.png', ...files.filter((f) => /\.(js|css)$/.test(f))];
+      const shell = ['index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-maskable-192.png', ...files.filter((f) => /\.(js|css|woff2)$/.test(f))];
       const assets = files.filter((f) => /\.webp$/.test(f));
       if (files.some((f) => /\.png$/.test(f))) this.error('a PNG source sheet is in the bundle; only WebP derivatives may be cached');
       const h = createHash('sha256');

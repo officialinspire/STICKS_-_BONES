@@ -96,7 +96,9 @@ export class PwaController {
 
   /** The app's root URL (one level above the hashed entry chunk in assets/). */
   static appRoot(): URL {
-    return new URL('../', import.meta.url);
+    // Intentionally resolved at runtime (the entry chunk lives in assets/, one level below the app
+    // root), so the same build works under any GitHub Pages subpath. Verified by npm run pwa / smoke.
+    return new URL(/* @vite-ignore */ '../', import.meta.url);
   }
 
   async start(): Promise<void> {

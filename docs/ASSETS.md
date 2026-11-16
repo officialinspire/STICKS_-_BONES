@@ -282,3 +282,22 @@ measured edge/alpha quality are in `src/assets/derivatives.json`, and
 `npm run assets:verify` re-checks them. The originals in `assets/art/` are
 unchanged. Sizes, quality gates and the loading order are in
 [PERFORMANCE.md](PERFORMANCE.md).
+
+## Stage 12 — story cast, story backdrop, fonts and brand
+
+- **Story cast atlases** (the owner's asset-production upload, Nov 16, 2026). Four
+  eight-expression portrait sheets (2 × 4 grids, 1774 × 887, transparent) were moved
+  from the repository root into `assets/art/characters/` with their **original
+  filenames unchanged**:
+  - `cast.vale.atlas`: Tomás Vale, tan suit;
+  - `cast.luz.atlas`: Luz Rivera, green field shirt;
+  - `cast.marisol.atlas`: Marisol Vélez, coral polo and lanyard;
+  - `cast.rafa.atlas`: Tío Rafa, cream guayabera.
+
+  Their frames are measured and verified (no neighbour contact). Status is
+  **variant**: they aren't bundled yet. The owner hasn't labelled which expression
+  each frame shows, so frames are named `e1`–`e8` by position.
+- **`env.cave-waterfall`** is now **runtime**: a WebP derivative (292 KB), used for the
+  Prologue's dream and warmed only when Story opens.
+- **Fonts** (DM Sans, Bricolage Grotesque; SIL OFL 1.1) and the **wordmark** vectors
+  are described in [DESIGN.md](DESIGN.md).

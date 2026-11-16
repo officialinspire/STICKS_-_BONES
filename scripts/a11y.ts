@@ -152,6 +152,31 @@ try {
       await axe(page, `menu: ${s}`);
       await page.click('[data-act="home"]');
     }
+    // Story: case file, a scene, the transcript dialog — and keyboard-only advancing.
+    await page.click('[data-act="story"]');
+    await page.waitForSelector('.story-shell');
+    await axe(page, 'story: case file');
+    await page.click('[data-act="story-new"], [data-act="story-continue"]');
+    await page.waitForSelector('.story-stage');
+    check(await activeIs(page, '[data-act="story-next"]'), 'story: Next not focused when the scene opens');
+    const pos0 = await page.textContent('.cine-pos');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(100);
+    const pos1 = await page.textContent('.cine-pos');
+    check(pos0 !== pos1, `story: Enter did not advance (${pos0} → ${pos1})`);
+    await page.waitForTimeout(300);
+    await axe(page, 'story: scene');
+    await page.click('[data-act="story-transcript"]');
+    await page.waitForSelector('dialog.transcript[open]');
+    await axe(page, 'story: transcript');
+    await tabStaysInside(page, 'dialog.transcript[open]', 'story transcript', 6);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+    check(!(await page.locator('dialog.transcript[open]').count()), 'story: Escape did not close the transcript');
+    notes.push(`story: keyboard Enter advanced ${pos0} → ${pos1}; transcript trapped Tab and closed on Escape`);
+    await page.click('[data-act="story-file"]');
+    await page.click('[data-act="story-home"]');
+    await page.waitForSelector('[data-go="setup"]');
     await startMatch(page, { mode: 'partnership4', opponent: 'ai', seed: 'axe' });
     await waitHumanTurn(page);
     await page.locator('.hand-tile.is-legal').first().click();

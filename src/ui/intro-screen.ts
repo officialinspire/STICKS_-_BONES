@@ -6,6 +6,7 @@
  */
 import { IntroController, type IntroEnd, type VideoPort } from '../app/intro';
 import { realScheduler } from '../app/session';
+import { wordmarkHtml } from './brand';
 
 export interface IntroDeps {
   root: HTMLElement;
@@ -43,7 +44,7 @@ export function showStart(d: IntroDeps): () => void {
   root.className = 'is-start';
   root.innerHTML = `
     <div class="start-screen">
-      <h1 class="title">STICKS <span class="amp">&amp;</span> BONES</h1>
+      ${wordmarkHtml({ level: 'h1', className: 'is-start' })}
       <button type="button" class="start-button" data-act="start" autofocus>Tap, click or press any key to start</button>
     </div>
     <div class="fade-black" aria-hidden="true"></div>`;

@@ -21,6 +21,7 @@
     "atlas:build": "tsx scripts/build-atlas.ts",
     "assets:derive": "tsx scripts/build-derivatives.ts",
     "icons:build": "tsx scripts/build-icons.ts",
+    "story:build": "tsx scripts/build-story.ts",
     "pwa": "tsx scripts/pwa.ts",
     "matches": "tsx scripts/matches.ts",
     "smoke": "tsx scripts/smoke.ts",

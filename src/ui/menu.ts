@@ -14,6 +14,7 @@ import { helpHtml } from './help';
 import { totals, type Stats } from '../app/stats';
 import { bindSettingsPanel, settingsPanelHtml, type SettingsApi } from './settings-panel';
 import { esc } from './svg';
+import { MENU_PROMISE, STORY_SUBTITLE, wordmarkHtml } from './brand';
 
 export interface MenuChoice {
   mode: ModeId;
@@ -36,7 +37,7 @@ export interface ResumeOffer {
   readonly twoHumans: boolean;
 }
 
-export type MenuScreen = 'home' | 'setup' | 'rules' | 'settings' | 'stats';
+export type MenuScreen = 'home' | 'setup' | 'setup-local' | 'rules' | 'settings' | 'stats';
 
 export interface MenuHandlers {
   readonly dev: boolean;
@@ -50,6 +51,8 @@ export interface MenuHandlers {
   onStart(c: MenuChoice): void;
   onResume(): void;
   onDiscard(): void;
+  /** Open Story (NO REST FOR COUSIN): the case file. */
+  onStory(): void;
   /** Offline/PWA status and actions (absent where unsupported, e.g. the dev server). */
   readonly pwa?: MenuPwa;
 }
@@ -79,8 +82,8 @@ function shell(inner: string, speech: string, mood: Parameters<typeof hostFigure
   return `
     <div class="scene">
       <header class="brand">
-        <h1 class="title">STICKS <span class="amp">&amp;</span> BONES</h1>
-        <p class="tagline">Dominoes in Puerto Rico · hosted by Roberto “Cousin”</p>
+        ${wordmarkHtml({ level: 'h1' })}
+        <p class="tagline">${esc(MENU_PROMISE)}</p>
       </header>
       <section class="host" aria-label="Your host">
         <div class="host-figure">${hostFigureHtml(mood, 'full')}</div>
@@ -111,11 +114,15 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
         ${(h.notices ?? []).length ? `<div class="notice" role="status">${(h.notices ?? []).map((n) => `<p>${esc(n)}</p>`).join('')}</div>` : ''}
         ${h.resume ? `<div class="resume"><h2>Game in progress</h2><p>${esc(h.resume.summary)}</p>${h.resume.twoHumans ? '<p class="note">Hands stay hidden until the right player reveals them.</p>' : ''}<div class="row"><button type="button" class="btn" data-act="resume">Resume</button><button type="button" class="btn-ghost dark" data-act="discard">Discard</button></div></div>` : ''}
         ${updateBanner(h.pwa)}
-        <button type="button" class="btn btn-start" data-go="setup">New game</button>
+        <ul class="destinations" role="list">
+          <li><button type="button" class="dest dest-story" data-act="story"><span class="dest-title">Story</span><span class="dest-sub">${esc(STORY_SUBTITLE)} · seven chapters, seven hands</span></button></li>
+          <li><button type="button" class="dest dest-quick btn-start" data-go="setup"><span class="dest-title">Quick Play</span><span class="dest-sub">You against Cousin: Draw, Block or Partnership</span></button></li>
+          <li><button type="button" class="dest dest-two" data-go="setup-local"><span class="dest-title">Two Players</span><span class="dest-sub">Share one device, hands kept private</span></button></li>
+        </ul>
         <div class="row home-row">
-          <button type="button" class="btn-ghost dark" data-go="rules">How to play</button>
-          <button type="button" class="btn-ghost dark" data-go="stats">Statistics</button>
+          <button type="button" class="btn-ghost dark" data-go="rules">How to Play</button>
           <button type="button" class="btn-ghost dark" data-go="settings">Settings</button>
+          <button type="button" class="btn-ghost dark" data-go="stats">Statistics</button>
         </div>
         ${offlineLine(h.pwa)}
       </nav>`,
@@ -125,6 +132,7 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
     root.querySelector('[data-act="resume"]')?.addEventListener('click', () => h.onResume());
     root.querySelector('[data-act="discard"]')?.addEventListener('click', () => h.onDiscard());
     root.querySelector('[data-act="update-now"]')?.addEventListener('click', () => h.pwa?.onUpdate());
+    root.querySelector('[data-act="story"]')?.addEventListener('click', () => h.onStory());
     return;
   }
   if (screen === 'rules') {
@@ -211,7 +219,9 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
     return;
   }
   const { dev, onStart } = h;
-  const mode = initial.mode ?? 'draw2';
+  // Quick Play opens on the computer opponent, Two Players on one shared device (both can still switch).
+  const init: Partial<MenuChoice> = { ...initial, opponent: screen === 'setup-local' ? 'local' : 'ai' };
+  const mode = init.mode ?? 'draw2';
   const modeCards = (['draw2', 'block2', 'partnership4'] as ModeId[])
     .map((m) => {
       const r = preset.modes[m];
@@ -241,22 +251,22 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
     `
       <form class="modes" aria-labelledby="modes-heading">
         ${back}
-        <h2 id="modes-heading">New game</h2>
+        <h2 id="modes-heading">${screen === 'setup-local' ? 'Two Players' : 'Quick Play'}</h2>
         <fieldset><legend>Game</legend><div class="choice-grid">${modeCards}</div></fieldset>
         <fieldset><legend>Opponent</legend><div class="row">
-          <label class="check"><input type="radio" name="opponent" value="ai" ${initial.opponent !== 'local' ? 'checked' : ''}> Play the computer</label>
-          <label class="check" data-local><input type="radio" name="opponent" value="local" ${initial.opponent === 'local' ? 'checked' : ''}> Two players, one device</label>
+          <label class="check"><input type="radio" name="opponent" value="ai" ${init.opponent !== 'local' ? 'checked' : ''}> Play the computer</label>
+          <label class="check" data-local><input type="radio" name="opponent" value="local" ${init.opponent === 'local' ? 'checked' : ''}> Two players, one device</label>
         </div><p class="note" data-p4-note hidden>Partnership: you and Luz (computer) against Cousin and Tío Rafa (computer).</p>
         <div class="two-players" data-two hidden>
           <div class="row">
-            <label class="field">Player 1 <input name="name1" type="text" maxlength="20" autocomplete="off" value="${esc(initial.names?.[0] ?? '')}" placeholder="Player 1"></label>
-            <label class="field">Player 2 <input name="name2" type="text" maxlength="20" autocomplete="off" value="${esc(initial.names?.[1] ?? '')}" placeholder="Player 2"></label>
+            <label class="field">Player 1 <input name="name1" type="text" maxlength="20" autocomplete="off" value="${esc(init.names?.[0] ?? '')}" placeholder="Player 1"></label>
+            <label class="field">Player 2 <input name="name2" type="text" maxlength="20" autocomplete="off" value="${esc(init.names?.[1] ?? '')}" placeholder="Player 2"></label>
           </div>
           <label class="field" data-seating hidden>Where does Player 2 sit?
             <select name="seating">
-              <option value="across" ${initial.seating === 'across' || !initial.seating ? 'selected' : ''}>Across — partners</option>
-              <option value="right" ${initial.seating === 'right' ? 'selected' : ''}>Right of Player 1 — opponents (plays next)</option>
-              <option value="left" ${initial.seating === 'left' ? 'selected' : ''}>Left of Player 1 — opponents (plays before)</option>
+              <option value="across" ${init.seating === 'across' || !init.seating ? 'selected' : ''}>Across — partners</option>
+              <option value="right" ${init.seating === 'right' ? 'selected' : ''}>Right of Player 1 — opponents (plays next)</option>
+              <option value="left" ${init.seating === 'left' ? 'selected' : ''}>Left of Player 1 — opponents (plays before)</option>
             </select>
           </label>
           <p class="note">You’ll pass the device between turns. Each hand stays covered until its owner taps Reveal.</p>
@@ -265,7 +275,7 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
           ${(['easy', 'normal', 'hard'] as Difficulty[])
             .map(
               (d) =>
-                `<label class="check"><input type="radio" name="difficulty" value="${d}" ${(initial.difficulty ?? 'normal') === d ? 'checked' : ''}> ${d === 'easy' ? 'Easy' : d === 'normal' ? 'Normal' : 'Hard'}</label>`,
+                `<label class="check"><input type="radio" name="difficulty" value="${d}" ${(init.difficulty ?? 'normal') === d ? 'checked' : ''}> ${d === 'easy' ? 'Easy' : d === 'normal' ? 'Normal' : 'Hard'}</label>`,
             )
             .join('')}
         </div></fieldset>

@@ -354,7 +354,7 @@ export const IMAGE_ASSETS = [
   {
     id: "env.cave-waterfall",
     category: "environment",
-    status: "variant",
+    status: "runtime",
     path: "assets/art/environments/Secret Cave Waterfall Platform.png",
     originalName: "Secret Cave Waterfall Platform.png",
     bytes: 3063918,
@@ -363,6 +363,102 @@ export const IMAGE_ASSETS = [
     height: 941,
     hasAlpha: false,
     proposedUse: "Selectable table setting."
+  },
+  {
+    id: "cast.vale.atlas",
+    category: "character",
+    status: "variant",
+    path: "assets/art/characters/file_0000000026f481f5b86411b8284ade12.png",
+    originalName: "file_0000000026f481f5b86411b8284ade12.png",
+    bytes: 1503432,
+    sha256: "5c197a8e64481c43338073e89824bff6274788f2a186ef452159e5d356247017",
+    width: 1774,
+    height: 887,
+    hasAlpha: true,
+    layout: { rows: 2, cols: 4, detect: { kind: "alpha", alphaThreshold: 8 } },
+    frames: [
+      { id: "e1", label: "Tomás Vale — expression 1 (row 1, column 1; meaning not yet labelled by the owner)", rect: { x: 31, y: 24, w: 364, h: 401 }, cell: { x: 0, y: 0, w: 434, h: 446 }, touchesNeighbor: false },
+      { id: "e2", label: "Tomás Vale — expression 2 (row 1, column 2; meaning not yet labelled by the owner)", rect: { x: 474, y: 24, w: 364, h: 401 }, cell: { x: 434, y: 0, w: 444, h: 446 }, touchesNeighbor: false },
+      { id: "e3", label: "Tomás Vale — expression 3 (row 1, column 3; meaning not yet labelled by the owner)", rect: { x: 918, y: 27, w: 364, h: 398 }, cell: { x: 878, y: 0, w: 443, h: 446 }, touchesNeighbor: false },
+      { id: "e4", label: "Tomás Vale — expression 4 (row 1, column 4; meaning not yet labelled by the owner)", rect: { x: 1361, y: 24, w: 364, h: 401 }, cell: { x: 1321, y: 0, w: 453, h: 446 }, touchesNeighbor: false },
+      { id: "e5", label: "Tomás Vale — expression 5 (row 2, column 1; meaning not yet labelled by the owner)", rect: { x: 31, y: 471, w: 364, h: 398 }, cell: { x: 0, y: 446, w: 434, h: 441 }, touchesNeighbor: false },
+      { id: "e6", label: "Tomás Vale — expression 6 (row 2, column 2; meaning not yet labelled by the owner)", rect: { x: 474, y: 471, w: 365, h: 398 }, cell: { x: 434, y: 446, w: 444, h: 441 }, touchesNeighbor: false },
+      { id: "e7", label: "Tomás Vale — expression 7 (row 2, column 3; meaning not yet labelled by the owner)", rect: { x: 918, y: 467, w: 365, h: 402 }, cell: { x: 878, y: 446, w: 444, h: 441 }, touchesNeighbor: false },
+      { id: "e8", label: "Tomás Vale — expression 8 (row 2, column 4; meaning not yet labelled by the owner)", rect: { x: 1361, y: 471, w: 365, h: 398 }, cell: { x: 1322, y: 446, w: 452, h: 441 }, touchesNeighbor: false }
+    ],
+    proposedUse: "Tomás Vale (tan suit) — eight-expression portrait atlas from the owner's asset-production upload (Nov 16, 2026) for NO REST FOR COUSIN. Story cast art; not bundled until the story chapters use it (needs a WebP derivative and expression labels)."
+  },
+  {
+    id: "cast.luz.atlas",
+    category: "character",
+    status: "variant",
+    path: "assets/art/characters/file_00000000490481f599b413eb36e26b11.png",
+    originalName: "file_00000000490481f599b413eb36e26b11.png",
+    bytes: 1458560,
+    sha256: "3f1eb2364c0ab4194c4262bc136912678e36fa1e7c7984436b5c1d858719e73d",
+    width: 1774,
+    height: 887,
+    hasAlpha: true,
+    layout: { rows: 2, cols: 4, detect: { kind: "alpha", alphaThreshold: 8 } },
+    frames: [
+      { id: "e1", label: "Luz Rivera — expression 1 (row 1, column 1; meaning not yet labelled by the owner)", rect: { x: 47, y: 28, w: 351, h: 396 }, cell: { x: 0, y: 0, w: 444, h: 448 }, touchesNeighbor: false },
+      { id: "e2", label: "Luz Rivera — expression 2 (row 1, column 2; meaning not yet labelled by the owner)", rect: { x: 491, y: 28, w: 351, h: 396 }, cell: { x: 444, y: 0, w: 444, h: 448 }, touchesNeighbor: false },
+      { id: "e3", label: "Luz Rivera — expression 3 (row 1, column 3; meaning not yet labelled by the owner)", rect: { x: 934, y: 28, w: 351, h: 396 }, cell: { x: 888, y: 0, w: 443, h: 448 }, touchesNeighbor: false },
+      { id: "e4", label: "Luz Rivera — expression 4 (row 1, column 4; meaning not yet labelled by the owner)", rect: { x: 1377, y: 29, w: 352, h: 395 }, cell: { x: 1331, y: 0, w: 443, h: 448 }, touchesNeighbor: false },
+      { id: "e5", label: "Luz Rivera — expression 5 (row 2, column 1; meaning not yet labelled by the owner)", rect: { x: 47, y: 472, w: 351, h: 397 }, cell: { x: 0, y: 448, w: 444, h: 439 }, touchesNeighbor: false },
+      { id: "e6", label: "Luz Rivera — expression 6 (row 2, column 2; meaning not yet labelled by the owner)", rect: { x: 491, y: 472, w: 350, h: 397 }, cell: { x: 444, y: 448, w: 443, h: 439 }, touchesNeighbor: false },
+      { id: "e7", label: "Luz Rivera — expression 7 (row 2, column 3; meaning not yet labelled by the owner)", rect: { x: 934, y: 472, w: 351, h: 397 }, cell: { x: 887, y: 448, w: 444, h: 439 }, touchesNeighbor: false },
+      { id: "e8", label: "Luz Rivera — expression 8 (row 2, column 4; meaning not yet labelled by the owner)", rect: { x: 1378, y: 472, w: 351, h: 397 }, cell: { x: 1331, y: 448, w: 443, h: 439 }, touchesNeighbor: false }
+    ],
+    proposedUse: "Luz Rivera (green field shirt and satchel) — eight-expression portrait atlas from the owner's asset-production upload (Nov 16, 2026) for NO REST FOR COUSIN. Story cast art; not bundled until the story chapters use it (needs a WebP derivative and expression labels)."
+  },
+  {
+    id: "cast.marisol.atlas",
+    category: "character",
+    status: "variant",
+    path: "assets/art/characters/file_00000000490881f58f848fba3782db75.png",
+    originalName: "file_00000000490881f58f848fba3782db75.png",
+    bytes: 1783753,
+    sha256: "49a7e46816c0502fd0662887388a3a6dacc7b6e3930cebdd79f94bb74828acbe",
+    width: 1774,
+    height: 887,
+    hasAlpha: true,
+    layout: { rows: 2, cols: 4, detect: { kind: "alpha", alphaThreshold: 8 } },
+    frames: [
+      { id: "e1", label: "Marisol Vélez — expression 1 (row 1, column 1; meaning not yet labelled by the owner)", rect: { x: 33, y: 12, w: 366, h: 417 }, cell: { x: 0, y: 0, w: 437, h: 442 }, touchesNeighbor: false },
+      { id: "e2", label: "Marisol Vélez — expression 2 (row 1, column 2; meaning not yet labelled by the owner)", rect: { x: 476, y: 12, w: 366, h: 417 }, cell: { x: 437, y: 0, w: 444, h: 442 }, touchesNeighbor: false },
+      { id: "e3", label: "Marisol Vélez — expression 3 (row 1, column 3; meaning not yet labelled by the owner)", rect: { x: 920, y: 12, w: 366, h: 417 }, cell: { x: 881, y: 0, w: 443, h: 442 }, touchesNeighbor: false },
+      { id: "e4", label: "Marisol Vélez — expression 4 (row 1, column 4; meaning not yet labelled by the owner)", rect: { x: 1363, y: 13, w: 366, h: 416 }, cell: { x: 1324, y: 0, w: 450, h: 442 }, touchesNeighbor: false },
+      { id: "e5", label: "Marisol Vélez — expression 5 (row 2, column 1; meaning not yet labelled by the owner)", rect: { x: 33, y: 455, w: 366, h: 418 }, cell: { x: 0, y: 442, w: 437, h: 445 }, touchesNeighbor: false },
+      { id: "e6", label: "Marisol Vélez — expression 6 (row 2, column 2; meaning not yet labelled by the owner)", rect: { x: 476, y: 456, w: 366, h: 417 }, cell: { x: 437, y: 442, w: 444, h: 445 }, touchesNeighbor: false },
+      { id: "e7", label: "Marisol Vélez — expression 7 (row 2, column 3; meaning not yet labelled by the owner)", rect: { x: 920, y: 456, w: 366, h: 417 }, cell: { x: 881, y: 442, w: 443, h: 445 }, touchesNeighbor: false },
+      { id: "e8", label: "Marisol Vélez — expression 8 (row 2, column 4; meaning not yet labelled by the owner)", rect: { x: 1363, y: 456, w: 366, h: 417 }, cell: { x: 1324, y: 442, w: 450, h: 445 }, touchesNeighbor: false }
+    ],
+    proposedUse: "Marisol Vélez (coral polo with staff lanyard) — eight-expression portrait atlas from the owner's asset-production upload (Nov 16, 2026) for NO REST FOR COUSIN. Story cast art; not bundled until the story chapters use it (needs a WebP derivative and expression labels)."
+  },
+  {
+    id: "cast.rafa.atlas",
+    category: "character",
+    status: "variant",
+    path: "assets/art/characters/file_000000004b5081f59acf62dc8ef1a216.png",
+    originalName: "file_000000004b5081f59acf62dc8ef1a216.png",
+    bytes: 1780912,
+    sha256: "fa5a69ffd45798daec5ae13428a2169c7252ff9572199512292cec3a98e57057",
+    width: 1774,
+    height: 887,
+    hasAlpha: true,
+    layout: { rows: 2, cols: 4, detect: { kind: "alpha", alphaThreshold: 8 } },
+    frames: [
+      { id: "e1", label: "Tío Rafa — expression 1 (row 1, column 1; meaning not yet labelled by the owner)", rect: { x: 34, y: 34, w: 372, h: 393 }, cell: { x: 0, y: 0, w: 442, h: 450 }, touchesNeighbor: false },
+      { id: "e2", label: "Tío Rafa — expression 2 (row 1, column 2; meaning not yet labelled by the owner)", rect: { x: 479, y: 34, w: 370, h: 393 }, cell: { x: 442, y: 0, w: 443, h: 450 }, touchesNeighbor: false },
+      { id: "e3", label: "Tío Rafa — expression 3 (row 1, column 3; meaning not yet labelled by the owner)", rect: { x: 921, y: 34, w: 372, h: 393 }, cell: { x: 885, y: 0, w: 444, h: 450 }, touchesNeighbor: false },
+      { id: "e4", label: "Tío Rafa — expression 4 (row 1, column 4; meaning not yet labelled by the owner)", rect: { x: 1366, y: 33, w: 372, h: 393 }, cell: { x: 1329, y: 0, w: 445, h: 450 }, touchesNeighbor: false },
+      { id: "e5", label: "Tío Rafa — expression 5 (row 2, column 1; meaning not yet labelled by the owner)", rect: { x: 34, y: 478, w: 372, h: 392 }, cell: { x: 0, y: 450, w: 442, h: 437 }, touchesNeighbor: false },
+      { id: "e6", label: "Tío Rafa — expression 6 (row 2, column 2; meaning not yet labelled by the owner)", rect: { x: 479, y: 478, w: 372, h: 392 }, cell: { x: 442, y: 450, w: 444, h: 437 }, touchesNeighbor: false },
+      { id: "e7", label: "Tío Rafa — expression 7 (row 2, column 3; meaning not yet labelled by the owner)", rect: { x: 921, y: 473, w: 372, h: 397 }, cell: { x: 886, y: 450, w: 443, h: 437 }, touchesNeighbor: false },
+      { id: "e8", label: "Tío Rafa — expression 8 (row 2, column 4; meaning not yet labelled by the owner)", rect: { x: 1366, y: 477, w: 372, h: 393 }, cell: { x: 1329, y: 450, w: 445, h: 437 }, touchesNeighbor: false }
+    ],
+    proposedUse: "Tío Rafa (cream guayabera) — eight-expression portrait atlas from the owner's asset-production upload (Nov 16, 2026) for NO REST FOR COUSIN. Story cast art; not bundled until the story chapters use it (needs a WebP derivative and expression labels)."
   }
 ] as const satisfies readonly ImageAsset[];
 
@@ -372,7 +468,7 @@ export const MISSING_ASSETS: readonly MissingAsset[] = [
   { id: 'audio.sfx', kind: 'audio', description: 'Tile place, knock (pass), draw, slam sound effects and patio ambience.', fallback: 'Code-synthesized PLACEHOLDER sounds (src/audio/synth.ts); not final audio.' },
   { id: 'audio.voice', kind: 'audio', description: 'Spoken lines for Cousin.', fallback: 'Subtitles (speech bubble + live region) and expressions only.' },
   { id: 'video.intro', kind: 'video', description: 'INSPIRE studio intro, expected at assets/video/inspiresoftwareintro.mp4.', fallback: 'Start screen fades through black straight to the menu.' },
-  { id: 'image.opponents', kind: 'image', description: 'Opponent / partner seat portraits for AI and second-human seats.', fallback: 'Seat badges with initials; silhouette reference exists but has an opaque background.' },
+  { id: 'image.opponents', kind: 'image', description: 'Opponent / partner seat portraits for AI and second-human seats.', fallback: 'Seat badges with initials. Story cast atlases (Vale, Luz, Marisol, Rafa) were supplied on Nov 16, 2026 and are catalogued as variants; they need expression labels and WebP derivatives before runtime use.' },
   { id: 'image.tile-sideview', kind: 'image', description: 'Edge-on / stacked tile art for the boneyard and opponent hands.', fallback: 'SVG tile backs rendered from the teal back sprite or flat colour.' },
   { id: 'image.ui-icons', kind: 'image', description: 'App icon / favicon and UI glyphs.', fallback: 'Inline SVG favicon with a 6|6 domino.' },
 ];

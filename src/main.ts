@@ -18,6 +18,7 @@ import { haptic, type HapticCue } from './audio/haptics';
 import { showStart } from './ui/intro-screen';
 import { renderMenu, type MenuChoice, type ResumeOffer } from './ui/menu';
 import { TableScreen } from './ui/table';
+import { renderStoryHome } from './ui/story-ui';
 import { consumeUpdatedFlag, describeOffline, eraseLocalData, PwaController } from './app/pwa';
 import { Analytics, winnerLabel, type AnalyticsEvent, type MatchInfo, type StartKind } from './app/analytics';
 import { ANALYTICS_CONFIG } from './app/analytics-config';
@@ -166,6 +167,47 @@ const menuPwa = {
 };
 const tableUpdate = { ready: () => pwa.view.updateReady, apply: applyUpdate };
 
+// ---- persistent save feedback ----------------------------------------------------------
+/**
+ * Shown whenever storage refuses a write (quota, private mode, blocked storage) and kept
+ * on screen until a later write succeeds. The game never claims "saved" in that state.
+ */
+let saveFailed = false;
+function setSaveHealth(ok: boolean): void {
+  if (ok === !saveFailed) return;
+  saveFailed = !ok;
+  let el = document.querySelector<HTMLElement>('.save-alert');
+  if (!ok) {
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'save-alert';
+      el.setAttribute('role', 'alert');
+      document.body.append(el);
+    }
+    el.innerHTML = '<p><strong>Not saved.</strong> This browser refused to store your progress (storage full or blocked). Keep this page open, or free some space.</p>';
+    el.hidden = false;
+  } else if (el) el.hidden = true;
+}
+
+// ---- Story: NO REST FOR COUSIN (case file + scene player) -------------------------------
+function openStory(): void {
+  teardown();
+  active = null;
+  audio.setScene('menu');
+  void renderStoryHome({
+    root,
+    store,
+    onBack: () => {
+      root.onclick = null;
+      root.onkeydown = null;
+      root.style.removeProperty('--scene-image');
+      showMenu();
+    },
+    reduceMotion: () => reduceMotion(settings, matchMedia('(prefers-reduced-motion: reduce)').matches),
+    onSaveFailed: () => setSaveHealth(false),
+  });
+}
+
 // ---- the active match ----------------------------------------------------------------
 interface Active {
   table: TableScreen;
@@ -223,6 +265,11 @@ function resumeOffer(game: SavedGame): ResumeOffer {
 
 function showMenu(): void {
   document.documentElement.classList.remove('table-lock');
+  // Leaving Story: drop the scene player's handlers and backdrop.
+  root.onclick = null;
+  root.onkeydown = null;
+  root.style.removeProperty('--scene-image');
+  delete root.dataset.scene;
   // Background warm-up (≤ 2 downloads at a time) for the first table: atlas, tabletop, then the
   // optional art this device will actually show (see deferredAssets).
   initTileArt();
@@ -247,6 +294,7 @@ function showMenu(): void {
     onResetStats: () => updateStats(resetStats(store)),
     onStart: (c) => void start(c),
     onResume: () => resume(),
+    onStory: () => openStory(),
     pwa: import.meta.env.PROD ? menuPwa : undefined,
     onDiscard: () => {
       const g = readSave(store).value;
@@ -280,7 +328,8 @@ function mount(controller: TableController, matchId: string, counted: boolean, o
   controller.subscribe((events) => {
     if (!events.length) return;
     // Autosave after every change (local only; see save.ts for what this is and isn't).
-    writeSave(store, session, matchId);
+    // A refused write is surfaced persistently (never silently ignored).
+    if (session.opponent !== 'dev-both') setSaveHealth(writeSave(store, session, matchId));
     // Analytics from applied engine events only (never from renders): the first accepted
     // command of a new match is its real start; a restored match never "starts" again.
     if (tracked) {

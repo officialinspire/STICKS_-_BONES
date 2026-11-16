@@ -320,7 +320,8 @@ try {
     await page.goto(`${ORIGIN}${APP}`);
     await enterMenu(page);
     const partial = await waitStatus(page, /still to download|interrupted/);
-    check(/2 of 6 images still to download/.test(partial), `interrupted: status should report 2 missing images — ${partial}`);
+    const imageCount = (JSON.parse(readFileSync(join(SITE_A, 'build.json'), 'utf8')) as { assets: string[] }).assets.length;
+    check(new RegExp(`2 of ${imageCount} images still to download`).test(partial), `interrupted: status should report 2 of ${imageCount} images missing — ${partial}`);
     const cached = (await cacheReport(page)).filter((c) => c.name.endsWith(':assets:v1'))[0];
     check(!!cached && !cached.urls.some((u) => /double-six-atlas|weathered-tabletop/.test(u)), 'interrupted: a truncated file was stored in the cache');
     // Offline with images missing: the game still completes with drawn fallbacks.

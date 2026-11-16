@@ -26,6 +26,24 @@
    "alphaExact": true
   },
   {
+   "id": "env.cave-waterfall",
+   "of": "env.cave-waterfall",
+   "path": "assets/generated/web/cave-waterfall.webp",
+   "format": "webp",
+   "encoder": "q80 alphaQuality100 smartSubsample",
+   "width": 1672,
+   "height": 941,
+   "bytes": 292134,
+   "sha256": "ec855cb15d6cf1e829c615b809c681597c2c59949851f358bb4d3bf054a5a608",
+   "sourceBytes": 3063918,
+   "sourceSha256": "e1548692a36bb34690c0a34d6b4dbebdd9abfc8977b90eedc9a5de4f9ed81265",
+   "maxMeanErr": 6,
+   "meanErr": 5.48,
+   "edgeP99": 0,
+   "edgePixels": 0,
+   "alphaExact": true
+  },
+  {
    "id": "table.weathered",
    "of": "table.weathered",
    "path": "assets/generated/web/weathered-tabletop.webp",

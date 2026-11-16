@@ -1,6 +1,6 @@
 # Agent / contributor notes
 
-Read this file, `docs/BUILD_STATUS.md`, `docs/RULES.md`, `docs/ENGINE.md`, `docs/AI.md`, `docs/SHARED_DEVICE.md`, `docs/PRESENTATION.md`, `docs/AUDIO.md`, `docs/SAVES.md`, `docs/ASSETS.md`, `docs/QA.md`, `docs/PERFORMANCE.md`, `docs/PWA.md`, `docs/ANALYTICS.md` and `docs/RELEASE_HANDOFF.md`
+Read this file, `docs/BUILD_STATUS.md`, `docs/RULES.md`, `docs/ENGINE.md`, `docs/AI.md`, `docs/SHARED_DEVICE.md`, `docs/PRESENTATION.md`, `docs/AUDIO.md`, `docs/SAVES.md`, `docs/ASSETS.md`, `docs/QA.md`, `docs/PERFORMANCE.md`, `docs/PWA.md`, `docs/ANALYTICS.md`, `docs/RELEASE_HANDOFF.md`, `docs/STORY_SCRIPT.md`, `docs/STORY_BUILD_STATUS.md` and `docs/DESIGN.md`
 before you change anything.
 
 ## Ground rules
@@ -51,7 +51,17 @@ before you change anything.
   below end targets/HUD. Character art renders through `src/render/stage.ts` boxes only.
 - **Local records are versioned envelopes** (`src/app/storage.ts`). Bump the version and add a migration
   for any shape change; never save presentation state; a restore must not re-score or replay an AI move.
-- **Scope:** no campaign, economy, shops, quests, online multiplayer or required backend.
+- **Scope:** the owner has approved one short story, **NO REST FOR COUSIN** (`docs/STORY_SCRIPT.md`, v0.2):
+  the human plays Roberto "Cousin" through a prologue, seven chapters (seven completed hands: three
+  Draw, two Block, two Partnership), outcome inserts and an epilogue, about 90–110 minutes. Every win,
+  loss or blocked tie advances the story. Quick Play and two-human pass-and-play stay fully playable.
+  Still out of scope: economy, shops, combat, online multiplayer, or any required backend.
+- **The script is authoritative:** never shorten, rewrite or paraphrase its dialogue. Story text reaches
+  the app only through `npm run story:build` (verbatim blocks, round-trip tested). Story state lives
+  outside the pure engine; story hands use the frozen presets unchanged (no scripted tiles, no unfair
+  AI); unfinished Story routes are labelled as such.
+- **Design tokens:** colours come from `src/ui/tokens.ts` / `docs/DESIGN.md` and only in their approved,
+  contrast-tested pairings. Fonts are the self-hosted OFL subsets in `src/assets/fonts/`.
 
 ## Before you finish a stage
 

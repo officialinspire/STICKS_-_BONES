@@ -20,6 +20,8 @@ export const RUNTIME_ASSET_URLS = {
   'tile.atlas': new URL('../../assets/generated/web/double-six-atlas.webp', import.meta.url).href,
   'table.weathered': new URL('../../assets/generated/web/weathered-tabletop.webp', import.meta.url).href,
   'env.neighborhood-patio': new URL('../../assets/generated/web/neighborhood-patio.webp', import.meta.url).href,
+  // Story only (Prologue dream); warmed when the Story screen opens, never at startup.
+  'env.cave-waterfall': new URL('../../assets/generated/web/cave-waterfall.webp', import.meta.url).href,
 } as const satisfies Partial<Record<ImageAssetId, string>>;
 
 export type RuntimeAssetId = keyof typeof RUNTIME_ASSET_URLS;
