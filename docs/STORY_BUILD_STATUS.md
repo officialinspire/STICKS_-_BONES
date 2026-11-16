@@ -61,7 +61,17 @@ v0.2, committed to `main` by the owner as 242ee60). The general project log stay
 
 ## Verification (this stage, Chromium only)
 
-See the Stage 12 entry in `docs/BUILD_STATUS.md` for commands and exact results.
+Commit **`a6c8ad8`** on `claude/inspiring-bardeen-4yfmu5`. The exact output is in the
+Stage 12 entry of `docs/BUILD_STATUS.md`.
+
+| Check | Result |
+| --- | --- |
+| `npm run check` | pass, 278 tests in 30 files, all budgets |
+| `npm run qa` | 0 failures, 0 comfort warnings (6 viewports × 11 screens, text 150%/200%, CLS 0.0199) |
+| `npm run a11y` | 0 failures (axe clean, including the story screens) |
+| `npm run e2e` / `npm run matches` | pass / all 8 arrangements completed full matches |
+| `npm run pwa` / `npm run smoke` | pass, cache 2,188,958 B / pass |
+| GitHub Actions CI | **success**: run 4 on `a6c8ad8` (https://github.com/officialinspire/STICKS_-_BONES/actions/runs/43981221753) |
 
 ## Missing inputs
 
