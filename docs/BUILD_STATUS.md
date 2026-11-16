@@ -467,10 +467,69 @@
   from the owner.
 - Carried over: dev-only `minimatch` advisory, no deploy workflow.
 
-## Next stage — Stage 7: Performance, audio hooks and release
+## Stage 7 — Start screen, studio intro and audio ✅ (2026-11-16)
 
-WebP/AVIF derivatives for backdrop, table and sheets (as new manifest entries),
-an audio layer with hooks for the owner's music and SFX (knock, slam, shuffle)
-gated by settings and reduced-sensory preferences, a table setting picker for
-the other six environments, a Lighthouse/accessibility pass, and a GitHub Pages
-deploy workflow if authorized.
+### Completed
+
+- **Owner's music integrated:** "Patio Dominoes (Take 2)" (menu/results) and
+  "Domino Table (Subtle Vibe)" (gameplay), merged from `main` and moved
+  byte-identical to `assets/audio/music/`.
+  - Measured audio manifest (`src/assets/audio-manifest.ts`): duration, format,
+    LUFS, normalisation gain, silences, ending type. Bytes and SHA-256 are verified.
+- **Loop points:** analysed with `scripts/audio-audit.py` and **not assumed**. No
+  seam is proven seamless, so runtime plays each composed ending and restarts.
+  The candidates are recorded with `auditioned: false`, and there's a dev audition
+  page at `/dev/audio-audition.html`.
+- **Startup:** start screen (touch, click or any key) → studio intro, if
+  `assets/video/inspiresoftwareintro.mp4` is supplied (it isn't yet) → controlled
+  fade through black → menu.
+  - The intro has accessible Skip (Esc too) and Mute buttons.
+  - One guarded `IntroController.finish()` handles Skip, ended, error,
+    start/stall/overall timeouts, play() refusal and a missing file.
+  - The video is released before menu music can start.
+  - The start gesture plays no sound.
+- **AudioManager:**
+  - Exclusive scenes: init, intro, menu, gameplay, paused, results.
+  - Gesture unlock (no AudioContext before the gesture) and persisted
+    master/music/SFX/voice/ambience levels plus mute.
+  - Fades with no music overlap, a token guard on every async step, per-sound and
+    global SFX caps, graceful missing/broken files, and visibility/focus handling
+    that resumes only the current scene.
+- **Web Audio backend:** music streams from `<audio>` elements through gain nodes.
+- **Placeholders, clearly labelled:** code-synthesized SFX (place, knock, draw,
+  slam, tap) and an optional patio ambience bed (off by default, seamless loop by
+  construction).
+- **Optional haptics,** feature-detected.
+- **Voice:** none recorded, so subtitles and expressions carry Cousin.
+- **Settings:** Sound section (mute, five sliders, ambience, haptics).
+- **Table and menu wiring:** scene changes, SFX and haptics on public events, and
+  reset on teardown.
+- Docs: `docs/AUDIO.md`.
+
+### Commands run and results
+
+| Command | Result |
+| --- | --- |
+| `npm run typecheck` / `npm run lint` | pass |
+| `npm test` | pass, **216 tests in 22 files**. New: audio manager (11), intro races (8), ambience loop continuity (1) |
+| `npm run assets:verify` / `npm run build` | pass. Dist 18 MB, of which music is 7.5 MB, streamed on demand |
+| `npm run e2e` | pass. No-video start (menu once, music only after the gesture, background → silent → resumed, reload silent until tapped). A generated WebM credit played out with at most 1 concurrent media source. Double-click start + mute + double Skip + Escape → one menu, mute kept, no stale callbacks. 404, play() refusal and a hanging download each enter the menu once. Mobile-emulated tap start. Gameplay → results → rematch → pause → restart with ≤ 1 music source and SFX cut on reset. No unhandled rejections. All earlier stages still pass |
+
+### Known issues
+
+- The intro video isn't supplied yet. When it is, H.264 MP4 plays on mobile
+  Safari/Chrome; open-source Chromium (as used in e2e) lacks H.264, so e2e uses a
+  WebM fixture.
+- SFX and ambience are placeholders until the owner supplies files. Music loops
+  await the owner's audition.
+- One e2e run stalled in a two-human Partnership round while a CPU-heavy build ran
+  alongside it. It didn't reproduce in isolation or on re-run. Stuck-round
+  diagnostics now print the full table state if it happens again.
+- Music files embed 1.4 MB of cover art (a stripped derivative would save space).
+
+## Next stage — Stage 8: Versioned saves, statistics, help and results arithmetic
+
+Versioned match/settings saves with validation and graceful recovery, restore
+without double scoring or stale moves, local statistics (completed, wins/losses,
+abandoned kept separate), a rules/help screen grounded in RULES.md, and pip
+arithmetic on the results sheet.
