@@ -272,3 +272,13 @@ Rendering contracts:
 3. Add an entry to `src/assets/manifest.ts`. If it's used at runtime, add a
    `new URL(...)` line to `src/assets/urls.ts`.
 4. `npm run assets:verify` must pass.
+
+## Runtime derivatives (Stage 9)
+
+The app no longer bundles the PNG originals. `npm run assets:derive` writes WebP
+derivatives to `assets/generated/web/`, at the same pixel dimensions, so every
+frame rectangle above still applies. Their bytes, hashes, source hash and
+measured edge/alpha quality are in `src/assets/derivatives.json`, and
+`npm run assets:verify` re-checks them. The originals in `assets/art/` are
+unchanged. Sizes, quality gates and the loading order are in
+[PERFORMANCE.md](PERFORMANCE.md).

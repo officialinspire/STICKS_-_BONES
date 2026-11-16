@@ -53,6 +53,7 @@ export const LIMITS = {
 const failures: string[] = [];
 const warnings: string[] = [];
 const report: Record<string, Record<string, unknown>> = {};
+const bleedNotes: string[] = [];
 
 const server = await createServer({ root, logLevel: 'error', server: { port: 5198, strictPort: true } });
 await server.listen();
@@ -214,6 +215,17 @@ const MEASURE = `(() => {
   out.board = tileStats('.board-tile .tile-box');
   out.hand = tileStats('.hand-tile');
   out.handVisible = (() => { const h = [...document.querySelectorAll('.hand-tile')].filter(visible); if (!h.length) return null; const strip = h[0].parentElement.getBoundingClientRect(); return h.filter((el) => { const r = el.getBoundingClientRect(); return r.left >= strip.left - 1 && r.right <= strip.right + 1; }).length + '/' + h.length; })();
+  // Table regions must not overlap one another (art included: the bubble must not cover Cousin).
+  out.overlaps = [];
+  const regions = ['.hud', '.host-avatar', '.bubble', '.opponent', '.turn-banner', '.board-wrap', '.actions', '.view-tools', '.hand'].map((q) => [q, document.querySelector(q)]).filter(([, e]) => e && visible(e) && !e.closest('[hidden]'));
+  for (let i = 0; i < regions.length; i++) for (let j = i + 1; j < regions.length; j++) {
+    const A = regions[i][1].getBoundingClientRect(), B = regions[j][1].getBoundingClientRect();
+    const ox = Math.min(A.right, B.right) - Math.max(A.left, B.left), oy = Math.min(A.bottom, B.bottom) - Math.max(A.top, B.top);
+    if (ox > 2 && oy > 2) out.overlaps.push(regions[i][0] + ' × ' + regions[j][0] + ' ' + Math.round(ox) + 'x' + Math.round(oy));
+  }
+  // Cousin's drawn figure (the svg content box) vs the bubble.
+  const art = document.querySelector('.host-avatar svg.host-svg'), bub = document.querySelector('.bubble');
+  if (art && bub && visible(art)) { const g = art.querySelector('image'); const A = art.getBoundingClientRect(), B = bub.getBoundingClientRect(); if (Math.min(A.bottom, B.bottom) - Math.max(A.top, B.top) > 2 && Math.min(A.right, B.right) - Math.max(A.left, B.left) > 2) out.overlaps.push('Cousin art × bubble'); }
   // Open-end targets must be the topmost element at their centre and on screen.
   out.ends = [];
   for (const el of document.querySelectorAll('.end-slot.is-legal')) {
@@ -225,6 +237,7 @@ const MEASURE = `(() => {
 })()`;
 
 type Measure = {
+  overlaps: string[];
   tableOverflow: number;
   below: string[];
   pageScrollX: number;
@@ -262,6 +275,7 @@ function judge(where: string, m: Measure, opts: { pageMayScroll?: boolean }) {
     const [shown, total] = m.handVisible.split('/').map(Number);
     if (total! <= 7) f(shown === total, `only ${m.handVisible} hand tiles visible without scrolling`);
   }
+  f(m.overlaps.length === 0, `regions overlap: ${m.overlaps.join(' | ')}`);
   for (const e of m.ends) f(e.ok && e.onScreen, `open end blocked by ${e.top}${e.onScreen ? '' : ' (off screen)'}`);
   if (m.uncomfortable.length) warnings.push(`${where}: under ${LIMITS.targetComfortable}px: ${m.uncomfortable.join(' | ')}`);
 }
@@ -326,9 +340,59 @@ try {
     await capture(vp, 'handoff', page);
     await ctx.close();
   }
+  // Atlas bleeding: the teal back sprite sits right of 6|6 and below 6|1 in the atlas. Render those faces
+  // at the smallest sizes the app uses (board unit 26 → 24×48, hand 38×76, results 24×48, rotated too)
+  // and require no teal pixels along the shared edges. Then the back itself at the mini size (13×26).
+  for (const dpr of [1, 2, 3]) {
+    const ctx = await browser.newContext({ viewport: { width: 600, height: 400 }, deviceScaleFactor: dpr });
+    const page = await ctx.newPage();
+    await page.goto(BASE); // the app page: same module graph and stylesheet as the real table
+    await page.waitForSelector('.start-button');
+    await page.evaluate(`(async () => {
+      const m = await import('/src/render/tile-art.ts');
+      m.initTileArt();
+      for (let i = 0; i < 100 && m.backend() !== 'atlas'; i++) await new Promise((r) => setTimeout(r, 50));
+      if (m.backend() !== 'atlas') throw new Error('atlas did not load');
+      const cases = [['t66', 24, 48, 0], ['t66', 48, 24, 90], ['t66', 38, 76, 0], ['t66', 18, 36, 0], ['t61', 24, 48, 0], ['t61', 48, 24, 270], ['t61', 18, 36, 0], ['back', 13, 26, 0], ['back', 16, 32, 0]];
+      document.body.innerHTML = '<div id="bleed" style="display:flex;gap:12px;padding:12px;background:#f0f;flex-wrap:wrap">' + cases.map(([id, w, h, r], i) => '<div data-case="' + i + '" data-id="' + id + '" data-rot="' + r + '" style="padding:3px;background:#f0f">' + m.tileBoxHtml(id, w, h, r) + '</div>').join('') + '</div>';
+      await new Promise((r) => setTimeout(r, 300));
+    })()`);
+    const boxes = page.locator('#bleed [data-case]');
+    const n = await boxes.count();
+    const { PNG } = await import('pngjs');
+    let checked = 0;
+    for (let i = 0; i < n; i++) {
+      const el = boxes.nth(i);
+      const meta = await el.evaluate((e: HTMLElement) => ({ id: e.dataset.id!, rot: Number(e.dataset.rot) }));
+      const png = PNG.sync.read(await el.locator('.tile-box').screenshot());
+      const teal = (x: number, y: number) => {
+        const k = (y * png.width + x) * 4;
+        const [r, g, b] = [png.data[k]!, png.data[k + 1]!, png.data[k + 2]!];
+        return g - r > 25 && b - r > 25; // teal/green-blue, never present on an ivory face or its border
+      };
+      // Magenta page background: transparency can never pass for ivory or teal. Faces must contain no teal
+      // anywhere; the back must show no ivory (from 6|6) along its edges.
+      let bad = 0;
+      if (meta.id !== 'back') {
+        for (let y = 0; y < png.height; y++) for (let x = 0; x < png.width; x++) if (teal(x, y)) bad++;
+      } else {
+        const ivory = (x: number, y: number) => {
+          const k = (y * png.width + x) * 4;
+          return png.data[k]! > 200 && png.data[k + 1]! > 190 && png.data[k + 2]! > 170 && png.data[k + 3]! > 200;
+        };
+        for (let y = 2; y < png.height - 2; y++) for (const x of [0, 1, png.width - 2, png.width - 1]) if (ivory(x, y)) bad++;
+      }
+      if (bad) failures.push(`atlas bleed @${dpr}x: ${meta.id} rot ${meta.rot} shows ${bad} neighbour pixels`);
+      checked++;
+    }
+    bleedNotes.push(`${checked} cases @${dpr}x`);
+    await ctx.close();
+  }
+
   // Contact sheets: one image per screen across viewports (small, for review).
   for (const s of SCREENS) {
     const files = VIEWPORTS.filter((v) => !only || only.some((o) => v.name.includes(o))).map((v) => join(outDir, `${s}--${v.name}.png`));
+    if (!files.length) continue;
     try {
       execFileSync('montage', [...files, '-geometry', '+8+8', '-tile', `${files.length}x1`, '-resize', '400x400>', '-background', '#222', '-label', '%t', join(outDir, `sheet-${s}.jpg`)]);
     } catch {
@@ -336,10 +400,11 @@ try {
     }
   }
 } finally {
-  writeFileSync(join(outDir, 'report.json'), JSON.stringify({ limits: LIMITS, dpr: DPR, failures, warnings, report }, null, 1));
+  writeFileSync(join(outDir, 'report.json'), JSON.stringify({ limits: LIMITS, dpr: DPR, failures, warnings, atlasBleed: bleedNotes, report }, null, 1));
   await browser.close();
   await server.close();
 }
+console.log(`atlas bleed: ${bleedNotes.join(', ')}`);
 console.log(`QA: ${failures.length} failures, ${warnings.length} comfort warnings → ${outDir}`);
 for (const f of failures) console.log('  ✗ ' + f);
 for (const w of warnings.slice(0, 60)) console.log('  ! ' + w);

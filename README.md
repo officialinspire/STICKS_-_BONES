@@ -40,6 +40,10 @@ npm run dev
 | `npm run atlas:build` | Regenerate the double-six tile atlas + JSON from the verified material sheet |
 | `npm run ai:tournament` | Mirrored seeded AI duels per mode plus decision timing |
 | `npm run e2e` | Browser acceptance checks (needs the machine's Playwright + Chromium; not part of `check`) |
+| `npm run qa` | Rendered-screen QA: 6 viewports × 9 screens, layout/target/pip/endpoint metrics, atlas bleed ([docs/QA.md](docs/QA.md)) |
+| `npm run a11y` | axe, keyboard, focus traps, screen-reader privacy, reduced motion, safe areas, orientation |
+| `npm run perf` | Profile the production build (run `npm run build` first) — see [docs/PERFORMANCE.md](docs/PERFORMANCE.md) |
+| `npm run assets:derive` | Rebuild the WebP runtime derivatives from the preserved originals |
 | `npm run check` | All of the above in sequence |
 
 ## Developer tools
@@ -60,7 +64,7 @@ No deployment workflow is set up yet.
 
 ```
 assets/art/        Owner's source art (unaltered, see assets/art/README.md)
-docs/              RULES.md, ENGINE.md, AI.md, SHARED_DEVICE.md, PRESENTATION.md, AUDIO.md, SAVES.md, ASSETS.md, BUILD_STATUS.md
+docs/              RULES.md, ENGINE.md, AI.md, SHARED_DEVICE.md, PRESENTATION.md, AUDIO.md, SAVES.md, ASSETS.md, QA.md, PERFORMANCE.md, BUILD_STATUS.md
 scripts/           Asset verification + measurement, dist check
 src/engine/        Pure, deterministic, serializable game engine (no DOM)
   rules/presets.ts Versioned rules presets ("Cousin's House Rules" v1)

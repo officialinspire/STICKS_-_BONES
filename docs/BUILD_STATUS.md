@@ -586,9 +586,71 @@
 - Carried over: intro video not yet supplied; placeholder SFX/ambience; music loops
   await the owner's audition; ≈ 18 MB dist (music streamed on demand).
 
-## Next stage — Stage 9: Performance, accessibility pass and release prep
+## Stage 9 — Rendered-screen QA, accessibility, input and performance ✅ (2026-11-16)
 
-WebP/AVIF derivatives and stripped-cover music derivatives (as new manifest
-entries), a full accessibility audit (axe + keyboard + screen-reader passes on
-every screen), a table setting picker for the other six environments, and a
-GitHub Pages deploy workflow if authorized.
+Full write-ups: `docs/QA.md` (screens, faults, a11y results, browsers, devices still
+needed) and `docs/PERFORMANCE.md` (measurements, derivatives, loading, byte budget).
+
+### Completed
+
+- **New evidence tools:**
+  - `npm run qa`: 6 viewports × 9 real screens, with DOM metrics, contact
+    sheets and an atlas-bleed check at DPR 1/2/3.
+  - `npm run a11y`: axe, keyboard, focus traps, screen-reader privacy,
+    non-colour cues, reduced motion, emulated safe areas, orientation.
+  - `npm run perf`: profiles the production build on emulated 4G with a 4× CPU
+    slowdown, and can measure an older commit through `PERF_ROOT`.
+  - `npm run assets:derive`: builds the WebP derivatives.
+- **First QA pass: 62 failures → 0.**
+  - Fixes are listed in `docs/QA.md`.
+  - High impact: phone landscape was unplayable; the landscape menu had every
+    button below the fold; open ends were 24–27 px tall on phones; results opened
+    scrolled past the title; Tab escaped modal sheets and the cover.
+- **Board fit-to-height:** the whole chain and both open ends show on short
+  screens; manual zoom still overrides.
+- **Comfortable targets:** 44 px for repeated controls. Hand tiles are 40/38 px
+  wide on the smallest screens (above the 32-px floor) so a 7-tile hand fits.
+- **Fixed — audio:** a scene change during the 0.45 s fade-out could leave the
+  old track playing under the new one. Found by the new rapid-action e2e; unit
+  tests fail on the old code.
+- **Runtime images are WebP derivatives:**
+  - same dimensions, originals untouched;
+  - edge error and alpha are measured and gated;
+  - 10,069 KB → 1,417 KB, with the tile atlas lossless;
+  - `assets:verify` checks hashes, source and dimensions, and that `urls.ts`
+    serves the derivative.
+- **Loading:** only the backdrop and portrait load at the start screen. The atlas
+  and tabletop are then warmed through a queue of at most 2 downloads, followed
+  by optional art this device will show.
+- **Byte budget** enforced in `npm run build` (table in `docs/PERFORMANCE.md`).
+- **E2E:**
+  - new section 9: a 400-tap seeded rapid-action burst, plus a double-tap on an
+    open end that must play exactly one tile;
+  - the missing-art test now blocks WebP as well as PNG.
+
+### Commands run and results
+
+| Command | Result |
+| --- | --- |
+| `npm run check` (typecheck, lint, **239 unit tests in 25 files**, assets:verify, build + budget) | pass |
+| `npm run qa` | **0 failures** across 54 screen captures. 6 comfort warnings, all the deliberate 40×80 / 38×76 hand tiles. Smallest pip 4.56 px (board, 360×800 longest chain). Largest Cousin upscale ×1.24. Atlas bleed: 0 neighbour pixels in 27 cases (DPR 1/2/3). |
+| `npm run a11y` | **0 failures.** axe 0 violations on 12 screens; keyboard, traps, privacy, cues, reduced motion, safe areas, orientation all pass. |
+| `npm run e2e` | pass. All earlier stages plus rapid actions: 400 taps; at most 1 table, 1 music track and 1 dialog at a time; board = engine line; a double-tap plays one tile. |
+| `npm run perf` (5 runs each, Stage 8 build vs this) | Start-screen bytes 4,882 → 579 KB. Menu backdrop 7.3 s → 1.2 s. Tabletop ready 5.7 s *before* the deal (was 6.0 s after). Session image bytes 8,331 → 1,155 KB. Decode work up (75 → 132 ms) but 0 ms on the main thread. Longest play task 60 → 59 ms and input 80 → 64 ms, ranges overlapping: no regression, not claimed as a win. |
+
+### Known issues
+
+- **Firefox and WebKit were not tested.** No build is available here and
+  Playwright browsers must not be downloaded. The real-device list in
+  `docs/QA.md` is outstanding: none of it has happened.
+- Hand tiles under 44 px on 360-px phones and in phone landscape (deliberate).
+- WebP costs more decode CPU than the old PNGs (off the main thread).
+- Carried over: intro video not supplied; placeholder SFX/ambience; music loops
+  await the owner's audition. The dist is now ≈ 8.9 MB, mostly music.
+
+## Next stage — Stage 10: Release prep
+
+A table setting picker for the other six environments (new derivatives through
+`assets:derive`), stripped-cover music derivatives, the real-device and
+Firefox/WebKit passes from `docs/QA.md`, and a GitHub Pages deploy workflow if
+authorized.

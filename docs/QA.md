@@ -1,0 +1,158 @@
+# QA: rendered screens, input and accessibility
+
+Three scripts run against the **real app** in Chromium. Unit tests cannot see
+layout, so these are the evidence for it:
+
+| Command | What it checks | Output |
+| --- | --- | --- |
+| `npm run qa` | 6 viewports × 9 screens: page scroll, controls off screen or clipped, touch targets, clipped text, region overlap, Cousin's portrait clipping and upscaling, tile/pip size, hand fit, open-end reachability; plus atlas bleeding at DPR 1/2/3 | `test-results/qa/` (screenshots, one contact sheet per screen, `report.json`) |
+| `npm run a11y` | axe-core on every screen and dialog; keyboard-only play; focus traps and restoration; screen-reader hand privacy; non-colour legal cues; reduced motion; safe areas; orientation changes | `test-results/a11y/report.json` plus screenshots |
+| `npm run e2e` | Full games and stage acceptance (solo, AI partnership, two humans, reset, save/resume, rapid actions…) | `test-results/e2e/` |
+
+## Viewports and screens
+
+**Viewports:**
+- 360×800 and 390×844 (phones);
+- 844×390 (phone on its side);
+- 768×1024 and 1024×768 (tablet, both orientations);
+- 1366×768 (laptop).
+
+All are captured at DPR 2, with touch enabled below 1100 px.
+
+**Screens:**
+- startup, menu, setup;
+- **longest chain**: the 27-tile `max-board` fixture with a double that fits both ends;
+- **largest hand**: the 21-tile `max-hand` fixture;
+- **partnership table**: four seats, human turn, a tile selected;
+- **handoff cover**: two humans;
+- **pause**;
+- **results**: four hands with pip arithmetic.
+
+## Limits
+
+| Check | Limit |
+| --- | --- |
+| Page scroll on the table and home menu | none (setup/rules/stats may scroll) |
+| Touch targets | **≥ 32 px floor** (fail), **44 px comfortable** (reported) |
+| Pip diameter on screen | ≥ 3 CSS px (measured minimum 4.6 px) |
+| Cousin upscaling (CSS px × DPR per source px) | ≤ 1.6 (measured maximum 1.24) |
+| Open ends | topmost element at their centre, on screen |
+| Regions (HUD, Cousin, bubble, seats, board, actions, tools, hand) | no overlap |
+
+## Faults found and fixed (first pass: 62 failures → 0)
+
+**High impact**
+
+- **Phone landscape (844×390) was unplayable.**
+  - The page scrolled, Pause was off the top and the hand covered the board.
+  - The scripted round could not be finished by tapping.
+  - Fix: a short-landscape layout. On the left, info and Draw/Pass; on the
+    right, the board and hand; the view tools share the turn-banner row.
+  - The board now fits its box's height as well as its width: the 27-tile chain
+    and both open ends show without scrolling, and pips stay ≥ 4.5 px.
+  - Manual zoom still overrides the fit.
+- **Landscape menu:** every button was below the fold. Fix: a two-column menu.
+- **Open-end targets were 24–27 px tall on phones.** Fix: an invisible hit area
+  that extends ≥ 10 px around each end. The ghost tile keeps its exact footprint.
+- **The results sheet opened scrolled to the bottom**, because focus on "Next
+  hand" scrolled it. The title and Cousin were hidden. Fix: focus without
+  scrolling, and sticky sheet actions.
+- **The audio manager could play two music tracks at once.** A second scene
+  change during the 0.45 s fade-out cancelled the timer that pauses the old
+  track. Found by the new rapid-action e2e. Fixed, with unit tests that fail on
+  the old code.
+- **Tab could leave modal sheets and the privacy cover** and reach the browser's
+  UI. Fix: wrap first ↔ last (`src/ui/focus-trap.ts`).
+
+**Medium and low**
+
+- A 7-tile hand didn't fit a 360-px phone without scrolling. The hand tile is now
+  40 px wide there, 44 px from 381 to 899 px, and 38 px in short landscape.
+- 13 px of page scroll under the handoff cover at 1024×768 and 1366×768: the
+  side column was too tall. Cousin's full figure now scales with the window
+  height, and the page can't scroll under the table at all.
+- Home menu: 6–18 px of page scroll at 360×800.
+- Controls raised to 44 px: secondary buttons, Back, the zoom/sort/end tools,
+  settings summaries, range inputs and radio/checkbox rows.
+- Radios and checkboxes had no visible focus ring.
+- The destructive confirm button was below 4.5:1 contrast.
+- The statistics table scrolled but was not keyboard-focusable.
+- The table had no `h1`.
+
+**Deliberately unchanged**
+
+- Hand tiles are 40×80 at 360 px and 38×76 in short landscape. That's under the
+  44-px comfortable size but above the 32-px floor; it's the price of fitting a
+  7-tile hand without scrolling.
+- Cousin's figure ends at mid-thigh. That's the art's own framing, not clipping:
+  the overlap check confirms the bubble never covers it.
+
+## Accessibility results (`npm run a11y`)
+
+- **axe-core (WCAG 2.1/2.2 A/AA + best practice): 0 violations** on 12 screens
+  and dialogs:
+  - start, menu, setup, rules, statistics, settings;
+  - table with ends shown, pause, confirm, results;
+  - handoff cover, reveal step.
+- **Keyboard only:**
+  - start → menu → setup (every form stop shows a focus ring) → deal;
+  - select a legal tile, then Enter moves focus to the open end, then Enter
+    places the tile.
+- **Focus traps:**
+  - pause, confirm, results and the cover keep Tab and Shift+Tab inside;
+  - Escape closes pause (focus returns to Pause) and confirm (focus returns to
+    Pause);
+  - Escape cannot dismiss results;
+  - after Reveal, focus returns to the table.
+- **Screen-reader privacy:**
+  - In two-human mode, the accessibility tree was snapshotted 12 times, under
+    the cover and during each revealed turn, and 8 live-region messages were
+    captured. None named a tile from the other player's hand.
+  - Against the computer, 12 snapshots across both sides' turns never named a
+    computer tile.
+- **Non-colour legal cues** (checked under `filter: grayscale(1)`):
+  - legal tiles carry a ✓ badge and "playable" in their name;
+  - others carry neither;
+  - open ends show ▼ and a full name.
+- **Reduced motion:** both the device preference and the in-app setting were
+  tested. Over 6 turns: 0 running animations, 0 effects, 0 slam frames.
+- **Safe areas:** emulated with DevTools `Emulation.setSafeAreaInsetsOverride`:
+  47/34 px portrait insets and 47/47/21 px landscape insets. No control sat
+  inside an inset on the menu or the table.
+- **Orientation:** a tile was selected, then the window rotated 390×844 →
+  844×390 → 390×844 → 1024×768 → 768×1024. There was no page scroll, both ends
+  stayed reachable and the engine state was unchanged. With two humans, rotating
+  covers the hand.
+
+## Browsers
+
+| Engine | Status |
+| --- | --- |
+| **Chromium** (Playwright build in this environment) | All of `qa`, `a11y`, `e2e` run and pass |
+| **Firefox** | **Not run.** No Firefox build is installed here, and this environment must not download Playwright browsers. Not claimed. |
+| **WebKit / Safari** | **Not run**, for the same reason. Not claimed. |
+
+The suites take the browser from `playwright`, so running them under Firefox
+and WebKit on a machine that has them means changing the `chromium` import.
+
+## Real-device tests still needed (none of these happened)
+
+- **iPhone (Safari, notch + home indicator):**
+  - portrait and landscape safe areas;
+  - `100dvh` with the URL bar collapsing/expanding;
+  - audio unlock on first tap;
+  - rotation mid-turn with two humans;
+  - VoiceOver: hand privacy under the cover and live-region wording.
+- **Small Android phone (Chrome, 360-px wide, gesture navigation):**
+  - touch accuracy on 40×80 hand tiles and the enlarged open ends;
+  - TalkBack.
+- **Android tablet and iPad:** both orientations, split-screen/slide-over widths,
+  keyboard + trackpad on iPad.
+- **Firefox desktop and Safari desktop:**
+  - layout parity (`display: contents`, sticky sheet actions, `dialog`);
+  - focus rings;
+  - the WebP derivatives.
+- **Low-end Android:** first-load timing on a real 3G/4G network, decode cost of
+  the WebP art, and thermal behaviour during a long match.
+- **Screen readers on desktop:** NVDA + Firefox and JAWS + Chrome, for the dialog
+  traps and the results arithmetic reading order.
