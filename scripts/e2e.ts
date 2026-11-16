@@ -161,7 +161,27 @@ async function playRound(page: Page, label: string, opts: { checkHidden?: boolea
     }
     await page.waitForTimeout(120);
   }
-  failures.push(`${label}: round did not finish`);
+  // Diagnostics: exactly where the table was stuck.
+  const diag = await page
+    .evaluate(() => {
+      const sb = (window as unknown as { __sb?: { controller: { state: unknown }; session: { turn: number; phase: string; paused: boolean; aiThinking: boolean; seq: number; stats: unknown } } }).__sb;
+      if (!sb) return 'no dev hook';
+      const s = sb.session;
+      return JSON.stringify({
+        controller: sb.controller.state,
+        turn: s.turn,
+        phase: s.phase,
+        paused: s.paused,
+        thinking: s.aiThinking,
+        seq: s.seq,
+        stats: s.stats,
+        cover: !!document.querySelector('.privacy-cover:not([hidden])'),
+        dialogs: [...document.querySelectorAll('dialog[open]')].map((d) => d.className),
+        hidden: document.hidden,
+      });
+    })
+    .catch((e: Error) => `diag failed: ${e.message}`);
+  failures.push(`${label}: round did not finish — ${diag}`);
   return actions;
 }
 
