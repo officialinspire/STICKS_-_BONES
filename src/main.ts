@@ -1,11 +1,13 @@
 import './styles.css';
 import { createWorkerRunner, inlineRunner, type AiRunner } from './ai/runner';
 import { TableController } from './app/controller';
-import { browserStore, clearSave, readSave, writeSave, type SavedGame } from './app/save';
+import { browserStore, clearSave, newMatchId, readSave, writeSave, type SavedGame } from './app/save';
 import { secureSeed } from './app/seed';
-import { loadSettings, saveSettings, type Settings } from './app/settings';
-import { DEFAULT_TIMING, GameSession, type Timing } from './app/session';
-import type { SeatIndex } from './engine/types';
+import { loadSettingsResult, reduceMotion, saveSettings, type Settings } from './app/settings';
+import { DEFAULT_TIMING, GameSession, realScheduler, type Timing } from './app/session';
+import { loadStats, recordAbandoned, recordCompleted, resetStats, saveStats, type Stats } from './app/stats';
+import type { ReadStatus } from './app/storage';
+import type { ModeId, SeatIndex } from './engine/types';
 import { initTileArt, setForceSvg } from './render/tile-art';
 import { assetUrl } from './assets';
 import { MUSIC } from './assets/audio-manifest';
@@ -13,8 +15,6 @@ import { introVideoUrl, musicUrl } from './assets/media-urls';
 import { AudioManager, type Scene, type SfxId } from './audio/manager';
 import { WebAudioBackend } from './audio/webaudio';
 import { haptic, type HapticCue } from './audio/haptics';
-import { reduceMotion } from './app/settings';
-import { realScheduler } from './app/session';
 import { showStart } from './ui/intro-screen';
 import { renderMenu, type MenuChoice, type ResumeOffer } from './ui/menu';
 import { TableScreen } from './ui/table';
@@ -22,7 +22,28 @@ import { TableScreen } from './ui/table';
 const DEV = import.meta.env.DEV;
 const root = document.getElementById('app')!;
 const store = browserStore();
-let settings: Settings = loadSettings(store);
+
+/** Messages for the next menu render (recovered or set-aside data). */
+const notices: string[] = [];
+const noticeFor = (what: string, status: ReadStatus): string | null =>
+  status === 'corrupt'
+    ? `Your ${what} couldn’t be read (the data was damaged), so ${what === 'settings' ? 'defaults are in use' : 'it was set aside'}.`
+    : status === 'incompatible'
+      ? `Your ${what} came from a different version of the game, so ${what === 'settings' ? 'defaults are in use' : 'it was set aside'}.`
+      : status === 'unavailable'
+        ? null
+        : null;
+
+const loadedSettings = loadSettingsResult(store);
+let settings: Settings = loadedSettings.settings;
+const sn = noticeFor('settings', loadedSettings.status);
+if (sn) notices.push(sn);
+const loadedStats = loadStats(store);
+let stats: Stats = loadedStats.stats;
+const stn = noticeFor('statistics', loadedStats.status);
+if (stn) notices.push(stn);
+if (!store) notices.push('This browser isn’t letting the game save. Settings, statistics and games last only until you close the page.');
+
 // ---- audio: one manager for the whole app ---------------------------------------
 const backend = new WebAudioBackend(
   { menu: musicUrl('menu') ?? undefined, gameplay: musicUrl('gameplay') ?? undefined } as never,
@@ -48,7 +69,6 @@ const audioApi = {
   scene: (s: Scene) => audio.setScene(s),
   sfx: (id: SfxId) => void audio.playSfx(id),
   haptic: (cue: HapticCue) => void haptic(cue, settings.haptics),
-  reset: () => audio.reset(),
 };
 
 const settingsApi = {
@@ -59,8 +79,16 @@ const settingsApi = {
     audio.setLevels(settings.audio);
   },
 };
-let table: TableScreen | null = null;
-let controller: TableController | null = null;
+
+// ---- the active match ----------------------------------------------------------------
+interface Active {
+  table: TableScreen;
+  controller: TableController;
+  matchId: string;
+  /** Statistics apply (not developer fixtures / both-seats mode). */
+  counted: boolean;
+}
+let active: Active | null = null;
 let last: MenuChoice | null = null;
 // One worker for the page; Hard sampling never runs on the main thread.
 const runner: AiRunner = createWorkerRunner() ?? inlineRunner();
@@ -80,19 +108,30 @@ document.addEventListener(
   true,
 );
 
+function updateStats(next: Stats): void {
+  stats = next;
+  saveStats(store, stats);
+}
+
+/** A match given up before its end counts as abandoned — never as a loss. */
+function abandon(matchId: string, mode: ModeId): void {
+  updateStats(recordAbandoned(stats, matchId, mode));
+}
+
+/** Stop the current table: cancels AI work, timers, effects and sounds. */
 function teardown(): void {
-  audio.reset(); // cut any sounds still ringing from the old table
-  table?.destroy();
-  controller?.dispose();
-  table = null;
-  controller = null;
+  audio.reset();
+  active?.table.destroy();
+  active?.controller.dispose();
+  active = null;
   root.className = '';
 }
 
 /** Public summary of a saved game for the menu (no hidden information). */
 function resumeOffer(game: SavedGame): ResumeOffer {
   const s = new GameSession({ state: game.state, opponent: game.opponent, difficulty: game.difficulty, aiRng: game.aiRng }, { scheduler: { set: () => 0, clear: () => {} } });
-  const summary = `${s.rules.name} · ${s.rules.teams.map((_, t) => `${s.teamName(t)} ${game.state.scores[t]}`).join(' – ')} · Hand ${game.state.hand.number}`;
+  const phase = game.state.phase === 'playing' ? `Hand ${game.state.hand.number}` : `Hand ${game.state.hand.number} finished`;
+  const summary = `${s.rules.name} · ${s.rules.teams.map((_, t) => `${s.teamName(t)} ${game.state.scores[t]}`).join(' – ')} · ${phase}`;
   s.dispose();
   return { summary, twoHumans: game.opponent === 'local' };
 }
@@ -100,76 +139,91 @@ function resumeOffer(game: SavedGame): ResumeOffer {
 function showMenu(): void {
   teardown();
   const saved = readSave(store);
+  const sv = noticeFor('saved game', saved.status);
+  if (sv) notices.push(sv);
   audio.setScene('menu');
   renderMenu(root, last ?? {}, {
     dev: DEV,
     settings: settingsApi,
-    resume: saved ? resumeOffer(saved) : null,
+    resume: saved.value ? resumeOffer(saved.value) : null,
+    notices: notices.splice(0),
+    stats: () => stats,
+    onResetStats: () => updateStats(resetStats(store)),
     onStart: (c) => void start(c),
     onResume: () => resume(),
     onDiscard: () => {
+      const g = readSave(store).value;
+      if (g) abandon(g.matchId, g.state.config.mode);
       clearSave(store);
-      // ---- boot: start screen → studio intro (if supplied) → fade through black → menu ----
-function boot(): void {
-  audio.setScene('init');
-  const devOverride = DEV ? (window as unknown as { __sbIntroVideo?: string | null }).__sbIntroVideo : undefined;
-  showStart({
-    root,
-    videoUrl: devOverride !== undefined ? devOverride : introVideoUrl(),
-    reduceMotion: () => reduceMotion(settings, matchMedia('(prefers-reduced-motion: reduce)').matches),
-    onGesture: () => {
-      // Inside the user gesture: unlock audio, but play nothing — the credit has its own sound.
-      audio.setScene('intro');
-      void audio.unlock();
-    },
-    videoVolume: () => ({ muted: settings.audio.muted, volume: Math.max(0, Math.min(1, settings.audio.master * Math.max(settings.audio.music, settings.audio.voice))) }),
-    setMuted: (muted) => settingsApi.set({ audio: { ...settings.audio, muted } }),
-    preload: () => {
-      // Enough for a smooth first menu, without pulling every large asset.
-      for (const id of ['env.neighborhood-patio', 'cousin.atlas.portrait'] as const) {
-        const url = assetUrl(id);
-        if (url) new Image().src = url;
-      }
-      audio.preload('menu', 'metadata');
-    },
-    onMenu: () => showMenu(),
-  });
-  if (DEV) (window as unknown as { __sbAudio: unknown }).__sbAudio = { audio, backend };
-}
-
-boot();
+      notices.push('Saved game discarded.');
+      showMenu();
     },
   });
 }
 
-function mount(c: TableController, onRestart: () => void): void {
-  controller = c;
+function mount(controller: TableController, matchId: string, counted: boolean, onRestart: () => void): void {
   root.className = 'is-table';
-  table = new TableScreen(root, c, { onMenu: showMenu, onRestart, settings: settingsApi, audio: audioApi });
+  const session = controller.session;
+  const table = new TableScreen(root, controller, {
+    onMenu: showMenu, // the save is kept: Resume from the menu (not abandoned)
+    onRestart,
+    settings: settingsApi,
+    audio: audioApi,
+  });
+  active = { table, controller, matchId, counted };
   audio.setScene('gameplay');
   audio.preload('gameplay');
   table.mount();
-  // Autosave after every game change (local only; see save.ts for what this is and isn't).
-  c.subscribe((events) => {
-    if (events.length) writeSave(store, c.session);
+  controller.subscribe((events) => {
+    if (!events.length) return;
+    // Autosave after every change (local only; see save.ts for what this is and isn't).
+    writeSave(store, session, matchId);
+    const won = events.find((e) => e.type === 'match-won');
+    if (won && won.type === 'match-won' && counted && session.opponent !== 'dev-both') {
+      const p1 = session.humanSeats[0] ?? 0;
+      updateStats(
+        recordCompleted(stats, {
+          matchId,
+          mode: session.config.mode,
+          opponent: session.opponent,
+          difficulty: session.difficulty,
+          player1Won: session.rules.teams[won.team]!.includes(p1),
+          humansArePartners: session.humanSeats.length === 2 && session.rules.teams.some((t) => session.humanSeats.every((h) => t.includes(h))),
+        }),
+      );
+    }
   });
-  writeSave(store, c.session);
-  if (DEV) (window as unknown as { __sb: unknown }).__sb = { session: c.session, controller: c, runnerKind: runner.kind };
+  writeSave(store, session, matchId);
+  if (DEV) (window as unknown as { __sb: unknown }).__sb = { session, controller, runnerKind: runner.kind, matchId, stats: () => stats };
+}
+
+/** Restart / rematch from a table: an unfinished match is abandoned first. */
+function restartFrom(c: MenuChoice): void {
+  const a = active;
+  if (a && a.counted && a.controller.session.phase !== 'match-over') abandon(a.matchId, a.controller.session.config.mode);
+  void start(c);
 }
 
 async function start(c: MenuChoice): Promise<void> {
   last = c;
+  // Starting fresh replaces any saved game: that match is abandoned (unless it's this one, already handled).
+  const saved = readSave(store).value;
+  if (saved && saved.matchId !== active?.matchId) abandon(saved.matchId, saved.state.config.mode);
   teardown();
+  clearSave(store);
   setForceSvg(Boolean(c.devForceSvg));
   const timing = DEV && c.devFastAi ? FAST_TIMING : DEFAULT_TIMING;
   let session: GameSession;
+  let counted = true;
   if (DEV && c.devFixture) {
     const { FIXTURES } = await import('./dev/fixtures');
     const fx = FIXTURES[c.devFixture as keyof typeof FIXTURES];
-    session = new GameSession({ state: fx.build(), opponent: 'dev-both', aiSeed: secureSeed() }, { runner, timing });
+    const opponent = fx.opponent ?? 'dev-both';
+    counted = opponent !== 'dev-both';
+    session = new GameSession({ state: fx.build(), opponent, difficulty: c.difficulty, aiSeed: secureSeed() }, { runner, timing });
   } else {
-    clearSave(store);
     const local = c.opponent === 'local' || c.opponent === 'dev-both';
+    counted = c.opponent !== 'dev-both';
     session = new GameSession(
       {
         mode: c.mode,
@@ -185,7 +239,8 @@ async function start(c: MenuChoice): Promise<void> {
       { runner, timing },
     );
   }
-  mount(new TableController(session), () => void start({ ...c, devFixture: undefined }));
+  const next: MenuChoice = { ...c, devFixture: undefined };
+  mount(new TableController(session), newMatchId(), counted, () => restartFrom(next));
 }
 
 /** Rebuild the setup of a (possibly resumed) match for a rematch: same mode, seats, names, target, skill. */
@@ -203,40 +258,19 @@ function choiceFromSession(s: GameSession): MenuChoice {
 }
 
 function resume(): void {
-  const saved = readSave(store);
-  if (!saved) return // ---- boot: start screen → studio intro (if supplied) → fade through black → menu ----
-function boot(): void {
-  audio.setScene('init');
-  const devOverride = DEV ? (window as unknown as { __sbIntroVideo?: string | null }).__sbIntroVideo : undefined;
-  showStart({
-    root,
-    videoUrl: devOverride !== undefined ? devOverride : introVideoUrl(),
-    reduceMotion: () => reduceMotion(settings, matchMedia('(prefers-reduced-motion: reduce)').matches),
-    onGesture: () => {
-      // Inside the user gesture: unlock audio, but play nothing — the credit has its own sound.
-      audio.setScene('intro');
-      void audio.unlock();
-    },
-    videoVolume: () => ({ muted: settings.audio.muted, volume: Math.max(0, Math.min(1, settings.audio.master * Math.max(settings.audio.music, settings.audio.voice))) }),
-    setMuted: (muted) => settingsApi.set({ audio: { ...settings.audio, muted } }),
-    preload: () => {
-      // Enough for a smooth first menu, without pulling every large asset.
-      for (const id of ['env.neighborhood-patio', 'cousin.atlas.portrait'] as const) {
-        const url = assetUrl(id);
-        if (url) new Image().src = url;
-      }
-      audio.preload('menu', 'metadata');
-    },
-    onMenu: () => showMenu(),
-  });
-  if (DEV) (window as unknown as { __sbAudio: unknown }).__sbAudio = { audio, backend };
-}
-
-boot();
+  const r = readSave(store);
+  if (!r.value) {
+    const n = noticeFor('saved game', r.status) ?? 'There’s no saved game to resume.';
+    notices.push(n);
+    return showMenu();
+  }
+  const saved = r.value;
   teardown();
+  // Engine state only: no animation, timer or AI request is restored. The session
+  // re-derives what happens next (an AI turn asks afresh; a finished hand resolves once).
   const session = new GameSession({ state: saved.state, opponent: saved.opponent, difficulty: saved.difficulty, aiRng: saved.aiRng }, { runner });
-  // A restored game always starts covered when two humans share the device.
-  mount(new TableController(session, { restored: true }), () => void start(choiceFromSession(session)));
+  // A restored game always opens covered when two humans share the device.
+  mount(new TableController(session, { restored: true }), saved.matchId, true, () => restartFrom(choiceFromSession(session)));
 }
 
 // ---- boot: start screen → studio intro (if supplied) → fade through black → menu ----

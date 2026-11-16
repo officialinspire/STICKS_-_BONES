@@ -10,6 +10,8 @@ import { DEFAULT_RULES_PRESET, type ModeId, type TargetScore } from '../engine';
 import { dominoSvg } from './domino';
 import { hostFigureHtml } from './host';
 import { rulesHtml } from './rules-summary';
+import { helpHtml } from './help';
+import { totals, type Stats } from '../app/stats';
 import { bindSettingsPanel, settingsPanelHtml, type SettingsApi } from './settings-panel';
 import { esc } from './svg';
 
@@ -34,13 +36,17 @@ export interface ResumeOffer {
   readonly twoHumans: boolean;
 }
 
-export type MenuScreen = 'home' | 'setup' | 'rules' | 'settings';
+export type MenuScreen = 'home' | 'setup' | 'rules' | 'settings' | 'stats';
 
 export interface MenuHandlers {
   readonly dev: boolean;
   readonly resume: ResumeOffer | null;
   readonly settings: SettingsApi;
   readonly screen?: MenuScreen;
+  /** Messages about recovered / set-aside data, shown once on the home screen. */
+  readonly notices?: readonly string[];
+  stats(): Stats;
+  onResetStats(): void;
   onStart(c: MenuChoice): void;
   onResume(): void;
   onDiscard(): void;
@@ -69,7 +75,7 @@ const SAMPLE_LINE = `<section class="table" aria-hidden="true"><div class="line"
 export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: MenuHandlers): void {
   const env = assetUrl('env.neighborhood-patio');
   if (env) root.style.setProperty('--env-image', `url("${env}")`);
-  const go = (screen: MenuScreen) => renderMenu(root, initial, { ...h, screen });
+  const go = (screen: MenuScreen) => renderMenu(root, initial, { ...h, screen, notices: [] });
   const screen = h.screen ?? 'home';
   const preset = DEFAULT_RULES_PRESET;
   const back = `<button type="button" class="btn-ghost dark back" data-act="home">← Back</button>`;
@@ -81,10 +87,12 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
     root.innerHTML = shell(
       `${SAMPLE_LINE}
       <nav class="panel home-nav" aria-label="Main menu">
+        ${(h.notices ?? []).length ? `<div class="notice" role="status">${(h.notices ?? []).map((n) => `<p>${esc(n)}</p>`).join('')}</div>` : ''}
         ${h.resume ? `<div class="resume"><h2>Game in progress</h2><p>${esc(h.resume.summary)}</p>${h.resume.twoHumans ? '<p class="note">Hands stay hidden until the right player reveals them.</p>' : ''}<div class="row"><button type="button" class="btn" data-act="resume">Resume</button><button type="button" class="btn-ghost dark" data-act="discard">Discard</button></div></div>` : ''}
         <button type="button" class="btn btn-start" data-go="setup">New game</button>
         <div class="row home-row">
           <button type="button" class="btn-ghost dark" data-go="rules">How to play</button>
+          <button type="button" class="btn-ghost dark" data-go="stats">Statistics</button>
           <button type="button" class="btn-ghost dark" data-go="settings">Settings</button>
         </div>
       </nav>`,
@@ -97,11 +105,57 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
   }
   if (screen === 'rules') {
     root.innerHTML = shell(
-      `<section class="panel" aria-labelledby="rules-heading">${back}<h2 id="rules-heading">How to play — ${esc(preset.name)}</h2><p class="note">${esc(preset.disclaimer)}</p><div class="rules-grid">${(['draw2', 'block2', 'partnership4'] as ModeId[]).map((m) => rulesHtml(preset.modes[m])).join('')}</div></section>`,
+      `<section class="panel" aria-labelledby="rules-heading">${back}<h2 id="rules-heading">How to play</h2>${helpHtml()}</section>`,
       'Same bones, three ways to play. Here’s how my table runs.',
       'thinking',
     );
     wire();
+    return;
+  }
+  if (screen === 'stats') {
+    const st = h.stats();
+    const t = totals(st);
+    const modes: [ModeId, string][] = [
+      ['draw2', 'Draw'],
+      ['block2', 'Block'],
+      ['partnership4', 'Partnership'],
+    ];
+    const rows = modes
+      .map(([m, label]) => {
+        const cells = (['easy', 'normal', 'hard'] as Difficulty[]).map((d) => `<td>${st.solo[m][d].wins}–${st.solo[m][d].losses}</td>`).join('');
+        return `<tr><th scope="row">${label}</th>${cells}<td>${st.local[m].completed}</td><td>${st.abandoned[m]}</td></tr>`;
+      })
+      .join('');
+    root.innerHTML = shell(
+      `<section class="panel" aria-labelledby="stats-heading">${back}<h2 id="stats-heading">Statistics</h2>
+        <p class="note">Kept on this device only. Games you leave unfinished and later discard or restart count as abandoned — never as losses.</p>
+        <p class="stat-line"><strong>${t.completed}</strong> completed · <strong>${t.wins}</strong> won · <strong>${t.losses}</strong> lost vs the computer · <strong>${t.abandoned}</strong> abandoned</p>
+        <div class="table-scroll"><table class="stats-table">
+          <caption>Against the computer: wins–losses by difficulty; two-player and abandoned counts</caption>
+          <thead><tr><th scope="col">Mode</th><th scope="col">Easy</th><th scope="col">Normal</th><th scope="col">Hard</th><th scope="col">Two players</th><th scope="col">Abandoned</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+        <p>Two players as partners (vs the computers): <strong>${st.localPartners.wins}–${st.localPartners.losses}</strong></p>
+        <button type="button" class="btn-ghost dark" data-act="reset-stats">Reset statistics</button>
+        <p class="status" role="status" data-stats-status></p>
+      </section>`,
+      t.completed ? 'Numbers don’t lie. Mostly.' : 'No games on the books yet. Let’s fix that.',
+      'smirk',
+    );
+    wire();
+    const btn = root.querySelector('[data-act="reset-stats"]') as HTMLButtonElement;
+    btn.addEventListener('click', () => {
+      // Two-step confirmation without a modal: the first tap arms, the second resets.
+      if (btn.dataset.armed !== '1') {
+        btn.dataset.armed = '1';
+        btn.textContent = 'Tap again to reset all statistics';
+        (root.querySelector('[data-stats-status]') as HTMLElement).textContent = 'This can’t be undone.';
+        return;
+      }
+      h.onResetStats();
+      renderMenu(root, initial, { ...h, screen: 'stats', notices: [] });
+      (root.querySelector('[data-stats-status]') as HTMLElement).textContent = 'Statistics reset.';
+    });
     return;
   }
   if (screen === 'settings') {
@@ -131,6 +185,7 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
           <button type="button" class="btn-ghost small" data-fixture="max-hand">21-tile hand</button>
           <button type="button" class="btn-ghost small" data-fixture="both-ends">Both ends</button>
           <button type="button" class="btn-ghost small" data-fixture="match-point">Match point</button>
+          <button type="button" class="btn-ghost small" data-fixture="match-point-solo">Match point (solo)</button>
         </div>
         <a class="dev-link" href="./dev/contact-sheet.html">Tile contact sheet →</a>
         <a class="dev-link" href="./dev/audio-audition.html">Music loop audition →</a>

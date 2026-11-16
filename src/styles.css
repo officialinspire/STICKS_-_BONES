@@ -1428,3 +1428,132 @@ body {
 .fade-black.is-on {
   opacity: 1;
 }
+
+/* ---------------------------------------------------------------- help, stats, notices */
+.notice {
+  border-left: 4px solid var(--sun);
+  background: #fff6e0;
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+.notice p {
+  margin: 0;
+}
+.help-grid {
+  display: grid;
+  gap: 12px;
+}
+@media (min-width: 900px) {
+  .help-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.help-section h3 {
+  margin: 0 0 4px;
+  font: 800 1.05rem var(--display);
+  color: var(--teal);
+}
+.help-section ul {
+  margin: 0;
+  padding-left: 1.1em;
+  display: grid;
+  gap: 3px;
+}
+.turn-diagram {
+  position: relative;
+  width: 200px;
+  height: 140px;
+  margin: 8px auto 0;
+}
+.turn-diagram .seat {
+  position: absolute;
+  font-weight: 800;
+  font-size: 0.85rem;
+  text-align: center;
+}
+.turn-diagram .s-top {
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.turn-diagram .s-bottom {
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.turn-diagram .s-left {
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.turn-diagram .s-right {
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.turn-diagram .arrow {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 2.6rem;
+  color: var(--teal);
+}
+.table-scroll {
+  overflow-x: auto;
+}
+.stats-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+  margin: 8px 0;
+}
+.stats-table caption {
+  text-align: left;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  padding-bottom: 4px;
+}
+.stats-table th,
+.stats-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--cream-2);
+  text-align: center;
+}
+.stats-table th[scope='row'] {
+  text-align: left;
+}
+.stat-line {
+  margin: 6px 0;
+}
+.math {
+  margin: 4px 0 0;
+  padding-left: 1.1em;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+.math li {
+  margin: 2px 0;
+}
+
+.math-line {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+.how {
+  border-top: 1px solid var(--cream-2);
+  padding-top: 8px;
+}
+
+.link-button {
+  background: none;
+  border: 0;
+  padding: 8px 4px;
+  min-height: 44px;
+  color: var(--teal);
+  font: 700 0.95rem var(--body);
+  text-decoration: underline;
+  cursor: pointer;
+}

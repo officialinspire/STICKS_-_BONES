@@ -16,6 +16,7 @@ import type { TableController } from '../app/controller';
 import type { GameSession } from '../app/session';
 import { faceHtml, onBackendChange, tileBoxHtml } from '../render/tile-art';
 import { Banter, type BanterContext } from '../app/banter';
+import { explainResult, handLine } from '../app/explain';
 import { AI_SPEED_FACTOR, reduceMotion } from '../app/settings';
 import { opposite, rotationFor } from '../render/pips';
 import { Effects, preloadEffects } from './effects';
@@ -472,6 +473,7 @@ export class TableScreen {
              <h2 id="cover-title">Pass the device to ${who}</h2>
              <p id="cover-desc">Only ${who} should look at the screen.</p>
              <button type="button" class="btn" data-act="cover-ready">I’m ${who} — ready</button>
+             <p><button type="button" class="link-button" data-act="cover-menu">Save &amp; leave to menu</button></p>
            </div>`
         : `<div class="cover-card" role="dialog" aria-modal="true" aria-labelledby="cover-title">
              <h2 id="cover-title">${who}, reveal your hand?</h2>
@@ -506,11 +508,13 @@ export class TableScreen {
     const hands = r.finalHands
       .map((h, seat) => {
         const faces = h.length ? h.map((id) => `<span class="result-tile" role="img" aria-label="${esc(tileLabel(id))}">${faceHtml(id)}</span>`).join('') : '<em>no tiles left</em>';
-        return `<div class="result-hand"><div class="result-who"><strong>${esc(name(seat as SeatIndex))}</strong><span>${r.seatTotals[seat]} pip${r.seatTotals[seat] === 1 ? '' : 's'}</span></div><div class="result-tiles">${faces}</div></div>`;
+        // The pip sum is spelled out under the tiles (zero-pip tiles and empty hands included).
+        const sum = handLine(name(seat as SeatIndex), h).replace(/^[^:]+: /, '');
+        return `<div class="result-hand"><div class="result-who"><strong>${esc(name(seat as SeatIndex))}</strong><span>${r.seatTotals[seat]} pip${r.seatTotals[seat] === 1 ? '' : 's'}</span></div><div class="result-tiles">${faces}</div><p class="math-line">${esc(sum)}</p></div>`;
       })
       .join('');
-    const teamLine =
-      v.seatCount === 4 ? `<p class="scores-line">Team pips: ${this.#s.rules.teams.map((_, t) => `${esc(this.#s.teamName(t))} ${r.teamTotals[t]}`).join(' · ')}</p>` : '';
+    const ex = explainResult(r, this.#s.rules, name, (t) => this.#s.teamName(t));
+    const teamLine = `<div class="how"><p class="kicker">How the points add up</p><ul class="math">${[...ex.teams, ex.decision, ex.points].map((l) => `<li>${esc(l)}</li>`).join('')}</ul></div>`;
     const pts =
       r.winnerTeam === null
         ? 'No points this hand.'
@@ -801,6 +805,10 @@ export class TableScreen {
         break;
       case 'cover-reveal':
         this.#c.reveal();
+        break;
+      case 'cover-menu':
+        // The match stays saved; resuming later lands on this cover again.
+        this.#cb.onMenu();
         break;
       case 'next-hand':
         this.#q<HTMLDialogElement>('results').close();

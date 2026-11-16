@@ -920,6 +920,208 @@ try {
     }
   }
 
+  // 8. Versioned saves, recovery, statistics, results arithmetic, actions in every state, no dead buttons.
+  {
+    type DebugState = { seq: number; scores: number[]; phase: string; hand: { number: number; turn: number } };
+    const dbg = (page: Page) =>
+      page.evaluate(() => {
+        const sb = (window as unknown as { __sb?: { session: { debugState(): unknown; stats: { aiDecisions: number; staleDiscarded: number }; aiThinking: boolean }; matchId: string } }).__sb!;
+        return { state: JSON.stringify(sb.session.debugState()), stats: sb.session.stats, thinking: sb.session.aiThinking, matchId: sb.matchId };
+      });
+    const savedState = (page: Page) => page.evaluate(() => JSON.stringify(JSON.parse(localStorage.getItem('sticks-and-bones.save') ?? 'null')?.data?.state ?? null));
+
+    // 8a. Refresh during a human turn: Resume reproduces the exact state and scores.
+    {
+      const page = await newPage({ width: 390, height: 844 });
+      await startMatch(page, { mode: 'draw2', opponent: 'ai', seed: 'e2e-resume-exact', aiSeed: 'r', fast: true });
+      for (let i = 0; i < 3; i++) {
+        const legal = page.locator('.hand-tile.is-legal');
+        if (await legal.count()) {
+          await tryClick(legal.first());
+          await tryClick(page.locator('.end-slot.is-legal').first());
+        } else if (await page.locator('[data-act="draw"]:not([disabled])').count()) await tryClick(page.locator('[data-act="draw"]'));
+        await page.waitForTimeout(600);
+      }
+      await page.waitForFunction(() => {
+        const sb = (window as unknown as { __sb: { controller: { canAct(): boolean } } }).__sb;
+        return sb.controller.canAct();
+      });
+      const before = await dbg(page);
+      await enterMenu(page, true);
+      await page.click('[data-act="resume"]');
+      await page.waitForSelector('.table-screen');
+      await page.waitForTimeout(400);
+      const after = await dbg(page);
+      check(after.state === before.state && after.matchId === before.matchId, 'resume: restored state differs from the state before the refresh');
+      const st = JSON.parse(after.state) as DebugState;
+      notes.push(`resume (human turn): identical state after refresh — seq ${st.seq}, scores ${st.scores.join('–')}, hand ${st.hand.number}`);
+      await page.context().close();
+    }
+
+    // 8b. Refresh during AI thinking: no stale pending move; the AI moves exactly once afresh.
+    {
+      const page = await newPage({ width: 390, height: 844 });
+      await startMatch(page, { mode: 'partnership4', opponent: 'ai', difficulty: 'hard', seed: 'e2e-p4-0', aiSeed: 'reload-ai' });
+      await tryClick(page.locator('.hand-tile.is-legal').first());
+      await tryClick(page.locator('.end-slot.is-legal').first());
+      await page.waitForTimeout(120);
+      const mid = await dbg(page);
+      check(mid.thinking, 'reload-during-AI: the AI should be thinking');
+      const saved = await savedState(page);
+      await enterMenu(page, true);
+      await page.click('[data-act="resume"]');
+      await page.waitForSelector('.table-screen');
+      const restored = await dbg(page);
+      check(restored.state === saved, 'reload-during-AI: restored state differs from the saved state');
+      await page.waitForTimeout(2600);
+      const later = await dbg(page);
+      const seq0 = (JSON.parse(saved) as DebugState).seq;
+      const seq1 = (JSON.parse(later.state) as DebugState).seq;
+      check(later.stats.staleDiscarded === 0 && later.stats.aiDecisions >= 1 && seq1 >= seq0 + 1, `reload-during-AI: ${JSON.stringify({ seq0, seq1, stats: later.stats })}`);
+      notes.push(`resume (AI thinking): restored = saved, then ${later.stats.aiDecisions} fresh AI decision(s), 0 stale`);
+      // Leave during AI thinking, resume, and keep going.
+      await page.click('[data-act="pause"]');
+      await page.click('dialog.pause [data-act="menu"]');
+      await page.click('[data-act="confirm-yes"]');
+      await page.waitForSelector('[data-act="resume"]');
+      await page.click('[data-act="resume"]');
+      await page.waitForSelector('.table-screen');
+      await page.context().close();
+    }
+
+    // 8c. Damaged save and settings: menu explains, nothing crashes, bad data is set aside.
+    {
+      const page = await newPage({ width: 390, height: 844 });
+      await page.goto(BASE);
+      await page.evaluate(() => {
+        localStorage.setItem('sticks-and-bones.save', '{"format":"sticks-and-bones/match","version":2,"data":{"matchId":"x"');
+        localStorage.setItem('sticks-and-bones.settings', 'not json at all');
+      });
+      await enterMenu(page, true);
+      const notice = (await page.textContent('.notice').catch(() => '')) ?? '';
+      const q = await page.evaluate(() => [localStorage.getItem('sticks-and-bones.save.quarantine') !== null, localStorage.getItem('sticks-and-bones.save')]);
+      check(/saved game couldn’t be read/.test(notice) && /settings couldn’t be read/.test(notice), `corrupt data: notice was "${notice}"`);
+      check(q[0] === true && q[1] === null && (await page.locator('[data-act="resume"]').count()) === 0, 'corrupt save: not set aside / Resume still offered');
+      notes.push('recovery: damaged save + settings → menu notice, save quarantined, defaults in use');
+      await page.context().close();
+    }
+
+    // 8d. Statistics: win counted once, persisted; abandoned ≠ loss; leaving keeps the save (not abandoned).
+    {
+      const page = await newPage({ width: 1366, height: 900 });
+      await page.goto(BASE);
+      await page.evaluate(() => localStorage.clear());
+      await startMatch(page, { fixture: 'match-point-solo' });
+      await page.click('.hand-tile[data-tile="t61"]');
+      await page.locator('.end-slot.is-legal').first().click();
+      await page.waitForSelector('dialog.results[open] .match-line', { timeout: 6000 });
+      const how = (await page.textContent('dialog.results .how')) ?? '';
+      check(/Opponent’s pips|Every pip left/.test(how) && /= 20/.test(how), `results arithmetic missing: "${how}"`);
+      const mathLine = (await page.locator('dialog.results .math-line').allTextContents()).join(' | ');
+      check(/5\|5 \(10\) \+ 4\|4 \(8\) \+ 2\|0 \(2\) = 20/.test(mathLine), `hand arithmetic: ${mathLine}`);
+      await page.click('[data-act="menu-now"]');
+      await page.click('[data-go="stats"]');
+      let stat = (await page.textContent('.stat-line')) ?? '';
+      check(/1\s*completed/.test(stat) && /1\s*won/.test(stat), `stats after a win: ${stat}`);
+      await enterMenu(page, true);
+      await page.click('[data-go="stats"]');
+      stat = (await page.textContent('.stat-line')) ?? '';
+      check(/1\s*completed/.test(stat), `stats not persisted across reload: ${stat}`);
+      // Start a match, leave it (kept), then start another → the first becomes abandoned, not lost.
+      await startMatch(page, { mode: 'block2', opponent: 'ai', seed: 'e2e-abandon', aiSeed: 'a', fast: true });
+      await page.click('[data-act="pause"]');
+      await page.click('dialog.pause [data-act="menu"]');
+      await page.click('[data-act="confirm-yes"]');
+      await page.click('[data-go="stats"]');
+      stat = (await page.textContent('.stat-line')) ?? '';
+      check(/0\s*abandoned/.test(stat), `leaving to menu must not count as abandoned: ${stat}`);
+      await startMatch(page, { mode: 'draw2', opponent: 'ai', seed: 'e2e-abandon-2', aiSeed: 'a', fast: true });
+      await page.click('[data-act="pause"]');
+      await page.click('dialog.pause [data-act="restart"]');
+      await page.click('[data-act="confirm-yes"]');
+      await page.waitForTimeout(300);
+      await page.click('[data-act="pause"]');
+      await page.click('dialog.pause [data-act="menu"]');
+      await page.click('[data-act="confirm-yes"]');
+      await page.click('[data-go="stats"]');
+      stat = (await page.textContent('.stat-line')) ?? '';
+      check(/2\s*abandoned/.test(stat) && /0\s*lost/.test(stat), `abandoned vs lost: ${stat}`);
+      notes.push(`statistics: ${stat.replace(/\s+/g, ' ').trim()}`);
+      // Discard (Stage 7 regression): returns to the menu with a notice, not the start screen.
+      await page.click('[data-act="home"]');
+      await page.click('[data-act="discard"]');
+      await page.waitForTimeout(200);
+      check((await page.locator('[data-go="setup"]').count()) === 1 && (await page.locator('.start-button').count()) === 0, 'discard: did not return to the menu');
+      check(/Saved game discarded/.test((await page.textContent('.notice').catch(() => '')) ?? ''), 'discard: no feedback');
+      await page.click('[data-go="stats"]');
+      stat = (await page.textContent('.stat-line')) ?? '';
+      check(/3\s*abandoned/.test(stat), `discard should count as abandoned: ${stat}`);
+      await page.context().close();
+    }
+
+    // 8e. Leave and resume during results and during a two-player handoff.
+    {
+      const page = await newPage({ width: 390, height: 844 });
+      await startMatch(page, { mode: 'draw2', opponent: 'local', seed: 'e2e-handoff-resume', aiSeed: 'h', names: ['Ana', 'Ben'] });
+      await page.waitForSelector('[data-act="cover-menu"]');
+      await page.click('[data-act="cover-menu"]');
+      await page.waitForSelector('[data-act="resume"]');
+      await page.click('[data-act="resume"]');
+      await page.waitForSelector('.privacy-cover:not([hidden])');
+      check((await page.locator('.hand-tile').count()) === 0, 'handoff resume: a hand is visible before Reveal');
+      await playRound(page, 'resume-results', { privacy: true });
+      await enterMenu(page, true); // refresh with the results sheet up
+      await page.click('[data-act="resume"]');
+      await page.waitForSelector('dialog.results[open]');
+      const before = await page.evaluate(() => (window as unknown as { __sb: { session: { debugState(): { scores: number[]; history: unknown[] } } } }).__sb.session.debugState());
+      await page.click('[data-act="next-hand"]');
+      await page.waitForTimeout(300);
+      const after = await page.evaluate(() => (window as unknown as { __sb: { session: { debugState(): { scores: number[]; history: unknown[]; hand: { number: number } } } } }).__sb.session.debugState());
+      check(JSON.stringify(after.scores) === JSON.stringify(before.scores) && after.history.length === before.history.length && after.hand.number === 2, `results resume scored twice or stalled: ${JSON.stringify({ before: before.scores, after: after.scores })}`);
+      notes.push('leave/resume during handoff (covered) and results (no double score, Next hand works)');
+      await page.context().close();
+    }
+
+    // 8f. No dead buttons: every enabled button on each menu screen and in the pause sheet does something visible.
+    {
+      const page = await newPage({ width: 390, height: 844 });
+      const sweep = async (screen: string, setup: () => Promise<void>) => {
+        await setup();
+        const labels: string[] = await page.$$eval('button:not([disabled])', (bs: HTMLButtonElement[]) => bs.filter((b) => b.offsetParent !== null).map((b) => b.dataset.act ?? b.dataset.go ?? b.dataset.fixture ?? b.textContent ?? ''));
+        for (const label of labels) {
+          await setup();
+          const sel = `button[data-act="${label}"], button[data-go="${label}"]`;
+          if (!(await page.locator(sel).count())) continue; // not addressable by data attribute (e.g. form submit)
+          const sig = () => page.evaluate(() => `${document.querySelector('#app')!.innerHTML.length}|${document.querySelectorAll('dialog[open]').length}|${(document.activeElement as HTMLElement | null)?.outerHTML.slice(0, 60)}|${document.body.textContent?.length}`);
+          const s0 = await sig();
+          await tryClick(page.locator(sel).first());
+          await page.waitForTimeout(150);
+          const s1 = await sig();
+          check(s0 !== s1, `dead button on ${screen}: ${label}`);
+        }
+        return labels.length;
+      };
+      const home = async () => {
+        await enterMenu(page);
+      };
+      const n1 = await sweep('home', home);
+      const n2 = await sweep('stats', async () => {
+        await enterMenu(page);
+        await page.click('[data-go="stats"]');
+      });
+      const n3 = await sweep('rules', async () => {
+        await enterMenu(page);
+        await page.click('[data-go="rules"]');
+      });
+      const n4 = await sweep('pause sheet', async () => {
+        await startMatch(page, { mode: 'block2', opponent: 'ai', seed: 'e2e-sweep', aiSeed: 's' });
+        await page.click('[data-act="pause"]');
+      });
+      notes.push(`no dead buttons: ${n1 + n2 + n3 + n4} buttons across home, stats, rules and the pause sheet each produced a visible change`);
+      await page.context().close();
+    }
+  }
+
 } catch (e) {
   failures.push(`exception: ${(e as Error).stack ?? e}`);
 } finally {

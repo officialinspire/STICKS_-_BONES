@@ -1,7 +1,10 @@
 /**
- * Player preferences (per device). Stored in localStorage when available; the
- * game works identically without storage. Nothing here affects rules or timing.
+ * Player preferences (per device), stored as a versioned record
+ * (format sticks-and-bones/settings, v2; the Stage 6/7 un-enveloped object is
+ * migrated). The game works identically without storage, and damaged data falls
+ * back to defaults with a notice. Nothing here affects rules or timing.
  */
+import { readRecord, writeRecord, type KeyValueStore, type ReadStatus, type RecordSpec } from './storage';
 export type MotionPref = 'system' | 'reduce' | 'full';
 export type AiSpeed = 'relaxed' | 'normal' | 'quick';
 
@@ -61,17 +64,13 @@ function loadAudio(a: unknown): AudioSettings {
 }
 export const SETTINGS_KEY = 'sticks-and-bones.settings';
 
-export interface SettingsStore {
-  getItem(k: string): string | null;
-  setItem(k: string, v: string): void;
-}
+export type SettingsStore = KeyValueStore;
 
-export function loadSettings(store: SettingsStore | null): Settings {
-  try {
-    const raw = store?.getItem(SETTINGS_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
-    const p = JSON.parse(raw) as Partial<Settings>;
-    return {
+/** Normalise any partial settings object (unknown/invalid fields fall back to defaults). */
+function normalise(raw: unknown): Settings | null {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
+  const p = raw as Partial<Settings>;
+  return {
       explicitLanguage: typeof p.explicitLanguage === 'boolean' ? p.explicitLanguage : DEFAULT_SETTINGS.explicitLanguage,
       banter: typeof p.banter === 'boolean' ? p.banter : DEFAULT_SETTINGS.banter,
       motion: p.motion === 'reduce' || p.motion === 'full' || p.motion === 'system' ? p.motion : DEFAULT_SETTINGS.motion,
@@ -79,18 +78,29 @@ export function loadSettings(store: SettingsStore | null): Settings {
       aiSpeed: p.aiSpeed === 'relaxed' || p.aiSpeed === 'quick' || p.aiSpeed === 'normal' ? p.aiSpeed : DEFAULT_SETTINGS.aiSpeed,
       audio: loadAudio(p.audio),
       haptics: typeof p.haptics === 'boolean' ? p.haptics : DEFAULT_SETTINGS.haptics,
-    };
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
+  };
+}
+
+export const SETTINGS_SPEC: RecordSpec<Settings> = {
+  key: SETTINGS_KEY,
+  format: 'sticks-and-bones/settings',
+  version: 2,
+  validate: normalise,
+  // v0 = the un-enveloped settings object written before versioning.
+  migrate: (from, data) => (from === 0 ? data : null),
+};
+
+export function loadSettingsResult(store: SettingsStore | null): { settings: Settings; status: ReadStatus } {
+  const r = readRecord(store, SETTINGS_SPEC);
+  return { settings: r.value ?? DEFAULT_SETTINGS, status: r.status };
+}
+
+export function loadSettings(store: SettingsStore | null): Settings {
+  return loadSettingsResult(store).settings;
 }
 
 export function saveSettings(store: SettingsStore | null, s: Settings): void {
-  try {
-    store?.setItem(SETTINGS_KEY, JSON.stringify(s));
-  } catch {
-    /* storage unavailable: keep in memory only */
-  }
+  writeRecord(store, SETTINGS_SPEC, s); // storage unavailable: settings stay in memory
 }
 
 /** Whether motion should be reduced, honouring the system preference when set to 'system'. */
