@@ -549,14 +549,17 @@ export class TableScreen {
       r.winnerTeam === null
         ? 'No points this hand.'
         : r.points === 0
-          ? `${esc(this.#s.teamName(r.winnerTeam))} take${this.#s.opponent === 'ai' && r.winnerTeam === 0 ? '' : 's'} the hand — but there are no pips left to count.`
+          ? `${esc(this.#s.teamName(r.winnerTeam))} take${(this.#s.opponent === 'ai' && r.winnerTeam === 0) || this.#s.teamName(r.winnerTeam).includes(' & ') ? '' : 's'} the hand — but there are no pips left to count.`
           : `+${r.points} for ${this.#s.opponent === 'ai' && r.winnerTeam === 0 ? 'you' : esc(this.#s.teamName(r.winnerTeam))}`;
     const before = r.scoresAfter.map((sc, t) => (t === r.winnerTeam ? sc - r.points : sc));
     const scores = this.#s.rules.teams
       .map((_, t) => `<span>${esc(this.#s.teamName(t))}: <strong class="tally" data-from="${before[t]}" data-to="${v.scores[t]}">${v.scores[t]}</strong></span>`)
       .join(' · ');
     const over = v.phase === 'match-over' && v.winnerTeam !== null;
-    const matchLine = over ? `<p class="match-line">${esc(this.#s.teamName(v.winnerTeam!))} ${this.#s.opponent === 'ai' && v.winnerTeam === 0 ? 'win' : 'wins'} the match!</p>` : '';
+    // Plural subjects ("You", "Ana & Luz") take "win"; a single player name takes "wins".
+    const winnerName = over ? this.#s.teamName(v.winnerTeam!) : '';
+    const plural = (this.#s.opponent === 'ai' && v.winnerTeam === 0) || winnerName.includes(' & ');
+    const matchLine = over ? `<p class="match-line">${esc(winnerName)} ${plural ? 'win' : 'wins'} the match!</p>` : '';
     const buttons = over
       ? `<button type="button" class="btn" data-act="new-match">Rematch</button><button type="button" class="btn-ghost" data-act="menu-now">Menu</button>`
       : `<button type="button" class="btn" data-act="next-hand">Next hand</button>`;

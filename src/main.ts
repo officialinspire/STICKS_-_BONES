@@ -19,6 +19,8 @@ import { showStart } from './ui/intro-screen';
 import { renderMenu, type MenuChoice, type ResumeOffer } from './ui/menu';
 import { TableScreen } from './ui/table';
 import { consumeUpdatedFlag, describeOffline, eraseLocalData, PwaController } from './app/pwa';
+import { Analytics, winnerLabel, type AnalyticsEvent, type MatchInfo, type StartKind } from './app/analytics';
+import { ANALYTICS_CONFIG } from './app/analytics-config';
 
 const DEV = import.meta.env.DEV;
 document.documentElement.dataset.build = __SB_BUILD_TAG__; // support/diagnostics: which build is running
@@ -81,6 +83,29 @@ const settingsApi = {
     audio.setLevels(settings.audio);
   },
 };
+
+// ---- analytics: disabled adapter (no contract supplied; see docs/ANALYTICS.md) ------
+const analytics = new Analytics(ANALYTICS_CONFIG);
+if (DEV) {
+  // Dev/test only: observe what WOULD be sent (already sanitised). Never in production builds.
+  const seen: AnalyticsEvent[] = [];
+  (window as unknown as { __sbAnalytics: AnalyticsEvent[] }).__sbAnalytics = seen;
+  analytics.record((e) => seen.push(e));
+}
+const errorArea = (): 'boot' | 'menu' | 'table' | 'unknown' => (active ? 'table' : root.classList.contains('is-start') ? 'boot' : root.querySelector('.scene') ? 'menu' : 'unknown');
+window.addEventListener('error', (e) => analytics.error('error', errorArea(), e.error ?? e.message));
+window.addEventListener('unhandledrejection', (e) => analytics.error('unhandledrejection', errorArea(), e.reason));
+
+function matchInfo(session: GameSession, matchId: string): MatchInfo {
+  const opponent = session.opponent === 'ai' ? 'ai' : 'local';
+  return {
+    matchId,
+    mode: session.config.mode,
+    opponent,
+    difficulty: opponent === 'ai' ? session.difficulty : null,
+    humansPartnered: opponent === 'local' ? session.rules.teams.some((t) => session.humanSeats.every((h) => t.includes(h))) : null,
+  };
+}
 
 // ---- PWA: offline files, updates, repair (production builds only) -------------------
 const pwa = new PwaController();
@@ -233,7 +258,7 @@ function showMenu(): void {
   });
 }
 
-function mount(controller: TableController, matchId: string, counted: boolean, onRestart: () => void): void {
+function mount(controller: TableController, matchId: string, counted: boolean, onRestart: () => void, how: { kind: StartKind; restored: boolean } = { kind: 'fresh', restored: false }): void {
   root.className = 'is-table';
   document.documentElement.classList.add('table-lock'); // no page scroll / rubber-band under the table
   const session = controller.session;
@@ -248,10 +273,32 @@ function mount(controller: TableController, matchId: string, counted: boolean, o
   audio.setScene('gameplay');
   audio.preload('gameplay');
   table.mount();
+  const info = matchInfo(session, matchId);
+  const tracked = session.opponent !== 'dev-both';
+  const humanTeam = session.rules.teams.findIndex((t) => t.includes(session.humanSeats[0] ?? 0));
+  let lastHand = 0;
   controller.subscribe((events) => {
     if (!events.length) return;
     // Autosave after every change (local only; see save.ts for what this is and isn't).
     writeSave(store, session, matchId);
+    // Analytics from applied engine events only (never from renders): the first accepted
+    // command of a new match is its real start; a restored match never "starts" again.
+    if (tracked) {
+      // A real move (play, draw or pass) — not the deal — marks the actual start.
+      if (events.some((e) => e.type === 'tile-played' || e.type === 'tile-drawn' || e.type === 'passed')) analytics.matchActivity(info, how.kind, how.restored);
+      for (const e of events) {
+        if (e.type === 'hand-resolved') {
+          lastHand = e.result.handNumber;
+          analytics.roundEnd(info, {
+            handNumber: e.result.handNumber,
+            ending: e.result.end.kind === 'out' ? 'domino' : e.result.winnerTeam === null ? 'blocked_tie' : 'blocked',
+            winner: winnerLabel(e.result.winnerTeam, info.opponent, humanTeam),
+            points: e.result.points,
+          });
+        }
+        if (e.type === 'match-won') analytics.matchEnd(info, lastHand || session.debugState().hand.number, winnerLabel(e.team, info.opponent, humanTeam));
+      }
+    }
     const won = events.find((e) => e.type === 'match-won');
     if (won && won.type === 'match-won' && counted && session.opponent !== 'dev-both') {
       const p1 = session.humanSeats[0] ?? 0;
@@ -274,11 +321,12 @@ function mount(controller: TableController, matchId: string, counted: boolean, o
 /** Restart / rematch from a table: an unfinished match is abandoned first. */
 function restartFrom(c: MenuChoice): void {
   const a = active;
-  if (a && a.counted && a.controller.session.phase !== 'match-over') abandon(a.matchId, a.controller.session.config.mode);
-  void start(c);
+  const over = a?.controller.session.phase === 'match-over';
+  if (a && a.counted && !over) abandon(a.matchId, a.controller.session.config.mode);
+  void start(c, over ? 'rematch' : 'restart');
 }
 
-async function start(c: MenuChoice): Promise<void> {
+async function start(c: MenuChoice, kind: StartKind = 'fresh'): Promise<void> {
   last = c;
   // Starting fresh replaces any saved game: that match is abandoned (unless it's this one, already handled).
   const saved = readSave(store).value;
@@ -314,7 +362,7 @@ async function start(c: MenuChoice): Promise<void> {
     );
   }
   const next: MenuChoice = { ...c, devFixture: undefined };
-  mount(new TableController(session), newMatchId(), counted, () => restartFrom(next));
+  mount(new TableController(session), newMatchId(), counted, () => restartFrom(next), { kind, restored: false });
 }
 
 /** Rebuild the setup of a (possibly resumed) match for a rematch: same mode, seats, names, target, skill. */
@@ -344,7 +392,8 @@ function resume(): void {
   // re-derives what happens next (an AI turn asks afresh; a finished hand resolves once).
   const session = new GameSession({ state: saved.state, opponent: saved.opponent, difficulty: saved.difficulty, aiRng: saved.aiRng }, { runner });
   // A restored game always opens covered when two humans share the device.
-  mount(new TableController(session, { restored: true }), saved.matchId, true, () => restartFrom(choiceFromSession(session)));
+  if (saved.opponent !== ('dev-both' as string)) analytics.resume(matchInfo(session, saved.matchId), saved.state.hand.number);
+  mount(new TableController(session, { restored: true }), saved.matchId, true, () => restartFrom(choiceFromSession(session)), { kind: 'fresh', restored: true });
 }
 
 // ---- boot: start screen → studio intro (if supplied) → fade through black → menu ----
@@ -373,6 +422,7 @@ function boot(): void {
 }
 
 boot();
+analytics.launch(matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone ? 'standalone' : 'browser', __SB_BUILD_TAG__);
 // Register after the first screen is up, so the worker's downloads never compete with it.
 if (document.readyState === 'complete') void pwa.start();
 else window.addEventListener('load', () => void pwa.start(), { once: true });

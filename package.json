@@ -22,6 +22,8 @@
     "assets:derive": "tsx scripts/build-derivatives.ts",
     "icons:build": "tsx scripts/build-icons.ts",
     "pwa": "tsx scripts/pwa.ts",
+    "matches": "tsx scripts/matches.ts",
+    "smoke": "tsx scripts/smoke.ts",
     "qa": "tsx scripts/qa.ts",
     "a11y": "tsx scripts/a11y.ts",
     "perf": "tsx scripts/perf.ts",

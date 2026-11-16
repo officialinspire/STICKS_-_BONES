@@ -54,11 +54,11 @@ share our CacheStorage, localStorage and service-worker registry.
 
 | Cache | Contents | How |
 | --- | --- | --- |
-| `inspire:sticks-and-bones:shell:<build>` | The minimal app shell: `index.html`, the JS entry, the AI worker, CSS, the manifest, the two 192-px icons. **7 files, 211.8 KB.** | At install, all or nothing (`cache.addAll`, bypassing the HTTP cache). If any file fails, install fails and retries on the next visit. |
+| `inspire:sticks-and-bones:shell:<build>` | The minimal app shell: `index.html`, the JS entry, the AI worker, CSS, the manifest, the two 192-px icons. **7 files, 216.4 KB** (211.8 KB at Stage 10, before the analytics adapter). | At install, all or nothing (`cache.addAll`, bypassing the HTTP cache). If any file fails, install fails and retries on the next visit. |
 | `inspire:sticks-and-bones:assets:v1` | The six optimized WebP runtime images: backdrop, tabletop, portrait, slam, effects, tile atlas. **6 files, 1,417.2 KB.** | After the shell, best effort, 2 at a time. A truncated or failed download is never stored. Quota errors stop the job and are reported to the page. Images no build references are pruned on activate. |
 | — | **Not cached:** PNG source sheets (the build fails if one is bundled), music, the studio intro video, the 512-px icons. | Music and video stream from the network. |
 
-**Measured cache size after a complete first visit: 1,668,179 bytes (1.59 MiB).**
+**Measured cache size after a complete first visit: 1,672,882 bytes (1.60 MiB)** (Stage 11 build; 1,668,179 B at Stage 10).
 That's 13 files across 2 caches, read back from CacheStorage by `npm run pwa`.
 
 ## Offline features and what needs a completed first online visit

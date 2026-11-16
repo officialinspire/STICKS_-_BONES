@@ -45,6 +45,8 @@ npm run dev
 | `npm run perf` | Profile the production build (run `npm run build` first) — see [docs/PERFORMANCE.md](docs/PERFORMANCE.md) |
 | `npm run assets:derive` | Rebuild the WebP runtime derivatives from the preserved originals |
 | `npm run icons:build` | Rebuild the PWA icons (maskable safe area measured) |
+| `npm run matches` | Play complete matches in all 8 supported arrangements (clean console, analytics recorder) |
+| `npm run smoke` | CI browser smoke on the production build (`npm run build` first) |
 | `npm run pwa` | Installable-PWA acceptance: subpath, offline, interrupted downloads, quota, update, repair ([docs/PWA.md](docs/PWA.md)) |
 | `npm run check` | All of the above in sequence |
 
@@ -66,7 +68,7 @@ No deployment workflow is set up yet.
 
 ```
 assets/art/        Owner's source art (unaltered, see assets/art/README.md)
-docs/              RULES.md, ENGINE.md, AI.md, SHARED_DEVICE.md, PRESENTATION.md, AUDIO.md, SAVES.md, ASSETS.md, QA.md, PERFORMANCE.md, PWA.md, BUILD_STATUS.md
+docs/              RULES.md, ENGINE.md, AI.md, SHARED_DEVICE.md, PRESENTATION.md, AUDIO.md, SAVES.md, ASSETS.md, QA.md, PERFORMANCE.md, PWA.md, ANALYTICS.md, PLAYTEST.md, RELEASE_HANDOFF.md, BUILD_STATUS.md
 scripts/           Asset verification + measurement, dist check
 src/engine/        Pure, deterministic, serializable game engine (no DOM)
   rules/presets.ts Versioned rules presets ("Cousin's House Rules" v1)

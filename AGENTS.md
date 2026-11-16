@@ -1,6 +1,6 @@
 # Agent / contributor notes
 
-Read this file, `docs/BUILD_STATUS.md`, `docs/RULES.md`, `docs/ENGINE.md`, `docs/AI.md`, `docs/SHARED_DEVICE.md`, `docs/PRESENTATION.md`, `docs/AUDIO.md`, `docs/SAVES.md`, `docs/ASSETS.md`, `docs/QA.md`, `docs/PERFORMANCE.md` and `docs/PWA.md`
+Read this file, `docs/BUILD_STATUS.md`, `docs/RULES.md`, `docs/ENGINE.md`, `docs/AI.md`, `docs/SHARED_DEVICE.md`, `docs/PRESENTATION.md`, `docs/AUDIO.md`, `docs/SAVES.md`, `docs/ASSETS.md`, `docs/QA.md`, `docs/PERFORMANCE.md`, `docs/PWA.md`, `docs/ANALYTICS.md` and `docs/RELEASE_HANDOFF.md`
 before you change anything.
 
 ## Ground rules
@@ -32,6 +32,10 @@ before you change anything.
   open/delete `inspire:sticks-and-bones:*` caches; never `unregister()` or `skipWaiting()` without the
   player's "Update now", never cache PNG source sheets, music or video. Local data keys are
   `sticks-and-bones.*`; repair must not touch them. Run `npm run pwa` for any PWA or caching change.
+- **Analytics:** only through `src/app/analytics.ts` (per-event allowlist, sanitised errors, de-duplicated
+  from applied engine events, never from renders). It stays disabled until the owner supplies the contract
+  (`docs/ANALYTICS.md`): never invent keys, project ids, event names, consent behaviour or attribution
+  parameters, and never let query parameters affect rules or seeds.
 - **Base-path safety:** reference assets through `src/assets/urls.ts`
   (`new URL(literal, import.meta.url)`). No root-absolute URLs.
 - **Fallbacks:** tiles must always render valid vector pips, even when art is missing.
@@ -52,6 +56,7 @@ before you change anything.
 ## Before you finish a stage
 
 Run `npm run check`, plus `npm run e2e` for UI changes and `npm run qa` / `npm run a11y` for layout,
-input or accessibility changes. Update `docs/BUILD_STATUS.md` with the work you completed,
+input or accessibility changes, and `npm run matches` / `npm run smoke` before a release. CI
+(`.github/workflows/ci.yml`) runs check + smoke on every push. Update `docs/BUILD_STATUS.md` with the work you completed,
 the commands you ran and their results, known issues and the next stage. A
 feature only counts as complete when it has been exercised, not just compiled.
