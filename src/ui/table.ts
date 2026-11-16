@@ -30,6 +30,14 @@ export interface TableCallbacks {
   /** Restart / rematch: a fresh match with the same setup. */
   onRestart(): void;
   readonly settings: SettingsApi;
+  /** Optional audio/haptics hooks. Presentation only: called after state changes, never awaited. */
+  readonly audio?: TableAudio;
+}
+
+export interface TableAudio {
+  scene(s: 'gameplay' | 'paused' | 'results'): void;
+  sfx(id: 'place' | 'knock' | 'draw' | 'slam'): void;
+  haptic(cue: 'place' | 'knock' | 'domino'): void;
 }
 
 const UNIT_MIN = 26;
@@ -146,6 +154,7 @@ export class TableScreen {
     confirmDlg.addEventListener('cancel', () => {
       this.#pendingConfirm = null;
       this.#c.resume();
+      this.#resumeScene();
     });
     this.#ro = new ResizeObserver(() => {
       const w = this.#q('board-wrap')?.clientWidth ?? 0;
@@ -520,6 +529,7 @@ export class TableScreen {
     const mood: Mood = r.winnerTeam === null ? 'thinking' : this.#s.opponent === 'ai' ? (r.winnerTeam === 0 ? (over ? 'delighted' : 'surprised') : over ? 'pumped' : 'laughing') : over ? 'delighted' : 'explaining';
     dlg.innerHTML = `<div class="results-head"><div class="results-host">${hostFigureHtml(mood, 'full')}</div><div><h2 id="results-title">${esc(title)}</h2><p class="why">${esc(why)}</p></div></div>${hands}${teamLine}<p class="points">${pts}</p><p class="scores-line">${scores} · to ${v.targetScore}</p>${matchLine}<div class="sheet-actions">${buttons}</div>`;
     if (!dlg.open) dlg.showModal();
+    this.#cb.audio?.scene('results');
     (dlg.querySelector('.btn') as HTMLElement).focus();
     this.#tally(dlg);
   }
@@ -559,6 +569,7 @@ export class TableScreen {
       },
     });
     if (!dlg.open) dlg.showModal();
+    this.#cb.audio?.scene('paused');
     (dlg.querySelector('[data-act="pause-resume"]') as HTMLElement).focus();
   }
 
@@ -566,10 +577,17 @@ export class TableScreen {
     const dlg = this.#q<HTMLDialogElement>('pause');
     if (dlg.open) dlg.close();
     this.#c.resume();
+    this.#resumeScene();
+  }
+
+  /** Music scene to return to after a pause: results while a results sheet is up, else gameplay. */
+  #resumeScene(): void {
+    this.#cb.audio?.scene(this.#q<HTMLDialogElement>('results').open ? 'results' : 'gameplay');
   }
 
   #showConfirm(kind: 'menu' | 'restart'): void {
     this.#pendingConfirm = kind;
+    this.#cb.audio?.scene('paused');
     this.#c.pause('dialog');
     const dlg = this.#q<HTMLDialogElement>('confirm');
     const text =
@@ -594,6 +612,9 @@ export class TableScreen {
     let slam = false;
     let impact: { big: boolean } | null = null;
     const knocks: SeatIndex[] = [];
+    let placed = false;
+    let drew = false;
+    let domino = false;
     const say = (ctx: BanterContext) => {
       const line = this.#banter.say(ctx);
       if (line) quip = line;
@@ -613,6 +634,7 @@ export class TableScreen {
           this.#mood = this.#s.isHuman(e.seat) ? 'neutral' : 'smirk';
           const t = tileFromId(e.tile);
           impact = { big: false };
+          placed = true;
           if (t.high === t.low) {
             say('double');
             if (this.#isCousin(e.seat)) slam = true;
@@ -624,6 +646,7 @@ export class TableScreen {
           this.#message = e.tile && !this.#c.privacy ? `${this.#name(e.seat)} drew ${tileShort(e.tile)}${e.playable ? ' — it plays!' : '.'}` : `${this.#name(e.seat)} drew from the boneyard.`;
           if (e.tile && this.#c.privacy) this.#status = `You drew ${tileShort(e.tile)}${e.playable ? ' — it plays!' : '.'}`;
           this.#mood = 'thinking';
+          drew = true;
           say('draw');
           break;
         case 'passed':
@@ -638,6 +661,7 @@ export class TableScreen {
           if (e.end.kind === 'out') {
             slam = true;
             impact = { big: true };
+            domino = true;
             const seat = e.end.seat;
             const team = this.#s.rules.teams.find((tm) => tm.includes(seat))!;
             say(this.#s.isHuman(seat) ? 'player-out' : team.some((x) => this.#s.isHuman(x)) ? 'team-out' : 'cousin-out');
@@ -666,6 +690,21 @@ export class TableScreen {
     if (this.#covered()) this.#fx.clear(this.#root);
     this.render();
     // Presentation only — fired after the state is already applied; nothing waits on these.
+    const a = this.#cb.audio;
+    if (a) {
+      if (domino) {
+        a.sfx('slam');
+        a.haptic('domino');
+      } else if (placed) {
+        a.sfx('place');
+        a.haptic('place');
+      }
+      if (knocks.length) {
+        a.sfx('knock');
+        a.haptic('knock');
+      }
+      if (drew) a.sfx('draw');
+    }
     if (slam) this.#host?.slam();
     if (impact) {
       const board = this.#q('board');
@@ -765,6 +804,7 @@ export class TableScreen {
         break;
       case 'next-hand':
         this.#q<HTMLDialogElement>('results').close();
+        this.#cb.audio?.scene('gameplay');
         this.#c.nextHand();
         break;
       case 'new-match':
@@ -792,6 +832,7 @@ export class TableScreen {
         this.#pendingConfirm = null;
         this.#q<HTMLDialogElement>('confirm').close();
         this.#c.resume();
+        this.#resumeScene();
         break;
       case 'confirm-yes': {
         const kind = this.#pendingConfirm;

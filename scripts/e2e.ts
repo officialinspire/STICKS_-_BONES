@@ -11,7 +11,8 @@
  * every board tile at every rotation, in both atlas and SVG renderers — that
  * the pips counted in the screenshot match the tile data.
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -53,11 +54,21 @@ async function newPage(viewport: { width: number; height: number }, dsf = 1, opt
   return page;
 }
 
+/** Load the app and pass the start screen (and the studio intro, if any) to reach the menu. */
+async function enterMenu(page: Page, reload = false) {
+  if (reload) await page.reload();
+  else await page.goto(BASE);
+  await page.click('.start-button');
+  const skip = page.locator('[data-act="intro-skip"]');
+  if (await skip.count()) await tryClick(skip);
+  await page.waitForSelector('[data-go="setup"]');
+}
+
 async function startMatch(
   page: Page,
   o: { mode?: string; opponent?: string; seed?: string; aiSeed?: string; difficulty?: string; fast?: boolean; fixture?: string; svg?: boolean; names?: [string, string]; seating?: string },
 ) {
-  await page.goto(BASE);
+  await enterMenu(page);
   await page.click('[data-go="setup"]');
   await page.locator('details.dev-panel summary').click();
   if (o.seed) await page.fill('input[name="seed"]', o.seed);
@@ -302,7 +313,7 @@ try {
   };
   {
     const page = await newPage({ width: 320, height: 800 });
-    await page.goto(BASE);
+    await enterMenu(page);
     await page.click('[data-go="setup"]');
     await page.check('input[name="mode"][value="partnership4"]');
     await page.check('input[name="opponent"][value="local"]');
@@ -378,7 +389,7 @@ try {
       await page.click('[data-act="cover-reveal"]');
       notes.push(`privacy: ${what} → covered, re-revealed explicitly`);
     }
-    await page.reload();
+    await enterMenu(page, true);
     await page.waitForSelector('[data-act="resume"]');
     const summary = await page.textContent('.resume');
     check(!/t\d\d/.test(summary ?? ''), 'resume summary leaks tile ids');
@@ -540,7 +551,7 @@ try {
     await startMatch(page, { mode: 'draw2', opponent: 'ai', seed: 'e2e-open', aiSeed: 'o' });
     let q = await quipOf(page);
     check(q.quip === 'Fuck that, we playing DOMINOES!', `opening line (explicit) was "${q.quip}"`);
-    await page.goto(BASE);
+    await enterMenu(page);
     await page.click('[data-go="settings"]');
     await page.check('input[name="set-language"][value="clean"]');
     await page.click('[data-act="home"]');
@@ -569,7 +580,7 @@ try {
 
     // 6b. Rules are visible on the setup screen before dealing, and follow the selected mode.
     const p2 = await newPage({ width: 390, height: 844 });
-    await p2.goto(BASE);
+    await enterMenu(p2);
     await p2.click('[data-go="setup"]');
     const drawRules = (await p2.textContent('.rules-preview')) ?? '';
     await p2.check('input[name="mode"][value="partnership4"]');
@@ -709,6 +720,184 @@ try {
     check(fb.tiles > 0 && fb.svgFaces === fb.tiles && fb.fallback && fb.overflow <= 0, `missing art: fallbacks failed ${JSON.stringify(fb)}`);
     notes.push(`missing art: ${fb.tiles} board tiles drawn as vector faces, host monogram shown, no overflow`);
     await p5.context().close();
+  }
+
+  // 7. Start → studio intro → fade through black → menu, and the audio manager.
+  {
+    // A tiny test credit (VP9/Opus WebM: plays in open-source Chromium). Generated, never committed.
+    const fixture = join(outDir, 'e2e-intro.webm');
+    let haveVideo = existsSync(fixture);
+    if (!haveVideo) {
+      try {
+        execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc=size=320x180:rate=24:duration=2.5', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=2.5', '-c:v', 'libvpx-vp9', '-b:v', '200k', '-c:a', 'libopus', '-shortest', fixture]);
+        haveVideo = true;
+      } catch {
+        notes.push('intro video tests skipped: ffmpeg not available to build the fixture');
+      }
+    }
+    const INSTRUMENT = () => {
+      const w = window as unknown as { __rej: string[]; __maxMedia: number; __menus: number; __sbAudio?: { backend: { playingCount(): number } } };
+      w.__rej = [];
+      w.__maxMedia = 0;
+      w.__menus = 0;
+      addEventListener('unhandledrejection', (e) => w.__rej.push(String((e as PromiseRejectionEvent).reason)));
+      setInterval(() => {
+        const vids = [...document.querySelectorAll('video')].filter((v) => !v.paused && !v.muted).length;
+        w.__maxMedia = Math.max(w.__maxMedia, vids + (w.__sbAudio?.backend.playingCount() ?? 0));
+      }, 25);
+      new MutationObserver((ms) => {
+        for (const m of ms) m.addedNodes.forEach((n) => n instanceof HTMLElement && n.matches('.scene') && w.__menus++);
+      }).observe(document, { subtree: true, childList: true });
+    };
+    const probe = (page: Page) =>
+      page.evaluate(() => {
+        const w = window as unknown as { __rej: string[]; __maxMedia: number; __menus: number; __sbAudio: { audio: { scene: string; playing: string | null; unlocked: boolean; levels: { muted: boolean }; activeSfx(): number }; backend: { playingCount(): number } } };
+        return { rej: w.__rej, maxMedia: w.__maxMedia, menus: w.__menus, scene: w.__sbAudio.audio.scene, playing: w.__sbAudio.audio.playing, count: w.__sbAudio.backend.playingCount(), muted: w.__sbAudio.audio.levels.muted, sfx: w.__sbAudio.audio.activeSfx(), unlocked: w.__sbAudio.audio.unlocked };
+      });
+    const intro = async (route: 'ok' | '404' | 'hang' | 'none' | 'reject', vp = { width: 390, height: 844 }, mobile = false) => {
+      const ctx = await browser.newContext({ viewport: vp, ...(mobile ? { isMobile: true, hasTouch: true } : {}) });
+      const page = await ctx.newPage();
+      page.on('pageerror', (e: { message: string }) => failures.push(`page error: ${e.message}`));
+      page.on('console', (m: Ctx) => {
+        if (m.type() === 'error' && !(route !== 'ok' && /Failed to load resource|404/.test(m.text()))) failures.push(`console error: ${m.text()}`);
+      });
+      await page.addInitScript(INSTRUMENT);
+      if (route !== 'none') await page.addInitScript(() => ((window as unknown as { __sbIntroVideo: string }).__sbIntroVideo = './e2e-intro.webm'));
+      // Simulate the browser refusing to play the credit (autoplay policy); music elements keep the real play().
+      if (route === 'reject')
+        await page.addInitScript(
+          `(() => { const orig = HTMLMediaElement.prototype.play; HTMLMediaElement.prototype.play = function () { return this instanceof HTMLVideoElement ? Promise.reject(new DOMException('blocked', 'NotAllowedError')) : orig.call(this); }; })();`,
+        );
+      await page.route('**/e2e-intro.webm', async (r: { fulfill(o: unknown): Promise<void>; abort(): Promise<void> }) => {
+        if (route === 'ok' || route === 'reject') return r.fulfill({ status: 200, contentType: 'video/webm', body: readFileSync(fixture) });
+        if (route === '404') return r.fulfill({ status: 404, body: '' });
+        /* hang: never answer */
+      });
+      await page.goto(BASE);
+      await page.waitForSelector('.start-button');
+      return { ctx, page };
+    };
+
+    // 7a. No intro video supplied (the repository today): start → black → menu once; music only after the gesture.
+    {
+      const { ctx, page } = await intro('none');
+      const before = await probe(page);
+      check(before.count === 0 && !before.unlocked && before.scene === 'init', `before the gesture audio must be silent and locked (${JSON.stringify(before)})`);
+      await page.click('.start-button');
+      await page.click('.start-button', { force: true }).catch(() => {}); // double-click
+      await page.waitForSelector('[data-go="setup"]');
+      await page.waitForTimeout(2000);
+      const after = await probe(page);
+      check(after.menus === 1 && after.scene === 'menu' && after.playing === 'menu' && after.count === 1 && after.rej.length === 0, `missing video → menu: ${JSON.stringify(after)}`);
+      // Background/foreground: silence, then resume only the menu scene.
+      await page.evaluate(`Object.defineProperty(document, 'hidden', { configurable: true, get() { return true; } }); document.dispatchEvent(new Event('visibilitychange'));`);
+      await page.waitForTimeout(200);
+      const hidden = await probe(page);
+      await page.evaluate(`Object.defineProperty(document, 'hidden', { configurable: true, get() { return false; } }); document.dispatchEvent(new Event('visibilitychange'));`);
+      await page.waitForTimeout(1500);
+      const back = await probe(page);
+      check(hidden.count === 0 && back.playing === 'menu' && back.count === 1, `background/foreground: hidden ${hidden.count}, back ${back.playing}/${back.count}`);
+      // Reload: back to the start screen, silent until a new gesture.
+      await page.reload();
+      await page.waitForSelector('.start-button');
+      const reloaded = await probe(page);
+      check(reloaded.count === 0 && reloaded.scene === 'init', 'reload: audio playing before the start gesture');
+      notes.push(`intro (no video): one menu mount, music after the gesture only, background → silent → menu resumed, reload silent until tapped`);
+      await ctx.close();
+    }
+
+    if (haveVideo) {
+      // 7b. Video plays to the end: no overlap between the credit's audio and menu music.
+      {
+        const { ctx, page } = await intro('ok');
+        await page.click('.start-button');
+        await page.waitForSelector('video');
+        const sceneDuring = await probe(page);
+        check(sceneDuring.scene === 'intro' && sceneDuring.count === 0, `during the credit menu music must be silent (${JSON.stringify(sceneDuring)})`);
+        await page.waitForSelector('[data-go="setup"]', { timeout: 15000 });
+        await page.waitForTimeout(2200);
+        const r = await probe(page);
+        check(r.menus === 1 && r.maxMedia <= 1 && r.playing === 'menu' && r.rej.length === 0, `video ended → menu: ${JSON.stringify(r)}`);
+        check((await page.locator('video').count()) === 0, 'intro video element left behind');
+        notes.push(`intro (video, played out): menu once, max concurrent media sources ${r.maxMedia}`);
+        await ctx.close();
+      }
+      // 7c. Rapid start + double Skip, and mute during the intro.
+      {
+        const { ctx, page } = await intro('ok');
+        await page.dblclick('.start-button');
+        await page.waitForSelector('[data-act="intro-skip"]');
+        await page.click('[data-act="intro-mute"]');
+        await page.click('[data-act="intro-skip"]');
+        await page.click('[data-act="intro-skip"]', { timeout: 500 }).catch(() => {});
+        await page.keyboard.press('Escape');
+        await page.waitForSelector('[data-go="setup"]');
+        await page.waitForTimeout(3500); // past the clip's natural end: no stale 'ended' may act
+        const r = await probe(page);
+        check(r.menus === 1 && r.muted && r.maxMedia <= 1 && r.rej.length === 0, `rapid skip + mute: ${JSON.stringify(r)}`);
+        notes.push(`intro: double-click start, mute, double Skip + Escape → one menu, mute kept (${r.muted}), no stale callbacks`);
+        await ctx.close();
+      }
+      // 7d. Error, stall and autoplay refusal each enter the menu exactly once.
+      for (const route of ['404', 'reject', 'hang'] as const) {
+        const { ctx, page } = await intro(route);
+        await page.click('.start-button');
+        await page.waitForSelector('[data-go="setup"]', { timeout: 15000 });
+        await page.waitForTimeout(800);
+        const r = await probe(page);
+        check(r.menus === 1 && r.rej.length === 0, `intro ${route}: ${JSON.stringify(r)}`);
+        notes.push(`intro ${route}: menu entered once`);
+        await ctx.close();
+      }
+      // 7e. Clean start on a mobile-emulated browser (touch).
+      {
+        const { ctx, page } = await intro('ok', { width: 390, height: 844 }, true);
+        await page.tap('.start-button');
+        await page.waitForSelector('[data-act="intro-skip"]');
+        await page.tap('[data-act="intro-skip"]');
+        await page.waitForSelector('[data-go="setup"]');
+        await page.waitForTimeout(1500);
+        const r = await probe(page);
+        check(r.menus === 1 && r.unlocked && r.rej.length === 0, `mobile tap start: ${JSON.stringify(r)}`);
+        notes.push('mobile emulation: tap to start → Skip → menu, audio unlocked');
+        await ctx.close();
+      }
+    }
+
+    // 7f. Gameplay: one music source through results and rematch; reset cuts sounds.
+    {
+      const page = await newPage({ width: 1366, height: 900 });
+      await page.addInitScript(INSTRUMENT);
+      await startMatch(page, { fixture: 'match-point' });
+      await page.waitForTimeout(1500);
+      let r = await probe(page);
+      check(r.scene === 'gameplay' && r.count <= 1, `gameplay scene: ${JSON.stringify(r)}`);
+      await page.click('.hand-tile[data-tile="t61"]');
+      await page.locator('.end-slot.is-legal').first().click();
+      await page.waitForSelector('dialog.results[open]', { timeout: 6000 });
+      r = await probe(page);
+      check(r.scene === 'results', `results scene: ${r.scene}`);
+      await page.click('[data-act="new-match"]');
+      await page.waitForTimeout(1500);
+      r = await probe(page);
+      check(r.scene === 'gameplay' && r.count <= 1 && r.maxMedia <= 1, `rematch: ${JSON.stringify(r)}`);
+      // Reset during sounds: play, then restart immediately.
+      const legal = page.locator('.hand-tile.is-legal');
+      if (await legal.count()) {
+        await legal.first().click();
+        await page.locator('.end-slot.is-legal').first().click();
+      }
+      await page.click('[data-act="pause"]');
+      r = await probe(page);
+      check(r.scene === 'paused', `pause scene: ${r.scene}`);
+      await page.click('dialog.pause [data-act="restart"]');
+      await page.click('[data-act="confirm-yes"]');
+      await page.waitForTimeout(300);
+      r = await probe(page);
+      check(r.sfx === 0 && r.count <= 1 && r.maxMedia <= 1 && r.rej.length === 0, `reset during sounds: ${JSON.stringify(r)}`);
+      notes.push(`audio in play: gameplay → results → rematch → paused → restart; max concurrent music ${r.maxMedia}, SFX cut on reset`);
+      await page.context().close();
+    }
   }
 
 } catch (e) {

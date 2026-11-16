@@ -14,6 +14,7 @@ import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PNG } from 'pngjs';
 import { IMAGE_ASSETS, MISSING_ASSETS } from '../src/assets/manifest.ts';
+import { MUSIC } from '../src/assets/audio-manifest.ts';
 import { RUNTIME_ASSET_URLS } from '../src/assets/urls.ts';
 import { measureFrames, rectsEqual, rectWithin } from './lib/measure.ts';
 
@@ -127,13 +128,13 @@ for (const file of walk(join(repoRoot, 'assets'))) {
   const rel = relative(repoRoot, file).split('\\').join('/');
   if (/\.(png|jpe?g|webp|gif|avif|svg)$/i.test(rel) && !registered.has(rel))
     errors.push(`unregistered image ${rel} — add it to src/assets/manifest.ts`);
-  if (/\.(mp3|ogg|wav|m4a|aac|flac|mp4|webm|mov)$/i.test(rel))
-    notes.push(`media file present but not yet catalogued: ${rel}`);
+  if (/\.(mp3|ogg|wav|m4a|aac|flac|mp4|webm|mov)$/i.test(rel) && !MUSIC.some((m) => m.path === rel) && rel !== 'assets/video/inspiresoftwareintro.mp4')
+    errors.push(`uncatalogued media ${rel} — add it to src/assets/audio-manifest.ts`);
 }
 
 // Stray art at the repo root (where uploads land) should be moved under assets/art.
 for (const name of readdirSync(repoRoot)) {
-  if (/\.(png|jpe?g|webp|mp3|ogg|wav|mp4|webm)$/i.test(name))
+  if (/\.(png|jpe?g|webp|mp3|ogg|wav|mp4|webm|mov)$/i.test(name))
     errors.push(`uncatalogued upload at repository root: ${name}`);
 }
 
@@ -174,6 +175,20 @@ for (const id of RUNTIME_ASSET_IDS) {
     if (json.tiles.length !== 28) errors.push(`[tile.atlas] expected 28 faces, found ${json.tiles.length}`);
   }
 }
+
+// Approved music: bytes and hash must match (files are never re-encoded in place).
+for (const m of MUSIC) {
+  const full = join(repoRoot, m.path);
+  if (!existsSync(full)) {
+    errors.push(`[music:${m.id}] missing ${m.path}`);
+    continue;
+  }
+  const buf = readFileSync(full);
+  if (buf.length !== m.bytes) errors.push(`[music:${m.id}] size ${buf.length} != manifest ${m.bytes}`);
+  if (createHash('sha256').update(buf).digest('hex') !== m.sha256) errors.push(`[music:${m.id}] sha256 changed — the approved file was altered or replaced`);
+  if (m.loop.candidates.some((c) => c.auditioned)) notes.push(`[music:${m.id}] has an auditioned loop candidate — runtime still uses restart-after-ending until the policy is changed`);
+}
+if (!existsSync(join(repoRoot, 'assets/video/inspiresoftwareintro.mp4'))) notes.push('intro video assets/video/inspiresoftwareintro.mp4 not supplied — start screen fades straight to the menu');
 
 for (const m of MISSING_ASSETS) notes.push(`missing (${m.kind}) ${m.id}: fallback = ${m.fallback}`);
 

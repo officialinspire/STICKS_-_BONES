@@ -1,5 +1,6 @@
 /** Settings form shared by the menu and the in-game pause sheet. */
-import type { Settings } from '../app/settings';
+import type { AudioSettings, Settings } from '../app/settings';
+import { hapticsSupported } from '../audio/haptics';
 
 export interface SettingsApi {
   get(): Settings;
@@ -9,7 +10,20 @@ export interface SettingsApi {
 export function settingsPanelHtml(s: Settings): string {
   const radio = (name: string, value: string, label: string, checked: boolean) =>
     `<label class="check"><input type="radio" name="${name}" value="${value}" ${checked ? 'checked' : ''}> ${label}</label>`;
+  const a = s.audio;
+  const slider = (key: keyof AudioSettings, label: string, note = '') =>
+    `<label class="field slider"><span>${label}${note ? ` <small>${note}</small>` : ''}</span><input type="range" min="0" max="100" step="5" name="set-vol-${key}" value="${Math.round((a[key] as number) * 100)}" aria-valuetext="${Math.round((a[key] as number) * 100)} percent"></label>`;
   return `<div class="settings-panel">
+    <fieldset><legend>Sound</legend>
+      <label class="check"><input type="checkbox" name="set-mute" ${a.muted ? 'checked' : ''}> Mute all sound</label>
+      ${slider('master', 'Master')}
+      ${slider('music', 'Music')}
+      ${slider('sfx', 'Sound effects', '(placeholder sounds)')}
+      ${slider('voice', 'Voice', '(no recorded voice yet — subtitles only)')}
+      ${slider('ambience', 'Ambience')}
+      <label class="check"><input type="checkbox" name="set-ambience" ${a.ambienceOn ? 'checked' : ''}> Quiet patio ambience during play <small>(placeholder)</small></label>
+      ${hapticsSupported() ? `<label class="check"><input type="checkbox" name="set-haptics" ${s.haptics ? 'checked' : ''}> Vibration (haptics)</label>` : '<p class="note">Vibration isn’t available on this device.</p>'}
+    </fieldset>
     <fieldset><legend>Cousin’s language</legend><div class="row">
       ${radio('set-language', 'explicit', 'Explicit (“Fuck that…”)', s.explicitLanguage)}
       ${radio('set-language', 'clean', 'Clean (“Forget that…”)', !s.explicitLanguage)}
@@ -32,9 +46,27 @@ export function settingsPanelHtml(s: Settings): string {
 }
 
 export function bindSettingsPanel(root: HTMLElement, api: SettingsApi): void {
+  // Sliders update live while dragging.
+  root.addEventListener('input', (e) => {
+    const t = e.target as HTMLInputElement;
+    if (!t.name.startsWith('set-vol-')) return;
+    const key = t.name.slice('set-vol-'.length) as keyof AudioSettings;
+    const v = Math.max(0, Math.min(1, Number(t.value) / 100));
+    t.setAttribute('aria-valuetext', `${Math.round(v * 100)} percent`);
+    api.set({ audio: { ...api.get().audio, [key]: v } });
+  });
   root.addEventListener('change', (e) => {
     const t = e.target as HTMLInputElement;
     switch (t.name) {
+      case 'set-mute':
+        api.set({ audio: { ...api.get().audio, muted: t.checked } });
+        break;
+      case 'set-ambience':
+        api.set({ audio: { ...api.get().audio, ambienceOn: t.checked } });
+        break;
+      case 'set-haptics':
+        api.set({ haptics: t.checked });
+        break;
       case 'set-language':
         api.set({ explicitLanguage: t.value === 'explicit' });
         break;

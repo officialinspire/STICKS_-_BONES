@@ -369,9 +369,9 @@ export const IMAGE_ASSETS = [
 export type ImageAssetId = (typeof IMAGE_ASSETS)[number]['id'];
 
 export const MISSING_ASSETS: readonly MissingAsset[] = [
-  { id: 'audio.music', kind: 'audio', description: 'Original music (owner will supply later).', fallback: 'Silence; no audio is loaded.' },
-  { id: 'audio.sfx', kind: 'audio', description: 'Tile click/slam, shuffle, draw, pass, win sound effects.', fallback: 'Silence; visual feedback only.' },
-  { id: 'video.intro', kind: 'video', description: 'No video was supplied. None is required for v1.', fallback: 'Static illustrated title screen.' },
+  { id: 'audio.sfx', kind: 'audio', description: 'Tile place, knock (pass), draw, slam sound effects and patio ambience.', fallback: 'Code-synthesized PLACEHOLDER sounds (src/audio/synth.ts); not final audio.' },
+  { id: 'audio.voice', kind: 'audio', description: 'Spoken lines for Cousin.', fallback: 'Subtitles (speech bubble + live region) and expressions only.' },
+  { id: 'video.intro', kind: 'video', description: 'INSPIRE studio intro, expected at assets/video/inspiresoftwareintro.mp4.', fallback: 'Start screen fades through black straight to the menu.' },
   { id: 'image.opponents', kind: 'image', description: 'Opponent / partner seat portraits for AI and second-human seats.', fallback: 'Seat badges with initials; silhouette reference exists but has an opaque background.' },
   { id: 'image.tile-sideview', kind: 'image', description: 'Edge-on / stacked tile art for the boneyard and opponent hands.', fallback: 'SVG tile backs rendered from the teal back sprite or flat colour.' },
   { id: 'image.ui-icons', kind: 'image', description: 'App icon / favicon and UI glyphs.', fallback: 'Inline SVG favicon with a 6|6 domino.' },

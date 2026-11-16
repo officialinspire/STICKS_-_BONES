@@ -5,6 +5,20 @@
 export type MotionPref = 'system' | 'reduce' | 'full';
 export type AiSpeed = 'relaxed' | 'normal' | 'quick';
 
+export interface AudioSettings {
+  /** 0..1 each. */
+  readonly master: number;
+  readonly music: number;
+  readonly sfx: number;
+  readonly voice: number;
+  readonly ambience: number;
+  readonly muted: boolean;
+  /** Optional quiet patio ambience during play. */
+  readonly ambienceOn: boolean;
+}
+
+export const DEFAULT_AUDIO: AudioSettings = { master: 0.8, music: 0.6, sfx: 0.8, voice: 0.9, ambience: 0.5, muted: false, ambienceOn: false };
+
 export interface Settings {
   /** Cousin may swear ("Fuck that…"); off uses the clean wording ("Forget that…"). */
   readonly explicitLanguage: boolean;
@@ -15,9 +29,36 @@ export interface Settings {
   readonly hostAnimation: boolean;
   /** Presentation-only thinking delay for computer players. */
   readonly aiSpeed: AiSpeed;
+  readonly audio: AudioSettings;
+  /** Short vibrations on supported devices. */
+  readonly haptics: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { explicitLanguage: true, banter: true, motion: 'system', hostAnimation: true, aiSpeed: 'normal' };
+export const DEFAULT_SETTINGS: Settings = {
+  explicitLanguage: true,
+  banter: true,
+  motion: 'system',
+  hostAnimation: true,
+  aiSpeed: 'normal',
+  audio: DEFAULT_AUDIO,
+  haptics: true,
+};
+
+const level = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : d);
+
+function loadAudio(a: unknown): AudioSettings {
+  if (typeof a !== 'object' || a === null) return DEFAULT_AUDIO;
+  const p = a as Partial<AudioSettings>;
+  return {
+    master: level(p.master, DEFAULT_AUDIO.master),
+    music: level(p.music, DEFAULT_AUDIO.music),
+    sfx: level(p.sfx, DEFAULT_AUDIO.sfx),
+    voice: level(p.voice, DEFAULT_AUDIO.voice),
+    ambience: level(p.ambience, DEFAULT_AUDIO.ambience),
+    muted: typeof p.muted === 'boolean' ? p.muted : DEFAULT_AUDIO.muted,
+    ambienceOn: typeof p.ambienceOn === 'boolean' ? p.ambienceOn : DEFAULT_AUDIO.ambienceOn,
+  };
+}
 export const SETTINGS_KEY = 'sticks-and-bones.settings';
 
 export interface SettingsStore {
@@ -36,6 +77,8 @@ export function loadSettings(store: SettingsStore | null): Settings {
       motion: p.motion === 'reduce' || p.motion === 'full' || p.motion === 'system' ? p.motion : DEFAULT_SETTINGS.motion,
       hostAnimation: typeof p.hostAnimation === 'boolean' ? p.hostAnimation : DEFAULT_SETTINGS.hostAnimation,
       aiSpeed: p.aiSpeed === 'relaxed' || p.aiSpeed === 'quick' || p.aiSpeed === 'normal' ? p.aiSpeed : DEFAULT_SETTINGS.aiSpeed,
+      audio: loadAudio(p.audio),
+      haptics: typeof p.haptics === 'boolean' ? p.haptics : DEFAULT_SETTINGS.haptics,
     };
   } catch {
     return DEFAULT_SETTINGS;

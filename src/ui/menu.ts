@@ -133,6 +133,7 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
           <button type="button" class="btn-ghost small" data-fixture="match-point">Match point</button>
         </div>
         <a class="dev-link" href="./dev/contact-sheet.html">Tile contact sheet →</a>
+        <a class="dev-link" href="./dev/audio-audition.html">Music loop audition →</a>
       </details>`
     : '';
   root.innerHTML = shell(

@@ -7,6 +7,15 @@ import { loadSettings, saveSettings, type Settings } from './app/settings';
 import { DEFAULT_TIMING, GameSession, type Timing } from './app/session';
 import type { SeatIndex } from './engine/types';
 import { initTileArt, setForceSvg } from './render/tile-art';
+import { assetUrl } from './assets';
+import { MUSIC } from './assets/audio-manifest';
+import { introVideoUrl, musicUrl } from './assets/media-urls';
+import { AudioManager, type Scene, type SfxId } from './audio/manager';
+import { WebAudioBackend } from './audio/webaudio';
+import { haptic, type HapticCue } from './audio/haptics';
+import { reduceMotion } from './app/settings';
+import { realScheduler } from './app/session';
+import { showStart } from './ui/intro-screen';
 import { renderMenu, type MenuChoice, type ResumeOffer } from './ui/menu';
 import { TableScreen } from './ui/table';
 
@@ -14,11 +23,40 @@ const DEV = import.meta.env.DEV;
 const root = document.getElementById('app')!;
 const store = browserStore();
 let settings: Settings = loadSettings(store);
+// ---- audio: one manager for the whole app ---------------------------------------
+const backend = new WebAudioBackend(
+  { menu: musicUrl('menu') ?? undefined, gameplay: musicUrl('gameplay') ?? undefined } as never,
+  Object.fromEntries(MUSIC.map((m) => [m.id, m.gainDb])),
+);
+const audio = new AudioManager({
+  backend,
+  scheduler: realScheduler,
+  levels: settings.audio,
+  gapSec: Object.fromEntries(MUSIC.map((m) => [m.id, m.loop.gapSec])) as Record<'menu' | 'gameplay', number>,
+});
+// Any later gesture re-unlocks if the browser suspended audio (iOS, focus loss).
+const regesture = () => {
+  if (!audio.unlocked || (audio.playing === null && audio.scene !== 'intro' && audio.scene !== 'init')) void audio.unlock();
+};
+document.addEventListener('pointerdown', regesture, { capture: true, passive: true });
+document.addEventListener('keydown', regesture, { capture: true });
+document.addEventListener('visibilitychange', () => audio.setHidden(document.hidden));
+window.addEventListener('pagehide', () => audio.setHidden(true));
+window.addEventListener('pageshow', () => audio.setHidden(document.hidden));
+
+const audioApi = {
+  scene: (s: Scene) => audio.setScene(s),
+  sfx: (id: SfxId) => void audio.playSfx(id),
+  haptic: (cue: HapticCue) => void haptic(cue, settings.haptics),
+  reset: () => audio.reset(),
+};
+
 const settingsApi = {
   get: () => settings,
   set: (p: Partial<Settings>) => {
     settings = { ...settings, ...p };
     saveSettings(store, settings);
+    audio.setLevels(settings.audio);
   },
 };
 let table: TableScreen | null = null;
@@ -43,6 +81,7 @@ document.addEventListener(
 );
 
 function teardown(): void {
+  audio.reset(); // cut any sounds still ringing from the old table
   table?.destroy();
   controller?.dispose();
   table = null;
@@ -61,6 +100,7 @@ function resumeOffer(game: SavedGame): ResumeOffer {
 function showMenu(): void {
   teardown();
   const saved = readSave(store);
+  audio.setScene('menu');
   renderMenu(root, last ?? {}, {
     dev: DEV,
     settings: settingsApi,
@@ -69,7 +109,35 @@ function showMenu(): void {
     onResume: () => resume(),
     onDiscard: () => {
       clearSave(store);
-      showMenu();
+      // ---- boot: start screen → studio intro (if supplied) → fade through black → menu ----
+function boot(): void {
+  audio.setScene('init');
+  const devOverride = DEV ? (window as unknown as { __sbIntroVideo?: string | null }).__sbIntroVideo : undefined;
+  showStart({
+    root,
+    videoUrl: devOverride !== undefined ? devOverride : introVideoUrl(),
+    reduceMotion: () => reduceMotion(settings, matchMedia('(prefers-reduced-motion: reduce)').matches),
+    onGesture: () => {
+      // Inside the user gesture: unlock audio, but play nothing — the credit has its own sound.
+      audio.setScene('intro');
+      void audio.unlock();
+    },
+    videoVolume: () => ({ muted: settings.audio.muted, volume: Math.max(0, Math.min(1, settings.audio.master * Math.max(settings.audio.music, settings.audio.voice))) }),
+    setMuted: (muted) => settingsApi.set({ audio: { ...settings.audio, muted } }),
+    preload: () => {
+      // Enough for a smooth first menu, without pulling every large asset.
+      for (const id of ['env.neighborhood-patio', 'cousin.atlas.portrait'] as const) {
+        const url = assetUrl(id);
+        if (url) new Image().src = url;
+      }
+      audio.preload('menu', 'metadata');
+    },
+    onMenu: () => showMenu(),
+  });
+  if (DEV) (window as unknown as { __sbAudio: unknown }).__sbAudio = { audio, backend };
+}
+
+boot();
     },
   });
 }
@@ -77,7 +145,9 @@ function showMenu(): void {
 function mount(c: TableController, onRestart: () => void): void {
   controller = c;
   root.className = 'is-table';
-  table = new TableScreen(root, c, { onMenu: showMenu, onRestart, settings: settingsApi });
+  table = new TableScreen(root, c, { onMenu: showMenu, onRestart, settings: settingsApi, audio: audioApi });
+  audio.setScene('gameplay');
+  audio.preload('gameplay');
   table.mount();
   // Autosave after every game change (local only; see save.ts for what this is and isn't).
   c.subscribe((events) => {
@@ -134,11 +204,67 @@ function choiceFromSession(s: GameSession): MenuChoice {
 
 function resume(): void {
   const saved = readSave(store);
-  if (!saved) return showMenu();
+  if (!saved) return // ---- boot: start screen → studio intro (if supplied) → fade through black → menu ----
+function boot(): void {
+  audio.setScene('init');
+  const devOverride = DEV ? (window as unknown as { __sbIntroVideo?: string | null }).__sbIntroVideo : undefined;
+  showStart({
+    root,
+    videoUrl: devOverride !== undefined ? devOverride : introVideoUrl(),
+    reduceMotion: () => reduceMotion(settings, matchMedia('(prefers-reduced-motion: reduce)').matches),
+    onGesture: () => {
+      // Inside the user gesture: unlock audio, but play nothing — the credit has its own sound.
+      audio.setScene('intro');
+      void audio.unlock();
+    },
+    videoVolume: () => ({ muted: settings.audio.muted, volume: Math.max(0, Math.min(1, settings.audio.master * Math.max(settings.audio.music, settings.audio.voice))) }),
+    setMuted: (muted) => settingsApi.set({ audio: { ...settings.audio, muted } }),
+    preload: () => {
+      // Enough for a smooth first menu, without pulling every large asset.
+      for (const id of ['env.neighborhood-patio', 'cousin.atlas.portrait'] as const) {
+        const url = assetUrl(id);
+        if (url) new Image().src = url;
+      }
+      audio.preload('menu', 'metadata');
+    },
+    onMenu: () => showMenu(),
+  });
+  if (DEV) (window as unknown as { __sbAudio: unknown }).__sbAudio = { audio, backend };
+}
+
+boot();
   teardown();
   const session = new GameSession({ state: saved.state, opponent: saved.opponent, difficulty: saved.difficulty, aiRng: saved.aiRng }, { runner });
   // A restored game always starts covered when two humans share the device.
   mount(new TableController(session, { restored: true }), () => void start(choiceFromSession(session)));
 }
 
-showMenu();
+// ---- boot: start screen → studio intro (if supplied) → fade through black → menu ----
+function boot(): void {
+  audio.setScene('init');
+  const devOverride = DEV ? (window as unknown as { __sbIntroVideo?: string | null }).__sbIntroVideo : undefined;
+  showStart({
+    root,
+    videoUrl: devOverride !== undefined ? devOverride : introVideoUrl(),
+    reduceMotion: () => reduceMotion(settings, matchMedia('(prefers-reduced-motion: reduce)').matches),
+    onGesture: () => {
+      // Inside the user gesture: unlock audio, but play nothing — the credit has its own sound.
+      audio.setScene('intro');
+      void audio.unlock();
+    },
+    videoVolume: () => ({ muted: settings.audio.muted, volume: Math.max(0, Math.min(1, settings.audio.master * Math.max(settings.audio.music, settings.audio.voice))) }),
+    setMuted: (muted) => settingsApi.set({ audio: { ...settings.audio, muted } }),
+    preload: () => {
+      // Enough for a smooth first menu, without pulling every large asset.
+      for (const id of ['env.neighborhood-patio', 'cousin.atlas.portrait'] as const) {
+        const url = assetUrl(id);
+        if (url) new Image().src = url;
+      }
+      audio.preload('menu', 'metadata');
+    },
+    onMenu: () => showMenu(),
+  });
+  if (DEV) (window as unknown as { __sbAudio: unknown }).__sbAudio = { audio, backend };
+}
+
+boot();
