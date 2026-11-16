@@ -89,6 +89,12 @@ export class AudioManager {
   #playing: TrackId | null = null;
   #broken = new Set<TrackId>();
   #timers = new Set<unknown>();
+  /**
+   * A track still fading out (audible until its fade timer pauses it). Nothing new
+   * starts while it exists, and its timer is never cancelled by scene changes —
+   * otherwise a quick second scene change would leave it playing under the next track.
+   */
+  #fadingOut: { id: TrackId; timer: unknown } | null = null;
   #active: { id: SfxId; h: SfxHandle }[] = [];
   readonly stats = { musicStarts: 0, staleDropped: 0, playRejected: 0, sfxPlayed: 0, sfxDropped: 0 };
 
@@ -157,6 +163,7 @@ export class AudioManager {
     const token = ++this.#token;
     if (hidden) {
       this.#clearTimers();
+      this.#finishFadeOut();
       this.stopAllSfx();
       if (this.#playing) this.#b.pause(this.#playing);
       this.#playing = null;
@@ -226,11 +233,22 @@ export class AudioManager {
     this.#timers.clear();
   }
 
+  /** Pause a pending fade-out now (tab hidden). */
+  #finishFadeOut(): void {
+    const f = this.#fadingOut;
+    if (!f) return;
+    this.#sched.clear(f.timer);
+    this.#fadingOut = null;
+    this.#b.pause(f.id);
+  }
+
   /** Bring audio in line with the current scene. */
   #apply(token: number): void {
     this.#clearTimers();
     const spec = SCENES[this.#scene];
     this.#b.ambience(spec.ambience && this.#levels.ambienceOn, 0.8);
+    // An old track is still fading out: its timer will re-apply the then-current scene.
+    if (this.#fadingOut) return;
     const want = spec.track && this.#b.hasTrack(spec.track) && !this.#broken.has(spec.track) ? spec.track : null;
     const cur = this.#playing;
     if (cur && cur === want) {
@@ -242,14 +260,15 @@ export class AudioManager {
       this.#b.fade(cur, 0, FADE_OUT_SEC);
       this.#playing = null;
       const old = cur;
-      const h = this.#sched.set(() => {
-        this.#timers.delete(h);
-        // Always stop the faded track, even if the scene moved on.
-        if (this.#playing !== old) this.#b.pause(old);
-        if (token !== this.#token) return void this.stats.staleDropped++;
-        if (want) this.#start(want, token, true);
+      const timer = this.#sched.set(() => {
+        if (this.#fadingOut?.timer !== timer) return;
+        this.#fadingOut = null;
+        this.#b.pause(old); // always stopped, even if the scene moved on meanwhile
+        if (token !== this.#token) this.stats.staleDropped++;
+        // Start whatever the CURRENT scene wants (it may have changed during the fade).
+        if (this.#unlocked && !this.#hidden) this.#apply(this.#token);
       }, FADE_OUT_SEC * 1000);
-      this.#timers.add(h);
+      this.#fadingOut = { id: old, timer };
       return;
     }
     if (want) this.#start(want, token, true);

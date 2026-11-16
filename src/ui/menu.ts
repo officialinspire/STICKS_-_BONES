@@ -130,7 +130,7 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
       `<section class="panel" aria-labelledby="stats-heading">${back}<h2 id="stats-heading">Statistics</h2>
         <p class="note">Kept on this device only. Games you leave unfinished and later discard or restart count as abandoned — never as losses.</p>
         <p class="stat-line"><strong>${t.completed}</strong> completed · <strong>${t.wins}</strong> won · <strong>${t.losses}</strong> lost vs the computer · <strong>${t.abandoned}</strong> abandoned</p>
-        <div class="table-scroll"><table class="stats-table">
+        <div class="table-scroll" tabindex="0" role="region" aria-label="Statistics table"><table class="stats-table">
           <caption>Against the computer: wins–losses by difficulty; two-player and abandoned counts</caption>
           <thead><tr><th scope="col">Mode</th><th scope="col">Easy</th><th scope="col">Normal</th><th scope="col">Hard</th><th scope="col">Two players</th><th scope="col">Abandoned</th></tr></thead>
           <tbody>${rows}</tbody>

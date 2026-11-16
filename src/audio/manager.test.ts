@@ -135,6 +135,43 @@ describe('AudioManager', () => {
     if (m.playing) expect(m.playing).toBe('menu');
   });
 
+  it('scene changes DURING a fade-out never start a second track (checked after every step)', async () => {
+    const { m, fb, sc } = make();
+    await m.unlock();
+    m.setScene('menu');
+    fb.resolveAll();
+    await tick();
+    // Fast taps: gameplay (menu starts fading), then menu, then gameplay again — all inside the fade.
+    const seq: Parameters<typeof m.setScene>[0][] = ['gameplay', 'menu', 'gameplay', 'paused', 'menu', 'gameplay'];
+    for (const scene of seq) {
+      m.setScene(scene);
+      fb.resolveAll();
+      await tick();
+      expect(fb.audible.size).toBeLessThanOrEqual(1);
+    }
+    // Let the pending fade finish: the old track is paused, then the current scene's track starts.
+    sc.flushAll();
+    expect(fb.audible.size).toBeLessThanOrEqual(1);
+    fb.resolveAll();
+    await tick();
+    sc.flushAll();
+    fb.resolveAll();
+    await tick();
+    expect([...fb.audible]).toEqual(['gameplay']);
+    expect(m.playing).toBe('gameplay');
+  });
+
+  it('hiding the tab mid-fade stops the fading track at once', async () => {
+    const { m, fb } = make();
+    await m.unlock();
+    m.setScene('menu');
+    fb.resolveAll();
+    await tick();
+    m.setScene('gameplay'); // menu now fading out
+    m.setHidden(true);
+    expect(fb.audible.size).toBe(0);
+  });
+
   it('paused and results duck the gameplay track instead of starting another', async () => {
     const { m, fb } = make();
     await m.unlock();

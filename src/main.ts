@@ -9,7 +9,7 @@ import { loadStats, recordAbandoned, recordCompleted, resetStats, saveStats, typ
 import type { ReadStatus } from './app/storage';
 import type { ModeId, SeatIndex } from './engine/types';
 import { initTileArt, setForceSvg } from './render/tile-art';
-import { assetUrl } from './assets';
+import { deferredAssets, ESSENTIAL_ASSETS, warm } from './assets/warm';
 import { MUSIC } from './assets/audio-manifest';
 import { introVideoUrl, musicUrl } from './assets/media-urls';
 import { AudioManager, type Scene, type SfxId } from './audio/manager';
@@ -95,7 +95,6 @@ const runner: AiRunner = createWorkerRunner() ?? inlineRunner();
 const FAST_TIMING: Timing = { aiPlay: { easy: 60, normal: 60, hard: 60 }, aiForced: 40, resolve: 250 };
 const SEATING: Record<NonNullable<MenuChoice['seating']>, SeatIndex> = { across: 2, right: 1, left: 3 };
 
-initTileArt();
 // Missing optional art: drop the broken image and reveal the code-drawn placeholder (menus, table, results).
 document.addEventListener(
   'error',
@@ -137,6 +136,17 @@ function resumeOffer(game: SavedGame): ResumeOffer {
 }
 
 function showMenu(): void {
+  document.documentElement.classList.remove('table-lock');
+  // Background warm-up (≤ 2 downloads at a time) for the first table: atlas, tabletop, then the
+  // optional art this device will actually show (see deferredAssets).
+  initTileArt();
+  void warm(
+    deferredAssets({
+      reduceMotion: reduceMotion(settings, matchMedia('(prefers-reduced-motion: reduce)').matches),
+      wide: matchMedia('(min-width: 900px)').matches,
+      hostAnimation: settings.hostAnimation,
+    }),
+  );
   teardown();
   const saved = readSave(store);
   const sv = noticeFor('saved game', saved.status);
@@ -163,6 +173,7 @@ function showMenu(): void {
 
 function mount(controller: TableController, matchId: string, counted: boolean, onRestart: () => void): void {
   root.className = 'is-table';
+  document.documentElement.classList.add('table-lock'); // no page scroll / rubber-band under the table
   const session = controller.session;
   const table = new TableScreen(root, controller, {
     onMenu: showMenu, // the save is kept: Resume from the menu (not abandoned)
@@ -289,11 +300,8 @@ function boot(): void {
     videoVolume: () => ({ muted: settings.audio.muted, volume: Math.max(0, Math.min(1, settings.audio.master * Math.max(settings.audio.music, settings.audio.voice))) }),
     setMuted: (muted) => settingsApi.set({ audio: { ...settings.audio, muted } }),
     preload: () => {
-      // Enough for a smooth first menu, without pulling every large asset.
-      for (const id of ['env.neighborhood-patio', 'cousin.atlas.portrait'] as const) {
-        const url = assetUrl(id);
-        if (url) new Image().src = url;
-      }
+      // Only what the first menu needs; the rest is warmed once the menu is up.
+      void warm(ESSENTIAL_ASSETS);
       audio.preload('menu', 'metadata');
     },
     onMenu: () => showMenu(),

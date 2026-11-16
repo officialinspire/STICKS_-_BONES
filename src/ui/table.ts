@@ -5,6 +5,7 @@
  * the controller is in 'human-turn' for that human.
  */
 import { assetUrl } from '../assets';
+import { warm } from '../assets/warm';
 import { layoutChain, type BoardLayout, type EndSlot } from '../board/layout';
 import type { GameEvent } from '../engine/events';
 import type { EndId } from '../engine/line';
@@ -14,12 +15,13 @@ import type { SeatView } from '../engine/view';
 import { controlStates, SORT_LABELS, SORT_MODES, sortHand, tileLabel, tileShort, whyNotPlayable, type SortMode } from '../app/helpers';
 import type { TableController } from '../app/controller';
 import type { GameSession } from '../app/session';
-import { faceHtml, onBackendChange, tileBoxHtml } from '../render/tile-art';
+import { faceHtml, initTileArt, onBackendChange, tileBoxHtml } from '../render/tile-art';
 import { Banter, type BanterContext } from '../app/banter';
 import { explainResult, handLine } from '../app/explain';
 import { AI_SPEED_FACTOR, reduceMotion } from '../app/settings';
 import { opposite, rotationFor } from '../render/pips';
 import { Effects, preloadEffects } from './effects';
+import { wrapTab } from './focus-trap';
 import { HostView, hostFigureHtml, type Mood } from './host';
 import { rulesHtml } from './rules-summary';
 import { bindSettingsPanel, settingsPanelHtml, type SettingsApi } from './settings-panel';
@@ -53,6 +55,8 @@ export class TableScreen {
   #selected: TileId | null = null;
   #sort: SortMode = 'value';
   #unit = 0;
+  /** The player zoomed by hand: stop auto-fitting the board to its box. */
+  #userZoom = false;
   #message = '';
   #mood: Mood = 'neutral';
   #quip: string | null = null;
@@ -103,6 +107,7 @@ export class TableScreen {
     r.innerHTML = `
       <div class="privacy-cover" data-region="cover" hidden></div>
       <div class="table-screen" data-region="table">
+        <h1 class="sr-only">STICKS &amp; BONES — the table</h1>
         <header class="hud">
           <button type="button" class="btn-ghost" data-act="pause" aria-label="Pause — rules, settings, restart, leave">❚❚ Pause</button>
           <div class="scoreboard" data-region="scores"></div>
@@ -157,10 +162,14 @@ export class TableScreen {
       this.#c.resume();
       this.#resumeScene();
     });
+    let lastFit = -1;
     this.#ro = new ResizeObserver(() => {
       const w = this.#q('board-wrap')?.clientWidth ?? 0;
-      if (w === lastWidth) return;
+      // A height change re-renders only if it changes the fitted tile size (keeps focus on end targets).
+      const fit = this.#userZoom ? this.#unit : this.#fitUnit();
+      if (w === lastWidth && fit === lastFit) return;
       lastWidth = w;
+      lastFit = fit;
       this.#renderBoard();
     });
     this.#ro.observe(this.#q('board-wrap'));
@@ -180,6 +189,8 @@ export class TableScreen {
       this.#mqMotion?.removeEventListener('change', onMotion);
       this.#host?.cancel();
     });
+    initTileArt();
+    void warm(['table.weathered'], { front: true });
     preloadEffects();
     const pauseDlg = this.#q<HTMLDialogElement>('pause');
     pauseDlg.addEventListener('cancel', (e) => {
@@ -320,11 +331,28 @@ export class TableScreen {
     return Math.max(UNIT_MIN, Math.min(46, Math.round(w / 13)));
   }
 
+  /**
+   * Largest tile unit (≤ the width-based default) at which the whole chain fits
+   * the board box's height too, so short and landscape screens show every tile
+   * and both open ends without scrolling. Never below UNIT_MIN (pips stay ≥ 4.5 px).
+   */
+  #fitUnit(): number {
+    const wrap = this.#q('board-wrap');
+    const base = this.#defaultUnit();
+    const availH = (wrap?.clientHeight ?? 0) - 24;
+    if (!wrap || availH <= 0) return base;
+    const line = this.#c.view().line;
+    for (let u = base; u > UNIT_MIN; u--) {
+      if (layoutChain(line, Math.floor(Math.max(0, wrap.clientWidth - 24) / u)).heightUnits * u <= availH) return u;
+    }
+    return UNIT_MIN;
+  }
+
   #renderBoard(): void {
     const wrap = this.#q('board-wrap');
     const board = this.#q('board');
     if (!wrap || !board) return;
-    if (!this.#unit) this.#unit = this.#defaultUnit();
+    if (!this.#userZoom || !this.#unit) this.#unit = this.#fitUnit();
     const v = this.#c.view();
     const u = this.#unit;
     const widthUnits = Math.floor(Math.max(0, wrap.clientWidth - 24) / u);
@@ -534,7 +562,9 @@ export class TableScreen {
     dlg.innerHTML = `<div class="results-head"><div class="results-host">${hostFigureHtml(mood, 'full')}</div><div><h2 id="results-title">${esc(title)}</h2><p class="why">${esc(why)}</p></div></div>${hands}${teamLine}<p class="points">${pts}</p><p class="scores-line">${scores} · to ${v.targetScore}</p>${matchLine}<div class="sheet-actions">${buttons}</div>`;
     if (!dlg.open) dlg.showModal();
     this.#cb.audio?.scene('results');
-    (dlg.querySelector('.btn') as HTMLElement).focus();
+    // Focus the primary action without scrolling: the sheet opens at its title (the actions are sticky).
+    (dlg.querySelector('.btn') as HTMLElement).focus({ preventScroll: true });
+    dlg.scrollTop = 0;
     this.#tally(dlg);
   }
 
@@ -788,6 +818,7 @@ export class TableScreen {
         break;
       case 'zoom-in':
       case 'zoom-out':
+        this.#userZoom = true;
         this.#unit = Math.max(UNIT_MIN, Math.min(UNIT_MAX, this.#unit + (target.dataset.act === 'zoom-in' ? 4 : -4)));
         this.render();
         break;
@@ -855,6 +886,14 @@ export class TableScreen {
 
   #onKey = (ev: KeyboardEvent): void => {
     const el = ev.target as HTMLElement;
+    // Tab wraps inside whichever modal surface is open (confirm > results/pause > privacy cover).
+    if (ev.key === 'Tab') {
+      const surface =
+        this.#root.querySelector('dialog.confirm[open]') ??
+        this.#root.querySelector('dialog.results[open], dialog.pause[open]') ??
+        this.#root.querySelector('.privacy-cover:not([hidden])');
+      if (wrapTab(ev, surface)) return;
+    }
     if (ev.key === 'Escape' && this.#selected) {
       const id = this.#selected;
       this.#selected = null;

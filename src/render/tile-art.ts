@@ -8,6 +8,7 @@
  */
 import atlas from '../../assets/generated/tiles/double-six-atlas.json';
 import { assetUrl } from '../assets';
+import { warm } from '../assets/warm';
 import type { TileId } from '../engine/types';
 import { dominoSvg } from '../ui/domino';
 import { esc } from '../ui/svg';
@@ -45,15 +46,20 @@ export function setForceSvg(on: boolean): void {
   listeners.forEach((f) => f());
 }
 
-/** Preload the atlas; switches to the atlas backend once it decodes. Safe to call repeatedly. */
+let requested = false;
+/**
+ * Fetch + decode the atlas (ahead of other background warm-up); switches to the
+ * atlas backend once it decodes. Safe to call repeatedly. Until then (or if it
+ * fails) faces render as vector SVG with identical pip geometry.
+ */
 export function initTileArt(): void {
-  if (loaded || !ATLAS_URL || typeof Image === 'undefined') return;
-  const img = new Image();
-  img.onload = () => {
+  if (loaded || requested || !ATLAS_URL || typeof Image === 'undefined') return;
+  requested = true;
+  void warm(['tile.atlas'], { front: true }).then(([ok]) => {
+    if (!ok) return;
     loaded = true;
     listeners.forEach((f) => f());
-  };
-  img.src = ATLAS_URL;
+  });
 }
 
 function atlasFace(id: FaceId): string {

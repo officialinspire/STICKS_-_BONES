@@ -5,6 +5,7 @@
  * decorate PUBLIC things (tiles on the board, seat chips) — never a hand.
  */
 import { assetUrl, getAsset, getFrame } from '../assets';
+import { warm } from '../assets/warm';
 import { effectBox } from '../render/stage';
 import { esc } from './svg';
 
@@ -19,9 +20,7 @@ export function preloadEffects(): void {
     return;
   }
   fxLoaded = false;
-  const img = new Image();
-  img.onload = () => (fxLoaded = true);
-  img.src = url;
+  void warm(['fx.sheet']).then(([ok]) => (fxLoaded = ok === true));
 }
 
 function fxSvg(frame: FxFrame): string {

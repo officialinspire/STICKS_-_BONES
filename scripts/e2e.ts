@@ -718,7 +718,7 @@ try {
 
     // 6e. Optional art missing: everything still renders and plays with code-drawn fallbacks.
     const p5 = await newPage({ width: 390, height: 844 }, 1, { blockedImages: true });
-    await p5.route('**/*.png', (r: { abort(): Promise<void> }) => r.abort());
+    await p5.route(/\.(png|webp|avif|jpe?g)(\?|$)/, (r: { abort(): Promise<void> }) => r.abort());
     await startMatch(p5, { mode: 'block2', opponent: 'ai', seed: 'e2e-noart', aiSeed: 'n', fast: true });
     for (let i = 0; i < 4; i++) {
       const legal = p5.locator('.hand-tile.is-legal');
@@ -1125,6 +1125,79 @@ try {
       notes.push(`no dead buttons: ${n1 + n2 + n3 + n4} buttons across home, stats, rules and the pause sheet each produced a visible change`);
       await page.context().close();
     }
+  }
+
+  // 9. Rapid actions: a seeded burst of fast taps across menu, setup, table, pause, confirm, cover and
+  //    results (≈ 40 ms apart, no waiting for transitions), then invariants once things settle.
+  {
+    const page = await newPage({ width: 390, height: 844 });
+    await page.addInitScript(() => {
+      const w = window as unknown as { __maxTables: number; __maxMusic: number; __sbAudio?: { backend: { playingCount(): number } } };
+      w.__maxTables = 0;
+      w.__maxMusic = 0;
+      new MutationObserver(() => {
+        w.__maxTables = Math.max(w.__maxTables, document.querySelectorAll('.table-screen').length);
+        w.__maxMusic = Math.max(w.__maxMusic, w.__sbAudio?.backend.playingCount() ?? 0);
+      }).observe(document, { subtree: true, childList: true });
+    });
+    await enterMenu(page);
+    const ACTIONS = [
+      '[data-go="setup"]', '[data-act="home"]', '.btn-start', '[data-act="pause"]', '[data-act="pause-resume"]', '[data-act="menu"]',
+      '[data-act="resume"]', '[data-act="discard"]', '[data-act="restart"]', '[data-act="confirm-yes"]', '[data-act="confirm-no"]',
+      '[data-act="cover-ready"]', '[data-act="cover-reveal"]', '[data-act="next-hand"]', '[data-act="new-match"]', '[data-act="menu-now"]',
+      '.hand-tile.is-legal', '.end-slot.is-legal', '[data-act="draw"]:not([disabled])', '[data-act="pass"]:not([disabled])',
+      '[data-go="stats"]', '[data-go="rules"]', 'input[name="opponent"][value="local"]', 'input[name="opponent"][value="ai"]',
+    ];
+    let seed = 0x5eed;
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 2 ** 32);
+    let clicks = 0;
+    for (let i = 0; i < 400; i++) {
+      // Prefer actions that exist right now; click via the DOM (no actionability wait) to stress re-entrancy.
+      const order = [...ACTIONS].sort(() => rnd() - 0.5);
+      const hit = await page.evaluate((sels: string[]) => {
+        for (const sel of sels) {
+          const el = [...document.querySelectorAll<HTMLElement>(sel)].find((e) => e.checkVisibility() && !e.closest('[inert]'));
+          if (el) {
+            el.click();
+            return sel;
+          }
+        }
+        return null;
+      }, order);
+      if (hit) clicks++;
+      await page.waitForTimeout(40);
+    }
+    await page.waitForTimeout(1500);
+    const st = await page.evaluate(() => {
+      const w = window as unknown as { __maxTables: number; __maxMusic: number; __sb?: { session: { debugState(): { hand: { line: { tiles: unknown[] } } } } }; __sbAudio?: { backend: { playingCount(): number } } };
+      const tableUp = document.querySelector('.table-screen') !== null;
+      return {
+        tables: document.querySelectorAll('.table-screen').length,
+        menus: document.querySelectorAll('[data-go="setup"]').length,
+        maxTables: w.__maxTables,
+        maxMusic: w.__maxMusic,
+        boardMatches: !tableUp || !w.__sb || document.querySelectorAll('.board-tile').length === w.__sb.session.debugState().hand.line.tiles.length,
+        dialogs: document.querySelectorAll('dialog[open]').length,
+      };
+    });
+    check(st.maxTables <= 1 && st.tables + st.menus >= 1, `rapid actions: ${st.maxTables} tables at once / nothing on screen (${JSON.stringify(st)})`);
+    check(st.maxMusic <= 1, `rapid actions: ${st.maxMusic} music tracks played at once`);
+    check(st.boardMatches, 'rapid actions: board does not match the engine line (ghost or missing tile)');
+    check(st.dialogs <= 1, `rapid actions: ${st.dialogs} dialogs open at once`);
+    // The app still works normally afterwards: a fresh game can be played to a placement.
+    await startMatch(page, { mode: 'draw2', opponent: 'ai', seed: 'e2e-after-rapid', aiSeed: 'r', fast: true });
+    // Measure MY hand in the engine (the fast computer may also play inside the wait).
+    const myTiles = () => page.evaluate(() => (window as unknown as { __sb: { session: { debugState(): { hand: { hands: string[][] } } } } }).__sb.session.debugState().hand.hands[0]!.length);
+    for (let k = 0; k < 100 && !(await page.locator('.hand-tile.is-legal').count()); k++) await page.waitForTimeout(100);
+    const before = await myTiles();
+    await page.locator('.hand-tile.is-legal').first().click();
+    // Double-tap on an open end places exactly one tile.
+    await page.locator('.end-slot.is-legal').first().dblclick();
+    await page.waitForTimeout(300);
+    const after = await myTiles();
+    check(before - after === 1, `rapid actions: double-tap played ${before - after} of my tiles`);
+    notes.push(`rapid actions: ${clicks} taps ~40 ms apart across menu/setup/table/pause/confirm/cover/results — ≤ 1 table, ≤ 1 music track, ≤ 1 dialog, board = engine line; a double-tap on an end placed exactly one tile; normal play afterwards`);
+    await page.context().close();
   }
 
 } catch (e) {

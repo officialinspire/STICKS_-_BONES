@@ -17,6 +17,20 @@ import { IMAGE_ASSETS, MISSING_ASSETS } from '../src/assets/manifest.ts';
 import { MUSIC } from '../src/assets/audio-manifest.ts';
 import { RUNTIME_ASSET_URLS } from '../src/assets/urls.ts';
 import { measureFrames, rectsEqual, rectWithin } from './lib/measure.ts';
+import sharp from 'sharp';
+import derivativesJson from '../src/assets/derivatives.json' with { type: 'json' };
+
+interface Derivative {
+  id: string;
+  path: string;
+  width: number;
+  height: number;
+  bytes: number;
+  sha256: string;
+  sourceSha256: string;
+  alphaExact: boolean;
+}
+const DERIVATIVES = derivativesJson.derivatives as Derivative[];
 
 const RUNTIME_ASSET_IDS: readonly string[] = Object.keys(RUNTIME_ASSET_URLS);
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -123,7 +137,7 @@ if (measureOnly) {
 }
 
 // Every image under assets/ must be registered (no silently added or renamed art).
-const registered = new Set<string>(IMAGE_ASSETS.map((a) => a.path));
+const registered = new Set<string>([...IMAGE_ASSETS.map((a) => a.path), ...DERIVATIVES.map((d) => d.path)]);
 for (const file of walk(join(repoRoot, 'assets'))) {
   const rel = relative(repoRoot, file).split('\\').join('/');
   if (/\.(png|jpe?g|webp|gif|avif|svg)$/i.test(rel) && !registered.has(rel))
@@ -146,6 +160,35 @@ for (const id of RUNTIME_ASSET_IDS) {
   const a = IMAGE_ASSETS.find((x) => x.id === id);
   if (!a) errors.push(`urls.ts references unknown asset ${id}`);
   else if (a.status !== 'runtime') errors.push(`[${id}] bundled in urls.ts but status is ${a.status}`);
+}
+
+// Runtime derivatives (assets/generated/web): same pixels as the current source, recorded bytes/hash,
+// and urls.ts must serve the derivative — never the multi-megabyte original — for those ids.
+{
+  const urlsSrc = readFileSync(join(repoRoot, 'src/assets/urls.ts'), 'utf8');
+  const served = new Map([...urlsSrc.matchAll(/'([\w.-]+)':\s*new URL\(\s*'\.\.\/\.\.\/([^']+)'/g)].map((m) => [m[1]!, m[2]!]));
+  for (const id of RUNTIME_ASSET_IDS) if (!served.has(id)) errors.push(`[${id}] could not read its URL literal in urls.ts`);
+  for (const d of DERIVATIVES) {
+    const tag = `[${d.id} → ${d.path}]`;
+    const src = IMAGE_ASSETS.find((a) => a.id === d.id);
+    const full = join(repoRoot, d.path);
+    if (!src) {
+      errors.push(`${tag} derivative of unknown asset`);
+      continue;
+    }
+    if (!existsSync(full)) {
+      errors.push(`${tag} missing — run npm run assets:derive`);
+      continue;
+    }
+    const buf = readFileSync(full);
+    if (buf.length !== d.bytes || createHash('sha256').update(buf).digest('hex') !== d.sha256) errors.push(`${tag} bytes/sha256 differ from derivatives.json — rebuild with npm run assets:derive`);
+    if (d.sourceSha256 !== src.sha256) errors.push(`${tag} was built from a different source file — rebuild with npm run assets:derive`);
+    const meta = await sharp(buf).metadata();
+    if (meta.width !== src.width || meta.height !== src.height) errors.push(`${tag} is ${meta.width}x${meta.height}, source is ${src.width}x${src.height} (frame rects would be wrong)`);
+    if (!d.alphaExact) errors.push(`${tag} alpha is not exact`);
+    if (src.status === 'runtime' && served.get(d.id) !== d.path) errors.push(`${tag} urls.ts serves ${served.get(d.id)} instead of the derivative`);
+  }
+  notes.push(`runtime derivatives: ${DERIVATIVES.length}, ${(DERIVATIVES.reduce((s, d) => s + d.bytes, 0) / 1024).toFixed(0)} KB (sources ${(DERIVATIVES.reduce((s, d) => s + (IMAGE_ASSETS.find((a) => a.id === d.id)?.bytes ?? 0), 0) / 1024).toFixed(0)} KB)`);
 }
 
 // Generated atlas: its JSON rectangle manifest must agree with the verified

@@ -7,6 +7,7 @@
  * skipped if the strip art is missing.
  */
 import { assetUrl, getAsset } from '../assets';
+import { warm } from '../assets/warm';
 import type { Rect } from '../assets/types';
 import { bustBox, stageFor } from '../render/stage';
 import { esc } from './svg';
@@ -23,12 +24,8 @@ let slamReady: Promise<boolean> | null = null;
 function loadSlam(): Promise<boolean> {
   if (!slamReady) {
     slamReady = new Promise((resolve) => {
-      const url = assetUrl(SLAM);
-      if (!url || typeof Image === 'undefined') return resolve(false);
-      const img = new Image();
-      img.onload = () => resolve(true);
-      img.onerror = () => resolve(false);
-      img.src = url;
+      if (!assetUrl(SLAM) || typeof Image === 'undefined') return resolve(false);
+      void warm([SLAM], { front: true }).then(([ok]) => resolve(ok === true));
     });
   }
   return slamReady;
