@@ -7,43 +7,10 @@
  */
 import type { Rect } from '../assets/types';
 import type { Pip } from '../engine/types';
+import { PIP_LAYOUT, PIP_RADIUS } from '../render/pips';
 import { esc } from './svg';
 
-/** Pip centres inside one 100×100 half, by value. */
-export const PIP_LAYOUT: Readonly<Record<Pip, readonly (readonly [number, number])[]>> = {
-  0: [],
-  1: [[50, 50]],
-  2: [
-    [27, 27],
-    [73, 73],
-  ],
-  3: [
-    [27, 27],
-    [50, 50],
-    [73, 73],
-  ],
-  4: [
-    [27, 27],
-    [73, 27],
-    [27, 73],
-    [73, 73],
-  ],
-  5: [
-    [27, 27],
-    [73, 27],
-    [50, 50],
-    [27, 73],
-    [73, 73],
-  ],
-  6: [
-    [27, 24],
-    [27, 50],
-    [27, 76],
-    [73, 24],
-    [73, 50],
-    [73, 76],
-  ],
-};
+export { PIP_LAYOUT } from '../render/pips';
 
 export interface FaceSprite {
   readonly url: string;
@@ -63,7 +30,7 @@ export interface DominoOptions {
 
 function pips(value: Pip, offsetY: number): string {
   return PIP_LAYOUT[value]
-    .map(([x, y]) => `<circle cx="${x}" cy="${y + offsetY}" r="8.5" class="pip"/>`)
+    .map(([x, y]) => `<circle cx="${x}" cy="${y + offsetY}" r="${PIP_RADIUS}" class="pip"/>`)
     .join('');
 }
 

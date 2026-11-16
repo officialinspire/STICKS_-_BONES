@@ -13,8 +13,7 @@ export const RUNTIME_ASSET_URLS = {
     '../../assets/art/characters/Eight-expression transparent portrait atlas-2.png',
     import.meta.url,
   ).href,
-  'tile.materials': new URL('../../assets/art/tiles/Four pristine domino material sprites.png', import.meta.url)
-    .href,
+  'tile.atlas': new URL('../../assets/generated/tiles/double-six-atlas.png', import.meta.url).href,
   'table.weathered': new URL('../../assets/art/tables/Weathered Caribbean game tabletop.png', import.meta.url).href,
   'env.neighborhood-patio': new URL(
     '../../assets/art/environments/Shaded Puerto Rican Neighborhood Patio.png',

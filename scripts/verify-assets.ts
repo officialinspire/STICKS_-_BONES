@@ -147,6 +147,34 @@ for (const id of RUNTIME_ASSET_IDS) {
   else if (a.status !== 'runtime') errors.push(`[${id}] bundled in urls.ts but status is ${a.status}`);
 }
 
+// Generated atlas: its JSON rectangle manifest must agree with the verified
+// manifest frames and must reference the current source sheet.
+{
+  const atlas = IMAGE_ASSETS.find((a) => a.id === 'tile.atlas');
+  const source = IMAGE_ASSETS.find((a) => a.id === 'tile.materials');
+  const jsonPath = join(repoRoot, 'assets/generated/tiles/double-six-atlas.json');
+  if (!atlas || !source || !existsSync(jsonPath)) errors.push('tile atlas or its JSON is missing — run npm run atlas:build');
+  else {
+    const json = JSON.parse(readFileSync(jsonPath, 'utf8')) as {
+      source: { sha256: string };
+      tiles: { id: string; high: number; low: number; rect: { x: number; y: number; w: number; h: number } }[];
+      backs: { id: string; rect: { x: number; y: number; w: number; h: number } }[];
+    };
+    if (json.source.sha256 !== source.sha256) errors.push('[tile.atlas] JSON was built from a different source sheet');
+    const frames = 'frames' in atlas ? atlas.frames : [];
+    const ids = new Set<string>();
+    for (const e of [...json.tiles, ...json.backs]) {
+      if (ids.has(e.id)) errors.push(`[tile.atlas] duplicate id ${e.id}`);
+      ids.add(e.id);
+      const f = frames.find((x) => x.id === e.id);
+      if (!f) errors.push(`[tile.atlas] JSON id ${e.id} has no manifest frame`);
+      else if (!rectsEqual(f.rect, e.rect)) errors.push(`[tile.atlas] ${e.id} JSON rect differs from measured frame`);
+    }
+    for (const t of json.tiles) if (t.id !== `t${t.high}${t.low}` || t.low > t.high || t.high > 6) errors.push(`[tile.atlas] bad values for ${t.id}`);
+    if (json.tiles.length !== 28) errors.push(`[tile.atlas] expected 28 faces, found ${json.tiles.length}`);
+  }
+}
+
 for (const m of MISSING_ASSETS) notes.push(`missing (${m.kind}) ${m.id}: fallback = ${m.fallback}`);
 
 console.log(`Checked ${IMAGE_ASSETS.length} image assets.`);

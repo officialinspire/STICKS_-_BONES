@@ -172,12 +172,100 @@
   saves, but the UI must only show them after a hand ends (they're public then).
 - Nothing is connected to the UI yet: the screen is still the Stage 1 placeholder.
 
-## Next stage — Stage 3: Table UI and local play
+## Stage 3 — First playable two-player table ✅ (2026-11-16)
 
-Wire the engine into an accessible table screen: mode/seat/target menu,
-SVG board laid out from the logical chain (crosswise doubles, wrapping), the
-player's hand with legal-move highlighting and end choice when a tile fits
-both ends, draw/pass controls driven by `availableAction`, an event-driven
-animation queue, hand-end reveal and score screen, match end, local save via
-`serializeMatch`, and pass-and-play handoff screens that show no hidden
-information. A simple fair AI (reading `seatView` only) fills AI seats.
+### Completed
+
+- **Tile atlas** (`npm run atlas:build`, `scripts/lib/atlas.ts`): 28 double-six faces
+  plus 2 backs, built from **verified** `tile.materials` frame rects. Faces are
+  96×192 with 4 px transparent padding, in stable canonical order (documented in
+  ASSETS.md), with a JSON rectangle manifest. Identity comes from JSON ids, never
+  cell position. Registered as derived asset `tile.atlas`.
+- **Shared pip geometry** (`src/render/pips.ts`) is used by both the raster atlas
+  and the SVG fallback. `src/render/tile-art.ts` serves faces from the atlas
+  (looked up by id) and falls back to SVG until the atlas loads, if it fails, or
+  when forced.
+- **Developer contact sheet** (`/dev/contact-sheet.html`, dev server only): every
+  face labelled by id, next to its SVG fallback and at 4 rotations, with 90
+  in-browser checks (ids, values, bounds, alpha padding, pip pixel counts).
+- **Board layout** (`src/board/layout.ts`): a pure, centre-out wrapping snake
+  projected from the logical chain.
+  - The head arm goes left then wraps up; the tail arm goes right then wraps down.
+    Doubles sit crosswise and corners use a vertical turning tile.
+  - Existing tiles never move when one is added, and wrapping can't change the
+    logical ends.
+  - The board pans (scrolls) and zooms (26–60 px per unit; the default is about
+    29 px on phones and 46 px on desktop) instead of shrinking pips.
+- **Table UI** (`src/ui/table.ts`, rendered only from the viewer's `SeatView`):
+  - Scores with progress to the target, current turn, Cousin with a mood-matched
+    portrait and running commentary, opponent backs and count, boneyard or
+    set-aside count.
+  - Tap-to-place: selecting a tile highlights its legal ends, and tapping an end
+    confirms. When both ends are legal the player has to choose.
+  - Keyboard: arrows/Home/End move through the hand, Enter selects, focus moves to
+    the ends (arrows cycle them), Enter places, Escape cancels.
+  - Hand sorting (by value / doubles first / as dealt) and a horizontally
+    scrolling hand that holds 21 tiles.
+  - Draw/Pass with a visible reason whenever disabled, buttons to jump to each
+    end, round-results sheet that reveals both hands only after the hand ends,
+    Next hand / Play again, and confirmation before Restart or Menu.
+- **GameSession** (`src/app/session.ts`): the only place commands are applied.
+  - Solo vs Cousin (fair AI `src/ai/simple.ts` reads only `seatView`).
+  - Two players on one device, with a handoff screen that shows no hidden
+    information.
+  - **Developer-controlled local mode** (`dev-both`: both seats, no handoff).
+  - AI turns and hand resolution are scheduled with stale-turn protection.
+- **Menu** (`src/ui/menu.ts`): Draw/Block (Partnership shown as coming soon),
+  opponent, 100/200 target. The **developer tools** panel (dev builds only)
+  offers a seed, both-seats mode, force SVG, layout fixtures and a contact sheet
+  link. Production seeds come from `crypto.getRandomValues` and are never shown.
+- **Dev fixtures** (`src/dev/fixtures.ts`): max board (26 on the table → 27),
+  21-tile Draw hand, and a both-ends choice.
+- **E2E** (`npm run e2e`, `scripts/e2e.ts`): browser acceptance using the
+  machine's Playwright against the Vite dev server.
+- Removed the Stage 1 title screen. The material sheet is no longer bundled (the
+  atlas replaces it), so dist dropped from 8.7 to 8.0 MB.
+
+### Commands run and results
+
+| Command | Result |
+| --- | --- |
+| `npm run typecheck` / `npm run lint` | pass |
+| `npm test` | pass, **145 tests in 12 files**. New: atlas (5: identity, bounds/padding, pip blob counts for all 28 faces, backs, deterministic regeneration), layout (6: empty board, full 28-tile chain at widths 8–30, every intermediate line from 36 seeded games at 4 widths, wrapping keeps logical ends, added tiles never move, width clamp), session (9) and helpers (2) |
+| `npm run assets:verify` | pass. 19 assets; the atlas's 30 frames re-measured and equal to its JSON rects |
+| `npm run build` | pass. 8.0 MB, base `./`. Dev code, fixtures and the debug hook are not in the bundle |
+| `npm run e2e` | pass. Full rounds in Draw vs AI (phone), Block vs AI (desktop), Draw pass-and-play with handoffs (tablet) and Block dev-both, each followed by Next hand. Pips counted from screenshots on all 26 board tiles at **rotations 0/90/180/270** in both the **atlas and SVG** renderers. Max board at phone (29 px units) and desktop (46 px); 6\|6 offers both ends, both visible after focus; 27 tiles after the final play. 21-tile hand: 42/48 px tiles, scrolls, End reveals the last tile. No overlap between HUD, Cousin, board, controls and hand; no horizontal page scroll. Keyboard-only placement with a both-ends choice and Escape. Restart/Menu confirmations. AI tiles never in the DOM during play. Contact sheet: 90/90 checks |
+| Production smoke (dist served at `/STICKS_-_BONES/`) | menu has no dev panel; a vs-AI game starts, the atlas renderer is active, 3 tiles on the board, no console or network errors |
+| Fault injection (temporary, reverted) | Flipping the high-half direction, or offsetting the turning tile, made the layout tests fail |
+
+### Decisions recorded
+
+- Wrapping snake plus pan/zoom instead of shrink-to-fit. The minimum unit is
+  26 px; the pip diameter is about 19% of the tile's short side.
+- Tapping an end is always required to confirm, even with only one legal end, so
+  the interaction is the same every time.
+- Corners: the turning tile is always vertical. A double right after a corner
+  shifts one unit so it never overlaps the turning tile.
+- Rejected moves and illegal taps put a reason in the status line (`role=status`)
+  instead of failing silently.
+- Seat 0 is always the human in solo play. In pass-and-play the bottom of the
+  screen shows the active player only after they confirm the handoff.
+
+### Known issues
+
+- No local save/resume yet. Partnership (4 seats) isn't playable yet, though the
+  engine supports it.
+- Animations are minimal (glow on the newest tile). There's no drag-and-drop and no audio.
+- The AI is a single heuristic level.
+- E2E needs the machine's Playwright (it isn't a project dependency) and isn't in `npm run check`.
+- Payload is still ≈ 8 MB of PNGs. WebP derivatives are still pending.
+- Carried over: large-atlas bleed, dev-only `minimatch` advisory, no deploy workflow.
+
+## Next stage — Stage 4: Partnership table, persistence and polish
+
+Four-seat table (partner opposite, two AI or human seats, team scores), local
+save/resume via `serializeMatch`/`restoreMatch` (stored locally only), an
+event-driven animation queue (slide-in, draw, pass, host gestures from the
+6-frame strips), smarter AI difficulty, settings (table setting picker from
+the seven environments, reduced motion), WebP derivatives, and a GitHub Pages
+deploy workflow if authorized.

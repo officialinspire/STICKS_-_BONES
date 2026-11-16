@@ -21,6 +21,7 @@ export type AssetCategory = 'character' | 'tile' | 'effect' | 'table' | 'environ
  * variant   — alternative take kept for later stages; not bundled yet.
  * reference — modeling/turnaround sheet with an opaque background; not for runtime.
  * duplicate — byte-identical copy of another entry; preserved, never bundled.
+ * Generated derivatives (e.g. the tile atlas) carry `derivedFrom` and live under assets/generated/.
  */
 export type AssetStatus = 'runtime' | 'variant' | 'reference' | 'duplicate';
 
@@ -59,6 +60,8 @@ export interface ImageAsset {
   readonly height: number;
   readonly hasAlpha: boolean;
   readonly duplicateOf?: string;
+  /** Present on generated derivatives: the source asset id they were built from. */
+  readonly derivedFrom?: string;
   /** Present for sheets/framed images. Frames are row-major. */
   readonly layout?: SheetLayout;
   readonly frames?: readonly SpriteFrame[];

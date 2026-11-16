@@ -19,7 +19,7 @@ export interface RgbaImage {
   width: number;
   height: number;
   /** RGBA, 4 bytes per pixel, row-major. */
-  data: Uint8Array | Buffer;
+  data: Uint8Array | Uint8ClampedArray | Buffer;
 }
 
 export type DetectMode =

@@ -36,7 +36,8 @@ count, SHA-256, dimension, alpha flag or frame rectangle drifts, if an image und
 | `cousin.anim.slam` | variant | `characters/Confident six-frame domino slam.png` | 1,783,741 | 2172×724 | RGBA | `dd4c4aef83d3…` |
 | `cousin.ref.host` | reference | `characters/Cousin_ Puerto Rican Dominoes Host.png` | 2,289,954 | 1536×1024 | RGB | `d9e780d4a48f…` |
 | `cousin.ref.silhouette` | reference | `characters/Character sheet with charcoal seated silhouette.png` | 2,094,181 | 1536×1024 | RGB | `dd0066d55131…` |
-| `tile.materials` | runtime | `tiles/Four pristine domino material sprites.png` | 1,484,710 | 1774×887 | RGBA | `02e9201095d2…` |
+| `tile.materials` | variant (atlas source) | `tiles/Four pristine domino material sprites.png` | 1,484,710 | 1774×887 | RGBA | `02e9201095d2…` |
+| `tile.atlas` | runtime (generated) | `../generated/tiles/double-six-atlas.png` | 652,285 | 624×1000 | RGBA | `a65ce0df6ebb…` |
 | `fx.sheet` | variant | `effects/Eight polished dominoes effect sprites.png` | 649,575 | 1774×887 | RGBA | `e657fe72c78f…` |
 | `table.weathered` | runtime | `tables/Weathered Caribbean game tabletop.png` | 2,938,960 | 1536×1024 | RGBA | `5a5bd2e50c6a…` |
 | `table.worn` | variant | `tables/Worn wood tabletop with cream-teal border.png` | 1,583,657 | 1254×1254 | RGBA | `aabc8b425498…` |
@@ -174,15 +175,51 @@ cell. Draw with the content rect. The cell is the safe padding region.
 | --- | --- | --- | --- | --- |
 | 0 | `surface` Table surface with cream-teal border | 28, 306, 1197, 695 | 0, 0, 1254, 1254 | no |
 
+## Generated double-six atlas (`tile.atlas`)
+
+`npm run atlas:build` writes `assets/generated/tiles/double-six-atlas.png` and
+`double-six-atlas.json`. It is a **derived** asset (`derivedFrom: tile.materials`);
+the source sheet is only read.
+
+- **Inputs:** the verified `tile.materials` frame rects `face-ivory-divided`,
+  `back-teal-weave` and `back-walnut-inlay` (taken from the manifest, never
+  guessed). The generator refuses to run if the source SHA-256 differs.
+- **Faces:** each frame is area-resampled (premultiplied alpha) to **96×192 px**.
+  Pips come from `src/render/pips.ts` (face space 100×200, pip radius 9.5,
+  centres at 27/50/73 of each half). The SVG fallback uses the same geometry.
+- **Orientation contract:** faces are portrait, with the **top half showing the high
+  pip** and the bottom half the low pip (`t64` = 6 over 4). The renderer only
+  rotates by quarter turns.
+- **Cells:** 6 columns × 5 rows of 104×200 cells. Each face sits inside a
+  **4 px fully transparent padding** ring, so sampling can't bleed into a
+  neighbour. Image size 624×1000.
+- **Stable canonical ordering:** cells 0–27 hold `t00, t10, t11, t20, t21, t22,
+  t30 … t66` (high ascending, then low ascending, the same as
+  `CANONICAL_TILE_IDS`). Cell 28 is `back-teal-weave` and cell 29 is
+  `back-walnut-inlay`. **Identity comes from the JSON** (`id`, `high`, `low`, `rect`
+  for each entry). Runtime looks faces up by id and never derives identity from
+  cell position.
+- **Checks:**
+  - `assets:verify` re-measures the 30 frames and requires them to equal the JSON
+    rects and the source hash.
+  - `scripts/lib/atlas.test.ts` checks unique ids and valid values, bounds,
+    non-overlap and transparent padding. It **counts the pip blobs in each half
+    from the pixels** for all 28 faces, and regenerates the atlas in memory to
+    confirm the pixels are byte-identical.
+  - The developer contact sheet (`npm run dev` → `/dev/contact-sheet.html`, which
+    is not in the production build) shows every face labelled by id, next to its
+    SVG fallback and at 0/90/180/270°, and runs the same checks in the browser.
+
 ## Runtime use
 
 | Use | Asset / frame | Status now |
 | --- | --- | --- |
 | Title/placeholder backdrop | `env.neighborhood-patio` | **in use** |
 | Board surface | `table.weathered` / `surface` | **in use** |
-| Host portrait | `cousin.atlas.portrait` / `explaining` (all 8 frames mapped) | **in use** |
-| Tile face | `tile.materials` / `face-ivory-divided` + vector pips | **in use** |
-| Tile back (hidden hands, boneyard) | `tile.materials` / `back-teal-weave` (alt `back-walnut-inlay`) | planned |
+| Host portrait | `cousin.atlas.portrait`: `explaining` on the menu; the table switches frames by mood (neutral, smirk, thinking, explaining, laughing, surprised, delighted, pumped) | **in use** |
+| Tile faces (board, hand, results) | `tile.atlas` faces by id; SVG fallback with the same pip geometry | **in use** |
+| Tile backs (opponent hand, boneyard) | `tile.atlas` / `back-teal-weave` (alt `back-walnut-inlay` in atlas) | **in use** |
+| Atlas source | `tile.materials` (face-ivory-divided, both backs) → `tile.atlas` | build-time only (not bundled) |
 | Selected/highlight tile skin | `tile.materials` / `face-ivory-rimmed` | planned |
 | Table setting picker | the other six `env.*` | planned |
 | Alternate board | `table.worn` | planned |
@@ -216,7 +253,7 @@ Rendering contracts:
 
 ## Known issues / follow-ups
 
-- **Payload:** the four runtime PNGs total ≈ 8.7 MB. A later stage should add
+- **Payload:** the runtime PNGs total ≈ 7.9 MB: backdrop 2.75 MB, table 2.94 MB, portrait atlas 1.53 MB and tile atlas 0.65 MB. The 1.48 MB material sheet is no longer bundled. A later stage should add
   *derived* WebP/AVIF sizes (e.g. 960 px and 1920 px backgrounds, 2× portrait
   frames) as separate manifest entries generated from these sources. The sources
   themselves stay untouched.

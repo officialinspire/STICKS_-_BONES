@@ -5,8 +5,8 @@ modes are two-player **Draw**, two-player **Block** and four-player **Partnershi
 played solo against AI or by two humans sharing one device. It runs entirely in
 the browser, with no backend, accounts or online play.
 
-> **Status:** Stage 2. The pure rules engine is complete and tested. The app
-> still shows the Stage 1 placeholder screen, and table UI comes next. See
+> **Status:** Stage 3. Two-player Draw and Block are playable against Cousin
+> (computer) or by two players on one device. Partnership is next. See
 > [docs/BUILD_STATUS.md](docs/BUILD_STATUS.md).
 
 ## Setup
@@ -33,7 +33,16 @@ npm run dev
 | `npm test` | Vitest unit tests |
 | `npm run assets:verify` | Re-measure all source art against the typed manifest (bytes, SHA-256, dimensions, frame rects) |
 | `npm run assets:measure` | Print freshly measured asset data as JSON |
+| `npm run atlas:build` | Regenerate the double-six tile atlas + JSON from the verified material sheet |
+| `npm run e2e` | Browser acceptance checks (needs the machine's Playwright + Chromium; not part of `check`) |
 | `npm run check` | All of the above in sequence |
+
+## Developer tools
+
+In `npm run dev`, the menu has a **Developer tools** panel: a fixed seed, a
+"control both seats" mode, force-SVG rendering, layout fixtures (max board,
+21-tile hand, both-ends choice) and a link to the tile contact sheet at
+`/dev/contact-sheet.html`. None of this is in production builds.
 
 ## GitHub Pages / subpath hosting
 
@@ -52,7 +61,13 @@ src/engine/        Pure, deterministic, serializable game engine (no DOM)
   rules/presets.ts Versioned rules presets ("Cousin's House Rules" v1)
   match.ts         Command → state + events state machine (see docs/ENGINE.md)
 src/assets/        Typed asset manifest, runtime URL registry
-src/ui/            Presentation (SVG tiles, sprites, placeholder screen)
+src/board/         Pure board layout (wrapping view of the logical chain)
+src/render/        Shared pip geometry, atlas/SVG tile renderer
+src/app/           GameSession (applies commands, schedules AI), UI helpers
+src/ai/            Fair AI (reads SeatView only)
+src/ui/            Menu, table screen, dialogs
+src/dev/           Dev-only fixtures and tile contact sheet (not in production)
+assets/generated/  Generated derivatives (tile atlas + JSON)
 ```
 
 ## Rules

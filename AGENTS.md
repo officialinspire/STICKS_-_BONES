@@ -25,10 +25,15 @@ before you change anything.
 - **Base-path safety:** reference assets through `src/assets/urls.ts`
   (`new URL(literal, import.meta.url)`). No root-absolute URLs.
 - **Fallbacks:** tiles must always render valid vector pips, even when art is missing.
+- **Tile art:** faces come from `tile.atlas`, looked up by id from its JSON. Regenerate with
+  `npm run atlas:build`, never by hand. The SVG fallback must keep the same geometry
+  (`src/render/pips.ts`).
+- **UI renders from `GameSession.view()` (a SeatView) only.** Opponent tiles must never
+  reach the DOM before the results sheet.
 - **Scope:** no campaign, economy, shops, quests, online multiplayer or required backend.
 
 ## Before you finish a stage
 
-Run `npm run check`. Update `docs/BUILD_STATUS.md` with the work you completed,
+Run `npm run check`, plus `npm run e2e` for UI changes. Update `docs/BUILD_STATUS.md` with the work you completed,
 the commands you ran and their results, known issues and the next stage. A
 feature only counts as complete when it has been exercised, not just compiled.

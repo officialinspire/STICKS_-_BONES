@@ -26,11 +26,16 @@ export interface CraftSpec {
   readonly targetScore?: TargetScore;
   readonly consecutivePasses?: number;
   readonly seed?: string;
+  readonly humanSeats?: readonly SeatIndex[];
 }
 
 export function craft(spec: CraftSpec): MatchState {
   const rules = COUSINS_HOUSE_RULES_V1.modes[spec.mode];
-  const cfg = createMatchConfig({ mode: spec.mode, ...(spec.targetScore ? { targetScore: spec.targetScore } : {}) });
+  const cfg = createMatchConfig({
+    mode: spec.mode,
+    ...(spec.targetScore ? { targetScore: spec.targetScore } : {}),
+    ...(spec.humanSeats ? { humanSeats: spec.humanSeats } : {}),
+  });
   if (!cfg.ok) throw new Error('craft: bad config');
   const base = createMatchWithDeal(cfg.config, deal(rules, seedRng('craft-base')), spec.seed ?? 'craft');
   if (!base.ok) throw new Error(base.errors.join('; '));
