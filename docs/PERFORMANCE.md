@@ -124,9 +124,11 @@ purpose, with a new measurement, in the same change.
 | Largest single image | 400 KB | 294 KB (tabletop) |
 | Start-up set (code + backdrop + portrait, raw) | 760 KB | 702 KB (579 KB on the wire) |
 | Media (music, streamed on demand only) | 8,000 KB | 7,332 KB |
-| Whole dist | 9,800 KB | 8,931 KB |
+| PWA icons (PNG by spec) | 140 KB | 113 KB |
+| Service worker + build manifest | 16 KB | 8 KB |
+| Whole dist | 9,800 KB | 9,063 KB (Stage 10) |
 
-The build also fails if a PNG original is ever bundled.
+The build also fails if a PNG original is ever bundled; only the generated PWA icons in `icons/` are PNG. The offline cache holds 1,668,179 B (see `docs/PWA.md`).
 
 ## Not measured here (needs real devices)
 

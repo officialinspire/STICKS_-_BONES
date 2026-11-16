@@ -19,6 +19,7 @@ import { RUNTIME_ASSET_URLS } from '../src/assets/urls.ts';
 import { measureFrames, rectsEqual, rectWithin } from './lib/measure.ts';
 import sharp from 'sharp';
 import derivativesJson from '../src/assets/derivatives.json' with { type: 'json' };
+import iconsJson from '../src/assets/icons.json' with { type: 'json' };
 
 interface Derivative {
   id: string;
@@ -189,6 +190,29 @@ for (const id of RUNTIME_ASSET_IDS) {
     if (src.status === 'runtime' && served.get(d.id) !== d.path) errors.push(`${tag} urls.ts serves ${served.get(d.id)} instead of the derivative`);
   }
   notes.push(`runtime derivatives: ${DERIVATIVES.length}, ${(DERIVATIVES.reduce((s, d) => s + d.bytes, 0) / 1024).toFixed(0)} KB (sources ${(DERIVATIVES.reduce((s, d) => s + (IMAGE_ASSETS.find((a) => a.id === d.id)?.bytes ?? 0), 0) / 1024).toFixed(0)} KB)`);
+}
+
+// PWA icons (public/icons): generated from the approved portrait, hash-locked, maskable safe area measured.
+{
+  const src = IMAGE_ASSETS.find((a) => a.id === iconsJson.source.id);
+  if (!src || src.sha256 !== iconsJson.source.sha256) errors.push('[icons] built from a different portrait sheet — run npm run icons:build');
+  for (const icon of iconsJson.icons) {
+    const full = join(repoRoot, 'public', icon.file);
+    if (!existsSync(full)) {
+      errors.push(`[icons] missing public/${icon.file} — run npm run icons:build`);
+      continue;
+    }
+    const buf = readFileSync(full);
+    if (buf.length !== icon.bytes || createHash('sha256').update(buf).digest('hex') !== icon.sha256) errors.push(`[icons] public/${icon.file} differs from icons.json`);
+    const meta = await sharp(buf).metadata();
+    if (meta.width !== icon.size || meta.height !== icon.size) errors.push(`[icons] ${icon.file} is ${meta.width}x${meta.height}, expected ${icon.size}`);
+    if (icon.measuredForegroundRadius > icon.safeRadiusLimit) errors.push(`[icons] ${icon.file} art reaches r=${icon.measuredForegroundRadius} beyond the ${icon.safeRadiusLimit} safe circle`);
+  }
+  const manifest = JSON.parse(readFileSync(join(repoRoot, 'public/manifest.webmanifest'), 'utf8')) as { icons: { src: string; purpose: string; sizes: string }[]; start_url: string; scope: string };
+  for (const i of manifest.icons) if (!iconsJson.icons.some((x) => x.file === i.src && `${x.size}x${x.size}` === i.sizes && x.purpose === i.purpose)) errors.push(`[manifest] icon ${i.src} (${i.purpose}) is not a verified generated icon`);
+  if (!manifest.icons.some((i) => i.purpose === 'maskable')) errors.push('[manifest] no maskable icon');
+  if (manifest.start_url.startsWith('/') || manifest.scope.startsWith('/')) errors.push('[manifest] start_url/scope must be relative (GitHub Pages subpath)');
+  notes.push(`PWA icons: ${iconsJson.icons.length}, maskable foreground within r=${Math.max(...iconsJson.icons.filter((i) => i.purpose !== 'any').map((i) => i.measuredForegroundRadius))} (limit 0.4)`);
 }
 
 // Generated atlas: its JSON rectangle manifest must agree with the verified

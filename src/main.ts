@@ -18,8 +18,10 @@ import { haptic, type HapticCue } from './audio/haptics';
 import { showStart } from './ui/intro-screen';
 import { renderMenu, type MenuChoice, type ResumeOffer } from './ui/menu';
 import { TableScreen } from './ui/table';
+import { consumeUpdatedFlag, describeOffline, eraseLocalData, PwaController } from './app/pwa';
 
 const DEV = import.meta.env.DEV;
+document.documentElement.dataset.build = __SB_BUILD_TAG__; // support/diagnostics: which build is running
 const root = document.getElementById('app')!;
 const store = browserStore();
 
@@ -79,6 +81,65 @@ const settingsApi = {
     audio.setLevels(settings.audio);
   },
 };
+
+// ---- PWA: offline files, updates, repair (production builds only) -------------------
+const pwa = new PwaController();
+if (consumeUpdatedFlag()) notices.push('Updated to the latest version. Your game was saved first — tap Resume to carry on.');
+const ERASED_FLAG = 'sticks-and-bones.erased';
+try {
+  if (sessionStorage.getItem(ERASED_FLAG)) {
+    sessionStorage.removeItem(ERASED_FLAG);
+    notices.push('Saved game, settings and statistics erased. Offline files were kept.');
+  }
+} catch {
+  /* storage blocked */
+}
+const pwaView = () => {
+  const d = describeOffline(pwa.view.offline);
+  return { ...d, updateReady: pwa.view.updateReady };
+};
+/** Keep every status line / update banner on screen current (menu, settings, pause sheet). */
+pwa.subscribe(() => {
+  const v = pwaView();
+  document.querySelectorAll<HTMLElement>('[data-region="offline-status"]').forEach((el) => {
+    el.textContent = (v.ready ? '✓ ' : '') + v.text;
+    el.classList.toggle('is-ready', v.ready);
+  });
+  document.querySelectorAll<HTMLElement>('[data-region="update"]').forEach((el) => (el.hidden = !v.updateReady));
+});
+/**
+ * Apply a waiting update only from a stable point: save the match exactly as the
+ * engine has it, stop the table (no AI move can land after the save), replace the
+ * screen so no hand is visible while the new version loads, then reload. The
+ * restored match opens behind the privacy cover when two humans share the device.
+ */
+function applyUpdate(): void {
+  pwa.applyUpdate(() => {
+    const a = active;
+    if (a) writeSave(store, a.controller.session, a.matchId);
+    teardown();
+    active = null;
+    document.documentElement.classList.remove('table-lock');
+    root.className = 'is-start';
+    root.innerHTML = '<p class="loading" role="status">Updating — your game is saved…</p>';
+  });
+}
+const menuPwa = {
+  view: pwaView,
+  onUpdate: applyUpdate,
+  onRepair: () => void pwa.repair(),
+  onErase: () => {
+    // Only this app's keys (saves, settings, statistics and their quarantined copies). Offline files stay.
+    eraseLocalData(store ? globalThis.localStorage : null);
+    try {
+      sessionStorage.setItem(ERASED_FLAG, '1');
+    } catch {
+      /* storage blocked */
+    }
+    location.reload();
+  },
+};
+const tableUpdate = { ready: () => pwa.view.updateReady, apply: applyUpdate };
 
 // ---- the active match ----------------------------------------------------------------
 interface Active {
@@ -161,6 +222,7 @@ function showMenu(): void {
     onResetStats: () => updateStats(resetStats(store)),
     onStart: (c) => void start(c),
     onResume: () => resume(),
+    pwa: import.meta.env.PROD ? menuPwa : undefined,
     onDiscard: () => {
       const g = readSave(store).value;
       if (g) abandon(g.matchId, g.state.config.mode);
@@ -180,6 +242,7 @@ function mount(controller: TableController, matchId: string, counted: boolean, o
     onRestart,
     settings: settingsApi,
     audio: audioApi,
+    update: tableUpdate,
   });
   active = { table, controller, matchId, counted };
   audio.setScene('gameplay');
@@ -310,3 +373,6 @@ function boot(): void {
 }
 
 boot();
+// Register after the first screen is up, so the worker's downloads never compete with it.
+if (document.readyState === 'complete') void pwa.start();
+else window.addEventListener('load', () => void pwa.start(), { once: true });

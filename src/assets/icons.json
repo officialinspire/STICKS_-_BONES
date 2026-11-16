@@ -1,0 +1,66 @@
+{
+ "generator": "scripts/build-icons.ts",
+ "source": {
+  "id": "cousin.atlas.portrait",
+  "sha256": "9d557d503e10d74747d496ad3a02d6607624f5d1ad47b9169bf9a4046b1ed291",
+  "frame": "neutral",
+  "crop": {
+   "x": 20.5,
+   "y": 104,
+   "w": 275,
+   "h": 288.75
+  }
+ },
+ "icons": [
+  {
+   "file": "icons/icon-192.png",
+   "size": 192,
+   "purpose": "any",
+   "bytes": 11448,
+   "sha256": "fc90992f18646b552f3dcc31ae8382fb2196b9147c87aef7f65c3687ac2a2928",
+   "safeRadiusLimit": 0.46,
+   "measuredForegroundRadius": 0.4508,
+   "opaque": true
+  },
+  {
+   "file": "icons/icon-512.png",
+   "size": 512,
+   "purpose": "any",
+   "bytes": 48477,
+   "sha256": "fb7340ba34d91a3175dcb8a03faa02171a514597af92e24c73bba4e2fd4f26fa",
+   "safeRadiusLimit": 0.46,
+   "measuredForegroundRadius": 0.4549,
+   "opaque": true
+  },
+  {
+   "file": "icons/icon-maskable-192.png",
+   "size": 192,
+   "purpose": "maskable",
+   "bytes": 8845,
+   "sha256": "727247ab8e224eb50a3af4a11042cf189d9a383d10190ce166209633e2f85a91",
+   "safeRadiusLimit": 0.4,
+   "measuredForegroundRadius": 0.3921,
+   "opaque": true
+  },
+  {
+   "file": "icons/icon-maskable-512.png",
+   "size": 512,
+   "purpose": "maskable",
+   "bytes": 39253,
+   "sha256": "de90399346bc8c9857c2ce65afb45287a6577b79a7881beb76dc4de2c6d21bac",
+   "safeRadiusLimit": 0.4,
+   "measuredForegroundRadius": 0.3954,
+   "opaque": true
+  },
+  {
+   "file": "icons/apple-touch-icon-180.png",
+   "size": 180,
+   "purpose": "apple",
+   "bytes": 8088,
+   "sha256": "89947a44a383c07fe35c932419304f4b4c66325ff71809e33b7bf8c77bca8a69",
+   "safeRadiusLimit": 0.4,
+   "measuredForegroundRadius": 0.3905,
+   "opaque": true
+  }
+ ]
+}

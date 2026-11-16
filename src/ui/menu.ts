@@ -50,6 +50,27 @@ export interface MenuHandlers {
   onStart(c: MenuChoice): void;
   onResume(): void;
   onDiscard(): void;
+  /** Offline/PWA status and actions (absent where unsupported, e.g. the dev server). */
+  readonly pwa?: MenuPwa;
+}
+
+export interface MenuPwa {
+  /** Current status line and whether a new version is waiting. */
+  view(): { text: string; ready: boolean; updateReady: boolean };
+  onUpdate(): void;
+  onRepair(): void;
+  onErase(): void;
+}
+
+/** The offline status line; main.ts keeps every `[data-region="offline-status"]` up to date. */
+function offlineLine(p: MenuPwa | undefined): string {
+  if (!p) return '';
+  const v = p.view();
+  return `<p class="offline-status${v.ready ? ' is-ready' : ''}" data-region="offline-status" role="status">${v.ready ? '✓ ' : ''}${esc(v.text)}</p>`;
+}
+function updateBanner(p: MenuPwa | undefined): string {
+  if (!p) return '';
+  return `<div class="update-banner" data-region="update" ${p.view().updateReady ? '' : 'hidden'}><p><strong>Update available.</strong> A new version of the game is ready.</p><button type="button" class="btn" data-act="update-now">Update now</button></div>`;
 }
 
 const PLAYABLE: ModeId[] = ['draw2', 'block2', 'partnership4'];
@@ -89,18 +110,21 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
       <nav class="panel home-nav" aria-label="Main menu">
         ${(h.notices ?? []).length ? `<div class="notice" role="status">${(h.notices ?? []).map((n) => `<p>${esc(n)}</p>`).join('')}</div>` : ''}
         ${h.resume ? `<div class="resume"><h2>Game in progress</h2><p>${esc(h.resume.summary)}</p>${h.resume.twoHumans ? '<p class="note">Hands stay hidden until the right player reveals them.</p>' : ''}<div class="row"><button type="button" class="btn" data-act="resume">Resume</button><button type="button" class="btn-ghost dark" data-act="discard">Discard</button></div></div>` : ''}
+        ${updateBanner(h.pwa)}
         <button type="button" class="btn btn-start" data-go="setup">New game</button>
         <div class="row home-row">
           <button type="button" class="btn-ghost dark" data-go="rules">How to play</button>
           <button type="button" class="btn-ghost dark" data-go="stats">Statistics</button>
           <button type="button" class="btn-ghost dark" data-go="settings">Settings</button>
         </div>
+        ${offlineLine(h.pwa)}
       </nav>`,
       'Pull up a chair. Pick a game and let’s get the tiles moving.',
     );
     wire();
     root.querySelector('[data-act="resume"]')?.addEventListener('click', () => h.onResume());
     root.querySelector('[data-act="discard"]')?.addEventListener('click', () => h.onDiscard());
+    root.querySelector('[data-act="update-now"]')?.addEventListener('click', () => h.pwa?.onUpdate());
     return;
   }
   if (screen === 'rules') {
@@ -159,9 +183,31 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
     return;
   }
   if (screen === 'settings') {
-    root.innerHTML = shell(`<section class="panel" aria-labelledby="settings-heading">${back}<h2 id="settings-heading">Settings</h2>${settingsPanelHtml(h.settings.get())}</section>`, 'Set the table how you like it.', 'smirk');
+    const offline = h.pwa
+      ? `<section class="offline-panel" aria-labelledby="offline-heading">
+          <h3 id="offline-heading">Offline &amp; storage</h3>
+          ${offlineLine(h.pwa)}
+          <p class="note">Offline play starts working after one complete online visit (this screen says “Ready to play offline”). Music and the studio intro always need a connection; offline, the game is silent.</p>
+          <div class="row"><button type="button" class="btn-ghost dark" data-act="repair">Repair offline files</button></div>
+          <p class="note">Repair re-downloads only this game’s offline files. Your saved game, settings and statistics are kept.</p>
+          <div class="row"><button type="button" class="btn-ghost dark" data-act="erase">Erase saved game, settings &amp; statistics…</button></div>
+        </section>`
+      : '';
+    root.innerHTML = shell(`<section class="panel" aria-labelledby="settings-heading">${back}<h2 id="settings-heading">Settings</h2>${settingsPanelHtml(h.settings.get())}${offline}</section>`, 'Set the table how you like it.', 'smirk');
     wire();
     bindSettingsPanel(root.querySelector('.settings-panel') as HTMLElement, h.settings);
+    root.querySelector('[data-act="repair"]')?.addEventListener('click', () => h.pwa?.onRepair());
+    const erase = root.querySelector<HTMLButtonElement>('[data-act="erase"]');
+    erase?.addEventListener('click', () => {
+      // Two taps: the first only arms the button (nothing is deleted by a stray tap).
+      if (erase.dataset.armed !== '1') {
+        erase.dataset.armed = '1';
+        erase.textContent = 'Tap again to erase your saved game, settings and statistics';
+        erase.classList.add('is-armed');
+        return;
+      }
+      h.pwa?.onErase();
+    });
     return;
   }
   const { dev, onStart } = h;

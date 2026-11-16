@@ -1791,3 +1791,47 @@ summary:focus-visible,
 .btn.danger {
   background: #a5321f;
 }
+
+/* ---------------------------------------------------------------- PWA: update + offline status */
+.update-banner {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fff4dc;
+  border: 2px solid var(--sun);
+  color: var(--ink);
+}
+.update-banner[hidden] {
+  display: none;
+}
+.update-banner p {
+  margin: 0;
+}
+.update-banner .btn,
+.update-banner .btn-ghost {
+  margin: 0;
+  justify-self: start;
+}
+.offline-status {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+.offline-status.is-ready {
+  color: var(--teal);
+  font-weight: 700;
+}
+.offline-panel {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--cream-2);
+}
+.offline-panel h3 {
+  margin: 0 0 4px;
+  font: 800 1.1rem var(--display);
+}
+[data-act='erase'].is-armed {
+  border-color: #a5321f;
+  color: #a5321f;
+}

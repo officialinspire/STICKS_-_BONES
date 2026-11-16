@@ -1,6 +1,6 @@
 # Agent / contributor notes
 
-Read this file, `docs/BUILD_STATUS.md`, `docs/RULES.md`, `docs/ENGINE.md`, `docs/AI.md`, `docs/SHARED_DEVICE.md`, `docs/PRESENTATION.md`, `docs/AUDIO.md`, `docs/SAVES.md`, `docs/ASSETS.md`, `docs/QA.md` and `docs/PERFORMANCE.md`
+Read this file, `docs/BUILD_STATUS.md`, `docs/RULES.md`, `docs/ENGINE.md`, `docs/AI.md`, `docs/SHARED_DEVICE.md`, `docs/PRESENTATION.md`, `docs/AUDIO.md`, `docs/SAVES.md`, `docs/ASSETS.md`, `docs/QA.md`, `docs/PERFORMANCE.md` and `docs/PWA.md`
 before you change anything.
 
 ## Ground rules
@@ -28,6 +28,10 @@ before you change anything.
   (same dimensions as the source, recorded in `src/assets/derivatives.json`). Rebuild them after
   `atlas:build` or any source change. Never bundle a PNG original; keep `npm run build` inside its
   byte budget (`docs/PERFORMANCE.md`). Load images through `src/assets/warm.ts`, not ad-hoc `new Image()`.
+- **PWA isolation:** the service worker (`src/pwa/sw.js`) is scoped to the app directory and may only
+  open/delete `inspire:sticks-and-bones:*` caches; never `unregister()` or `skipWaiting()` without the
+  player's "Update now", never cache PNG source sheets, music or video. Local data keys are
+  `sticks-and-bones.*`; repair must not touch them. Run `npm run pwa` for any PWA or caching change.
 - **Base-path safety:** reference assets through `src/assets/urls.ts`
   (`new URL(literal, import.meta.url)`). No root-absolute URLs.
 - **Fallbacks:** tiles must always render valid vector pips, even when art is missing.

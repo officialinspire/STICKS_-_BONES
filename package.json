@@ -20,6 +20,8 @@
     "check": "npm run typecheck && npm run lint && npm run test && npm run assets:verify && npm run build",
     "atlas:build": "tsx scripts/build-atlas.ts",
     "assets:derive": "tsx scripts/build-derivatives.ts",
+    "icons:build": "tsx scripts/build-icons.ts",
+    "pwa": "tsx scripts/pwa.ts",
     "qa": "tsx scripts/qa.ts",
     "a11y": "tsx scripts/a11y.ts",
     "perf": "tsx scripts/perf.ts",

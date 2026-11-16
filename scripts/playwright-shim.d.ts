@@ -7,5 +7,7 @@ declare module 'playwright' {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   export type Page = any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  export type BrowserContext = any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   export const chromium: any;
 }

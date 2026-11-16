@@ -3,7 +3,7 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules', 'coverage'] },
+  { ignores: ['dist', 'node_modules', 'coverage', 'test-results'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -11,6 +11,11 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',
     },
+  },
+  {
+    // The service worker runs in its own global scope.
+    files: ['src/pwa/sw.js'],
+    languageOptions: { globals: { ...globals.serviceworker } },
   },
   {
     // The engine must stay pure, deterministic and serializable.

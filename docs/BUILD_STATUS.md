@@ -648,7 +648,81 @@ needed) and `docs/PERFORMANCE.md` (measurements, derivatives, loading, byte budg
 - Carried over: intro video not supplied; placeholder SFX/ambience; music loops
   await the owner's audition. The dist is now ≈ 8.9 MB, mostly music.
 
-## Next stage — Stage 10: Release prep
+## Stage 10 — Installable PWA with safe offline play, updates and repair ✅ (2026-11-16)
+
+Full write-up: `docs/PWA.md`.
+
+### Completed
+
+- **Manifest** (`public/manifest.webmanifest`): `id`, `start_url` and `scope` are
+  relative, so the app works under any GitHub Pages subpath. Display is standalone.
+  It lists 4 icons (192/512, any + maskable), plus an Apple touch icon.
+- **Icons** (`npm run icons:build`):
+  - generated from the approved portrait atlas, using the game's own bust box;
+  - **maskable safe area measured**: foreground within r = 0.392–0.395 of a 0.40
+    limit;
+  - hash-locked and source-locked in `assets:verify`, which also checks that the
+    manifest icons and URLs are relative.
+- **Service worker** (`src/pwa/sw.js`, generated per build by the `sticks-pwa`
+  Vite plugin, build id = hash of every emitted file):
+  - scope = the app directory only;
+  - only `inspire:sticks-and-bones:*` caches;
+  - no unregister, and no `skipWaiting` without the player's action;
+  - **minimal shell** precached all-or-nothing (7 files);
+  - **optimized WebP images** cached deliberately, 2 at a time; truncated
+    downloads are never stored; quota errors are reported;
+  - **no PNG source sheets, music or video** (the build fails if a PNG sheet is
+    bundled).
+- **Offline status** on the menu and in Settings → Offline & storage, as a live
+  `role="status"` line, for example "✓ Ready to play offline (1.6 MB saved on
+  this device). Music needs a connection." There are also partial, quota and
+  unsupported states.
+- **Update available** (menu banner and pause sheet). "Update now" does this:
+  - saves the engine state;
+  - stops the table, so no AI move can land after the save;
+  - clears the screen, so no hand is visible;
+  - lets the waiting worker take over, then reloads;
+  - afterwards a notice is shown, and Resume restores the match (behind the cover
+    for two humans).
+- **Repair offline files** deletes and re-downloads only this app's caches; saves
+  and settings are kept. **Erase saved game, settings & statistics** is a
+  separate two-tap action: it removes only `sticks-and-bones.*` keys and keeps
+  the offline files.
+- `<html data-build>` shows which build is running (`SB_BUILD_TAG`).
+- Byte budget gains `icons` (140 KB) and `service worker` (16 KB) lines.
+
+### Commands run and results
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | pass, **242 unit tests in 26 files**. New: cache/storage isolation with look-alike names; status wording. |
+| `npm run pwa` | **pass.** The full scenario list is in `docs/PWA.md`. **Measured cache: 1,668,179 B** (shell 211.8 KB in 7 files + images 1,417.2 KB in 6 files). |
+| `npm run e2e` / `npm run qa` / `npm run a11y` | pass / 0 failures / 0 failures (dev server; the PWA UI only exists in production builds and is axe-checked by `npm run pwa`) |
+
+What `npm run pwa` covered:
+- subpath first visit;
+- offline reload completing a hand vs the computer (silent music; 0 app files
+  requested from the network);
+- interrupted downloads → partial status → offline hand with vector faces →
+  Repair → ready;
+- quota at 700 KB and at 40 KB → storage message, online play still works;
+- update A → B mid-match with two humans → identical save, opens covered, old
+  shell cache gone;
+- repair and erase leave the other app's worker, caches and localStorage intact;
+- axe: 0 violations on the offline panel and on the pause sheet with the update
+  banner.
+
+### Known issues / browser limitations
+
+- Only Chromium was tested. iOS Safari has no install prompt, gives home-screen
+  apps separate storage, and may evict storage after about 7 days without use.
+  Firefox desktop doesn't install sites as apps. Private modes may disable
+  service workers. Details are in `docs/PWA.md`; none of this has been verified
+  on devices.
+- Music and the (unsupplied) intro video are never cached: offline play is silent.
+- Storage is best effort (no `navigator.storage.persist()` request).
+
+## Next stage — Stage 11: Release prep
 
 A table setting picker for the other six environments (new derivatives through
 `assets:derive`), stripped-cover music derivatives, the real-device and

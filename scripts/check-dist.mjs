@@ -38,6 +38,8 @@ export const BUDGET = {
   singleImageKB: 400, // largest single image (measured 301 KB)
   startupKB: 760, // start screen + first menu, raw bytes: code + backdrop + portrait (measured 702 KB raw, 579 KB on the wire)
   mediaKB: 8000, // music, streamed on demand only (measured 7,331 KB)
+  iconsKB: 140, // PWA icons (PNG by spec), generated from approved art (measured 113 KB)
+  swKB: 16, // service worker + build manifest (measured 8 KB)
   totalKB: 9800, // whole dist (measured 9.1 MB)
 };
 const size = (f) => statSync(f).size;
@@ -47,7 +49,10 @@ const isImage = (f) => /\.(webp|png|avif|jpe?g|svg|gif)$/.test(f);
 const isMedia = (f) => /\.(mp3|ogg|m4a|mp4|webm)$/.test(f);
 const sumKB = (fs) => fs.reduce((s, f) => s + size(f), 0) / KB;
 const code = sumKB(files.filter(isCode));
-const images = files.filter(isImage);
+const isIcon = (f) => rel(f).startsWith('icons/');
+const images = files.filter((f) => isImage(f) && !isIcon(f));
+const iconsKB = sumKB(files.filter(isIcon));
+const swKB = sumKB(files.filter((f) => /(^|\/)(sw\.js|build\.json)$/.test(rel(f))));
 const imagesKB = sumKB(images);
 const biggest = images.reduce((m, f) => (size(f) > (m ? size(m) : 0) ? f : m), null);
 // Startup set: code + the two essential images (src/assets/warm.ts ESSENTIAL_ASSETS).
@@ -65,6 +70,8 @@ const budgetLines = [
   gate(`largest image (${biggest ? rel(biggest) : '-'})`, biggest ? size(biggest) / KB : 0, BUDGET.singleImageKB),
   gate('startup', startupKB, BUDGET.startupKB),
   gate('media', mediaKB, BUDGET.mediaKB),
+  gate('icons', iconsKB, BUDGET.iconsKB),
+  gate('service worker', swKB, BUDGET.swKB),
   gate('total', bytes / KB, BUDGET.totalKB),
 ];
 if (images.some((f) => /\.png$/.test(f))) errors.push(`a PNG original was bundled (${images.filter((f) => /\.png$/.test(f)).map(rel).join(', ')}) — serve the WebP derivative`);
