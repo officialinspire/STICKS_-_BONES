@@ -1085,12 +1085,13 @@ try {
     // 8f. No dead buttons: every enabled button on each menu screen and in the pause sheet does something visible.
     {
       const page = await newPage({ width: 390, height: 844 });
-      const sweep = async (screen: string, setup: () => Promise<void>) => {
+      // `scope` limits the sweep to what is actually interactive (a modal makes everything behind it inert).
+      const sweep = async (screen: string, setup: () => Promise<void>, scope = 'body') => {
         await setup();
-        const labels: string[] = await page.$$eval('button:not([disabled])', (bs: HTMLButtonElement[]) => bs.filter((b) => b.offsetParent !== null).map((b) => b.dataset.act ?? b.dataset.go ?? b.dataset.fixture ?? b.textContent ?? ''));
+        const labels: string[] = await page.$$eval(`${scope} button:not([disabled])`, (bs: HTMLButtonElement[]) => bs.filter((b) => b.offsetParent !== null).map((b) => b.dataset.act ?? b.dataset.go ?? b.dataset.fixture ?? b.textContent ?? ''));
         for (const label of labels) {
           await setup();
-          const sel = `button[data-act="${label}"], button[data-go="${label}"]`;
+          const sel = `${scope} button[data-act="${label}"], ${scope} button[data-go="${label}"]`;
           if (!(await page.locator(sel).count())) continue; // not addressable by data attribute (e.g. form submit)
           const sig = () => page.evaluate(() => `${document.querySelector('#app')!.innerHTML.length}|${document.querySelectorAll('dialog[open]').length}|${(document.activeElement as HTMLElement | null)?.outerHTML.slice(0, 60)}|${document.body.textContent?.length}`);
           const s0 = await sig();
@@ -1113,10 +1114,14 @@ try {
         await enterMenu(page);
         await page.click('[data-go="rules"]');
       });
-      const n4 = await sweep('pause sheet', async () => {
-        await startMatch(page, { mode: 'block2', opponent: 'ai', seed: 'e2e-sweep', aiSeed: 's' });
-        await page.click('[data-act="pause"]');
-      });
+      const n4 = await sweep(
+        'pause sheet',
+        async () => {
+          await startMatch(page, { mode: 'block2', opponent: 'ai', seed: 'e2e-sweep', aiSeed: 's' });
+          await page.click('[data-act="pause"]');
+        },
+        'dialog.pause[open]',
+      );
       notes.push(`no dead buttons: ${n1 + n2 + n3 + n4} buttons across home, stats, rules and the pause sheet each produced a visible change`);
       await page.context().close();
     }
