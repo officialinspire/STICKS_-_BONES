@@ -392,10 +392,85 @@
 - Carried over: no animation queue or audio, ≈ 8 MB PNG payload, large-atlas
   bleed, dev-only `minimatch` advisory, no deploy workflow.
 
-## Next stage — Stage 6: Presentation and polish
+## Stage 6 — Art integration, Cousin's voice, menus and table polish ✅ (2026-11-16)
 
-An event-driven animation queue (slide-in, draw, pass, host gestures from the
-6-frame strips, effect sprites) that is cancelled on reset/cover and never
-animates hidden tiles; settings (table setting picker from the seven
-environments, reduced motion, AI speed); audio hooks for the owner's music;
-WebP derivatives; and a GitHub Pages deploy workflow if authorized.
+### Completed
+
+- **Art with stable anchors** (`src/render/stage.ts`, `src/ui/host.ts`):
+  - Every Cousin frame is shown through a shared, bottom-anchored stage box per
+    sheet. Tested for every frame: full figure included (hat never cropped), never
+    outside its own cell (no neighbours), drift ≤ 6 px, no distortion (`meet`).
+  - A compact bust on small screens; the full figure on wide screens, in menus and
+    in results.
+  - The patio backdrop and weathered tabletop are the one polished setting.
+    Optional slam strip and effects sheet, each loaded on first use.
+  - Code-drawn placeholders for every missing image. The monogram shows only when
+    the portrait art actually fails.
+- **Expressions and slam** driven by public engine events. The slam plays on a
+  domino and when Cousin plays a double, in the full-figure view only. It is never
+  awaited and is skipped under reduced motion or when turned off.
+- **Cousin's voice** (`src/app/banter.ts`):
+  - Opening line "Fuck that, we playing DOMINOES!", or "Forget that, we playing
+    DOMINOES!" with the explicit-language setting off (on by default, as specified).
+  - Short contextual lines in plain English (no phonetic accents), last-8 repeat
+    suppression, routine lines only sometimes, a banter-off switch.
+  - The live region announces exactly what the bubble shows, and lines are chosen
+    from public events only.
+- **Screens:**
+  - Home (New game / Resume / How to play / Settings).
+  - Setup, with the **selected mode's rules generated from preset data, shown above
+    Deal** (`src/ui/rules-summary.ts`).
+  - Rules for all modes, and Settings: language, banter, slam, motion, computer
+    speed (presentation delay only, via `GameSession.setThinkingSpeed`).
+  - A compact HUD with a **pause sheet**: Resume, Restart, Leave, Rules, Settings.
+  - Results with larger Cousin art, a score tally, and **Rematch** (same setup;
+    works for resumed games).
+- **Table feedback:** selection outline; ✓ badge on legal tiles (not colour alone);
+  **endpoint ghost preview** oriented as the tile would land, on each legal end;
+  260 ms placement easing; a restrained impact puff (gold star on a domino); a pass
+  "knock" on the passer's chip; the score tally. Effects are `pointer-events: none`,
+  sit below the end targets and HUD, last ≤ 0.9 s, and are cleared under a privacy
+  cover.
+- **Reduced motion:** follows the device by default, or can be forced on or off.
+  Reduced means no effects, slam or easing, and an instant tally.
+- New dev fixture **match-point** (Draw, 95 points, one tile from going out) for
+  testing match results and rematch.
+- Docs: `docs/PRESENTATION.md`; ASSETS, README and AGENTS updated.
+
+### Commands run and results
+
+| Command | Result |
+| --- | --- |
+| `npm run typecheck` / `npm run lint` | pass |
+| `npm test` | pass, **196 tests in 19 files**. New: stage boxes (6: portrait atlas, slam and place strips per frame; large atlas proven unstageable; bust keeps the hat; effect boxes), banter (6: both opening variants, clean mode profanity-free across all contexts, banter off, no repeats in the window, routine vs big moments, live reconfiguration), rules summary from preset data |
+| `npm run assets:verify` / `npm run build` | pass. Dist is 10.5 MB (slam strip and effects sheet now bundled, loaded lazily) |
+| `npm run e2e` | pass. Opening line explicit, then clean after the Settings change, with the live region matching the bubble; banter turned off from the pause sheet leaves facts only; setup shows the selected mode's rules above Deal and updates with the mode; every Cousin frame swap observed on phone (bust) and desktop (full, slam played) matches its stage box; while effects play, end targets stay topmost, effects take no input and the scores stay visible; reduced motion → 0 effects, no slam, instant tally; match point → match result → Rematch → Hand 1; every PNG blocked → vector tiles, visible monogram, no overflow. All Stage 1–5 checks still pass (privacy covers ×5 seatings, ghost tile, pause, pips at all rotations, fixtures, keyboard) |
+
+### Decisions recorded
+
+- Explicit language is on by default because the owner specified the opening line.
+  Clean wording is one setting away, and banter off silences Cousin entirely
+  (facts stay).
+- The slam only plays where the full figure is visible; the compact bust keeps
+  static expressions.
+- The place-gesture strip is not used. The large Roberto atlas stays unused (it
+  can't be staged cleanly, as a test shows).
+- Restart and Leave moved into the pause sheet to keep the HUD compact.
+- E2E loop clicks use short timeouts and re-check state, because the table can
+  legitimately change (cover, results) between finding a button and clicking it.
+
+### Known issues
+
+- Payload is now ≈ 10.5 MB of PNG (the optional art loads on demand). WebP
+  derivatives remain the main size win.
+- No audio yet: the knock and slam are visual only, and music is still to come
+  from the owner.
+- Carried over: dev-only `minimatch` advisory, no deploy workflow.
+
+## Next stage — Stage 7: Performance, audio hooks and release
+
+WebP/AVIF derivatives for backdrop, table and sheets (as new manifest entries),
+an audio layer with hooks for the owner's music and SFX (knock, slam, shuffle)
+gated by settings and reduced-sensory preferences, a table setting picker for
+the other six environments, a Lighthouse/accessibility pass, and a GitHub Pages
+deploy workflow if authorized.
