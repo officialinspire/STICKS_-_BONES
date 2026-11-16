@@ -1,6 +1,6 @@
 # Agent / contributor notes
 
-Read this file, `docs/BUILD_STATUS.md`, `docs/RULES.md`, `docs/ENGINE.md`, `docs/AI.md` and `docs/ASSETS.md`
+Read this file, `docs/BUILD_STATUS.md`, `docs/RULES.md`, `docs/ENGINE.md`, `docs/AI.md`, `docs/SHARED_DEVICE.md` and `docs/ASSETS.md`
 before you change anything.
 
 ## Ground rules
@@ -30,8 +30,10 @@ before you change anything.
 - **Tile art:** faces come from `tile.atlas`, looked up by id from its JSON. Regenerate with
   `npm run atlas:build`, never by hand. The SVG fallback must keep the same geometry
   (`src/render/pips.ts`).
-- **UI renders from `GameSession.view()` (a SeatView) only.** Opponent tiles must never
-  reach the DOM before the results sheet.
+- **UI renders from `TableController.view()` only** (one revealed human's SeatView or a
+  concealed public table). No hand in the DOM, labels, live regions or animations unless the
+  controller is in `human-turn` for that human; opponent tiles never before the results sheet.
+  Only the TableController may subscribe to the session's raw events.
 - **Scope:** no campaign, economy, shops, quests, online multiplayer or required backend.
 
 ## Before you finish a stage

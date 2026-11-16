@@ -49,7 +49,10 @@ async function newPage(viewport: { width: number; height: number }, dsf = 1): Pr
   return page;
 }
 
-async function startMatch(page: Page, o: { mode?: string; opponent?: string; seed?: string; aiSeed?: string; difficulty?: string; fast?: boolean; fixture?: string; svg?: boolean }) {
+async function startMatch(
+  page: Page,
+  o: { mode?: string; opponent?: string; seed?: string; aiSeed?: string; difficulty?: string; fast?: boolean; fixture?: string; svg?: boolean; names?: [string, string]; seating?: string },
+) {
   await page.goto(BASE);
   await page.locator('details.dev-panel summary').click();
   if (o.seed) await page.fill('input[name="seed"]', o.seed);
@@ -58,7 +61,12 @@ async function startMatch(page: Page, o: { mode?: string; opponent?: string; see
   if (o.svg) await page.check('input[name="forceSvg"]');
   if (o.mode) await page.check(`input[name="mode"][value="${o.mode}"]`);
   if (o.opponent) await page.check(`input[name="opponent"][value="${o.opponent}"]`);
-  if (o.difficulty) await page.check(`input[name="difficulty"][value="${o.difficulty}"]`);
+  if (o.names) {
+    await page.fill('input[name="name1"]', o.names[0]);
+    await page.fill('input[name="name2"]', o.names[1]);
+  }
+  if (o.seating) await page.selectOption('select[name="seating"]', o.seating);
+  if (o.difficulty && (await page.locator(`input[name="difficulty"][value="${o.difficulty}"]`).isVisible())) await page.check(`input[name="difficulty"][value="${o.difficulty}"]`);
   if (o.fixture) await page.click(`[data-fixture="${o.fixture}"]`);
   else await page.click('.btn-start');
   await page.waitForSelector('.table-screen');
@@ -67,14 +75,44 @@ async function startMatch(page: Page, o: { mode?: string; opponent?: string; see
 const resultsOpen = (page: Page) => page.evaluate(() => (document.querySelector('dialog.results') as HTMLDialogElement | null)?.open ?? false);
 
 /** Play until the results dialog opens. Returns the number of human actions. */
-async function playRound(page: Page, label: string, opts: { checkHidden?: boolean; preferTail?: boolean } = {}): Promise<number> {
+/** While the privacy cover is up: no hand in the DOM, table inert, nothing private in the accessibility tree or live region. */
+async function assertCovered(page: Page, label: string) {
+  const facts = await page.evaluate(() => ({
+    handTiles: document.querySelectorAll('.hand-tile').length,
+    privateTiles: [...document.querySelectorAll('[data-tile]')].filter((el) => !el.closest('.board') && !el.closest('dialog.results')).length,
+    inert: (document.querySelector('.table-screen') as HTMLElement & { inert: boolean }).inert,
+    modal: document.querySelector('.privacy-cover [role="dialog"][aria-modal="true"]') !== null,
+    announce: document.querySelector('[data-region="announce"]')?.textContent ?? '',
+    bubble: document.querySelector('.bubble')?.textContent ?? '',
+  }));
+  check(facts.handTiles === 0 && facts.privateTiles === 0, `${label}: hand tiles present under the cover (${facts.handTiles}/${facts.privateTiles})`);
+  check(facts.inert && facts.modal, `${label}: covered table is not inert/modal`);
+  check(!/drew \d\|\d/.test(facts.announce + facts.bubble), `${label}: live region/bubble names a drawn tile: ${facts.announce} ${facts.bubble}`);
+  const tree = await page.locator('body').ariaSnapshot();
+  check(!/pips, (playable|not playable)/.test(tree) && !/Your tiles|’s tiles/.test(tree), `${label}: accessibility tree exposes a covered hand`);
+}
+
+/** Outside a human's revealed turn (AI turns, results), no hand is rendered at all. */
+async function assertNoForeignHand(page: Page, label: string) {
+  const st = await page.evaluate(() => {
+    const sb = (window as unknown as { __sb?: { controller: { state: { kind: string } } } }).__sb;
+    return { kind: sb?.controller.state.kind ?? '', tiles: document.querySelectorAll('.hand-tile').length };
+  });
+  if (st.kind !== 'human-turn') check(st.tiles === 0, `${label}: ${st.tiles} hand tiles rendered during ${st.kind}`);
+}
+
+async function playRound(page: Page, label: string, opts: { checkHidden?: boolean; preferTail?: boolean; privacy?: boolean } = {}): Promise<number> {
   let actions = 0;
   for (let i = 0; i < 2000; i++) {
     if (await resultsOpen(page)) return actions;
-    if (await page.locator('.handoff:not([hidden])').count()) {
-      await page.click('[data-act="handoff-ready"]');
+    if (await page.locator('.privacy-cover:not([hidden])').count()) {
+      if (opts.privacy) await assertCovered(page, label);
+      const ready = page.locator('[data-act="cover-ready"]');
+      if (await ready.count()) await ready.click();
+      else await page.click('[data-act="cover-reveal"]');
       continue;
     }
+    if (opts.privacy) await assertNoForeignHand(page, label);
     if (opts.checkHidden) await assertAiHandHidden(page, label);
     const legal = page.locator('.hand-tile.is-legal');
     if (await legal.count()) {
@@ -200,7 +238,6 @@ try {
     ['block2', 'ai', 'normal', { width: 1366, height: 900 }],
     ['partnership4', 'ai', 'hard', { width: 390, height: 844 }],
     ['partnership4', 'ai', 'normal', { width: 1366, height: 900 }],
-    ['draw2', 'local', 'normal', { width: 820, height: 1180 }],
     ['block2', 'dev-both', 'normal', { width: 390, height: 844 }],
   ] as const) {
     const label = `${mode}-${opponent}-${difficulty}-${vp.width}`;
@@ -222,7 +259,6 @@ try {
       const kind = await page.evaluate(() => (window as unknown as { __sb: { runnerKind: string } }).__sb.runnerKind);
       check(kind === 'worker', `${label}: AI runs in ${kind}, expected a Web Worker`);
     }
-    if (opponent === 'local') check((await page.locator('.handoff:not([hidden])').count()) === 1, `${label}: no handoff screen at start`);
     const actions = await playRound(page, label, { checkHidden: opponent === 'ai' });
     await page.screenshot({ path: join(outDir, `${label}-results.png`) });
     const title = await page.textContent('#results-title');
@@ -237,6 +273,109 @@ try {
     await page.waitForTimeout(1200);
     await page.screenshot({ path: join(outDir, `${label}-hand2.png`) });
     await assertNoOverlap(page, label);
+    await page.context().close();
+  }
+
+  // 2a. Two humans on one device: every seating, several complete hands, privacy checked at every step.
+  const FLASH_RECORDER = () => {
+    const w = window as unknown as { __flash: string[]; __sb?: { controller: { privacy: boolean; state: { kind: string } } } };
+    w.__flash = [];
+    new MutationObserver(() => {
+      const sb = w.__sb;
+      if (!sb || !sb.controller.privacy) return;
+      const tiles = document.querySelectorAll('.hand-tile').length;
+      const cover = document.querySelector('.privacy-cover:not([hidden])');
+      if (tiles && (cover || sb.controller.state.kind !== 'human-turn')) w.__flash.push(`${sb.controller.state.kind}${cover ? '+cover' : ''}:${tiles}`);
+    }).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden'] });
+  };
+  {
+    const page = await newPage({ width: 320, height: 800 });
+    await page.goto(BASE);
+    await page.check('input[name="mode"][value="partnership4"]');
+    await page.check('input[name="opponent"][value="local"]');
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    check(overflow <= 0 && (await page.locator('select[name="seating"]').isVisible()), `menu: two-player Partnership setup overflows at 320px (${overflow}px) or hides seating`);
+    await page.context().close();
+  }
+  for (const [mode, seating, vp] of [
+    ['draw2', undefined, { width: 390, height: 844 }],
+    ['block2', undefined, { width: 1366, height: 900 }],
+    ['partnership4', 'across', { width: 390, height: 844 }],
+    ['partnership4', 'right', { width: 820, height: 1180 }],
+    ['partnership4', 'left', { width: 1366, height: 900 }],
+  ] as const) {
+    const label = `two-humans-${mode}${seating ? `-${seating}` : ''}`;
+    const page = await newPage(vp, 1);
+    await page.addInitScript(FLASH_RECORDER);
+    await startMatch(page, { mode, opponent: 'local', seed: `e2e-${label}`, aiSeed: `ai-${label}`, fast: true, names: ['Ana', 'Ben'], seating, difficulty: 'normal' });
+    const cover = await page.textContent('#cover-title');
+    check(/Pass the device to (Ana|Ben)/.test(cover ?? ''), `${label}: match did not open on the privacy cover (${cover})`);
+    let hands = 0;
+    for (; hands < 2; hands++) {
+      await playRound(page, `${label} hand ${hands + 1}`, { privacy: true });
+      if (await page.locator('[data-act="new-match"]').count()) break;
+      await page.click('[data-act="next-hand"]');
+    }
+    const names = await page.textContent('.scoreboard');
+    check(/Ana/.test(names ?? '') && /Ben/.test(names ?? ''), `${label}: player names missing from scores (${names})`);
+    const flashes = await page.evaluate(() => (window as unknown as { __flash: string[] }).__flash);
+    check(flashes.length === 0, `${label}: hand flashed while covered or off-turn: ${flashes.slice(0, 5).join(', ')}`);
+    notes.push(`${label}: ${hands === 2 ? 2 : hands + 1} complete hands through the cover, 0 flashes — ${names?.replace(/\s+/g, ' ').trim()}`);
+    await page.context().close();
+  }
+
+  // 2a'. Reload/resume, tab hide, orientation change and pause all come back covered.
+  {
+    const page = await newPage({ width: 390, height: 844 });
+    await page.addInitScript(FLASH_RECORDER);
+    await startMatch(page, { mode: 'draw2', opponent: 'local', seed: 'e2e-resume', aiSeed: 'r', names: ['Ana', 'Ben'] });
+    await page.click('[data-act="cover-ready"]');
+    await page.click('[data-act="cover-reveal"]');
+    check((await page.locator('.hand-tile').count()) > 0, 'resume test: hand not revealed after Reveal');
+    const tile = page.locator('.hand-tile.is-legal').first();
+    await tile.click();
+    await page.locator('.end-slot.is-legal').first().click();
+    await page.click('[data-act="cover-ready"]');
+    await page.click('[data-act="cover-reveal"]'); // Ben is revealed now
+    const scenarios: [string, () => Promise<void>][] = [
+      [
+        'tab hidden',
+        // A string script: tsx would inject a __name helper into a serialized function here.
+        async () =>
+          page.evaluate(`
+            Object.defineProperty(document, 'hidden', { configurable: true, get() { return true; } });
+            document.dispatchEvent(new Event('visibilitychange'));
+            Object.defineProperty(document, 'hidden', { configurable: true, get() { return false; } });
+            document.dispatchEvent(new Event('visibilitychange'));
+          `),
+      ],
+      ['orientation change', async () => page.evaluate(() => window.dispatchEvent(new Event('orientationchange')))],
+      ['menu opened then cancelled', async () => {
+        await page.click('[data-act="menu"]');
+        await page.click('[data-act="confirm-no"]');
+      }],
+    ];
+    for (const [what, act] of scenarios) {
+      await act();
+      await page.waitForTimeout(100);
+      const covered = await page.locator('.privacy-cover:not([hidden])').count();
+      check(covered === 1, `${what}: hand not covered afterwards`);
+      await assertCovered(page, what);
+      await page.click('[data-act="cover-ready"]');
+      await page.click('[data-act="cover-reveal"]');
+      notes.push(`privacy: ${what} → covered, re-revealed explicitly`);
+    }
+    await page.reload();
+    await page.waitForSelector('[data-act="resume"]');
+    const summary = await page.textContent('.resume');
+    check(!/t\d\d/.test(summary ?? ''), 'resume summary leaks tile ids');
+    await page.click('[data-act="resume"]');
+    await page.waitForSelector('.table-screen');
+    check((await page.locator('.privacy-cover:not([hidden])').count()) === 1 && (await page.locator('.hand-tile').count()) === 0, 'reload: restored game did not open covered');
+    await assertCovered(page, 'restored');
+    const flashes = await page.evaluate(() => (window as unknown as { __flash: string[] }).__flash);
+    check(flashes.length === 0, `restore: hand flashed during hydration: ${flashes.join(', ')}`);
+    notes.push(`privacy: reload → menu "Resume" (${summary?.replace(/\s+/g, ' ').trim().slice(0, 70)}…) → covered, no flash`);
     await page.context().close();
   }
 

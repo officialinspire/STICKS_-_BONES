@@ -59,7 +59,7 @@ body {
   display: grid;
   gap: 16px;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: 'brand' 'host' 'table' 'modes' 'footer';
+  grid-template-areas: 'brand' 'host' 'table' 'resume' 'modes' 'footer';
 }
 
 .brand {
@@ -299,6 +299,7 @@ body {
     grid-template-areas:
       'brand brand'
       'host table'
+      'resume resume'
       'modes modes'
       'footer footer';
     align-items: end;
@@ -363,6 +364,8 @@ body {
   border: 0;
   margin: 0 0 12px;
   padding: 0;
+  /* Fieldsets default to min-width: min-content, which lets long options widen the page. */
+  min-width: 0;
 }
 .modes legend {
   font-weight: 800;
@@ -831,6 +834,7 @@ body {
   transform: translateY(-8px);
   box-shadow: 0 0 0 4px var(--sun), 0 0 14px rgba(233, 162, 59, 0.9);
 }
+.privacy-cover,
 .handoff {
   position: fixed;
   inset: 0;
@@ -842,8 +846,89 @@ body {
     linear-gradient(rgba(20, 10, 4, 0.92), rgba(20, 10, 4, 0.92)),
     var(--env-image) center / cover;
 }
+.privacy-cover[hidden],
 .handoff[hidden] {
   display: none;
+}
+.privacy-cover {
+  /* Fully opaque: nothing of the table shows through. */
+  background:
+    linear-gradient(rgba(20, 10, 4, 0.97), rgba(20, 10, 4, 0.97)),
+    var(--env-image) center / cover,
+    #1c1008;
+}
+.cover-card {
+  max-width: 460px;
+  width: min(460px, calc(100vw - 32px));
+  background: var(--cream);
+  color: var(--ink);
+  border-radius: 18px;
+  padding: 22px 20px;
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+.cover-card h2 {
+  margin: 0 0 6px;
+  font: 900 1.45rem var(--display);
+}
+.cover-card .btn {
+  margin-top: 12px;
+}
+.cover-card .sheet-actions {
+  justify-content: center;
+}
+.cover-kicker {
+  margin: 0 0 4px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--teal);
+}
+.btn-ghost.dark {
+  color: var(--ink);
+  border-color: var(--ink-soft);
+  background: transparent;
+}
+.resume {
+  grid-area: resume;
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px var(--gutter);
+  margin-bottom: 4px;
+}
+.resume h2 {
+  margin: 0 0 4px;
+  font: 800 1.2rem var(--display);
+}
+.resume p {
+  margin: 0 0 8px;
+}
+.resume .btn {
+  margin: 0;
+}
+.two-players {
+  margin-top: 8px;
+}
+.two-players .field,
+.modes .field {
+  display: grid;
+  gap: 4px;
+  font-weight: 700;
+  flex: 1 1 140px;
+  min-width: 0;
+}
+.two-players input,
+.two-players select {
+  min-height: 44px;
+  padding: 6px 10px;
+  font: 400 1rem var(--body);
+  border: 2px solid var(--cream-2);
+  border-radius: 10px;
+  background: #fffaf0;
+  width: 100%;
+  max-width: 100%;
 }
 .handoff-card,
 .sheet {

@@ -9,6 +9,7 @@ import { seatView } from '../engine/view';
 import type { GameEvent } from '../engine/events';
 import type { ModeId } from '../engine/types';
 import { controlStates, sortHand, whyNotPlayable } from './helpers';
+import { TableController } from './controller';
 import { GameSession, type OpponentKind, type Scheduler } from './session';
 
 /** Synchronous scheduler: timers run only when flushed. */
@@ -45,26 +46,31 @@ function deferredRunner() {
 
 const tick = () => new Promise<void>((r) => setTimeout(r, 0));
 
-/** Drive a session to match end, acting for the human(s) with the Normal policy via public intents. */
+/** Drive a session to match end, acting for the human(s) with the Normal policy through the controller. */
 async function playOut(s: GameSession, flush: () => void, pending: () => number, onStep?: () => void): Promise<number> {
+  const c = new TableController(s);
   let humanRng = seedRng('human-stand-in');
   for (let i = 0; i < 40000; i++) {
     onStep?.();
     const st = s.debugState();
     if (st.phase === 'match-over') return i;
-    if (s.handoffPending) {
-      s.confirmHandoff();
+    if (c.state.kind === 'covered') {
+      c.ready();
+      continue;
+    }
+    if (c.state.kind === 'revealing') {
+      c.reveal();
       continue;
     }
     if (st.phase === 'hand-resolved') {
-      expect(s.nextHand()).toBe(true);
+      expect(c.nextHand()).toBe(true);
       continue;
     }
-    if (s.canAct()) {
-      const d = decide('normal', buildObservation(s.view(), s.rules), humanRng);
+    if (c.canAct()) {
+      const d = decide('normal', buildObservation(c.view(), s.rules), humanRng);
       humanRng = d.rng;
       const a = d.action;
-      const ok = a.type === 'play' ? s.play(a.tile, a.end) : a.type === 'draw' ? s.draw() : s.pass();
+      const ok = a.type === 'play' ? c.play(a.tile, a.end) : a.type === 'draw' ? c.draw() : c.pass();
       expect(ok).toBe(true);
       continue;
     }
@@ -92,7 +98,6 @@ describe('GameSession', () => {
       await playOut(s, flush, pending, () => expect(checkInvariants(s.debugState())).toEqual([]));
       expect(s.debugState().phase).toBe('match-over');
       expect(events.some((e) => e.type === 'match-won')).toBe(true);
-      for (const e of events) if (e.type === 'tile-drawn' && e.tile) expect(s.isHuman(e.seat)).toBe(true);
       if (opponent === 'ai') expect(s.stats.aiDecisions).toBeGreaterThan(10);
       expect(s.stats.staleDiscarded).toBe(0);
     }, 30000);
@@ -105,34 +110,20 @@ describe('GameSession', () => {
     expect(s.teamName(1)).toBe('Cousin & Tío Rafa');
   });
 
-  it('pass-and-play: a handoff screen appears whenever the device changes hands, and at each new hand', async () => {
-    const { sched, flush, pending } = manualScheduler();
-    const s = new GameSession({ mode: 'block2', opponent: 'local', seed: 'handoff', aiSeed: 0 }, { scheduler: sched });
-    expect(s.handoffPending).toBe(true);
-    expect(s.canAct()).toBe(false);
-    let handoffs = 0;
-    let lastViewer = s.viewer;
-    await playOut(s, flush, pending, () => {
-      if (s.handoffPending) handoffs++;
-      if (s.viewer !== lastViewer) {
-        expect(s.handoffPending).toBe(true);
-        lastViewer = s.viewer;
-      }
-    });
-    expect(handoffs).toBeGreaterThan(2);
-  });
-
   it('rejects out-of-turn intents and reports engine errors without changing state', () => {
     const s = new GameSession({ mode: 'draw2', opponent: 'dev-both', seed: 'errors', aiSeed: 0 }, { scheduler: manualScheduler().sched });
     const before = s.debugState();
-    const v = s.view();
+    const turn = s.turn;
+    const v = s.viewFor(turn);
     const illegal = v.myHand.find((t) => !v.legalMoves.some((m) => m.tile === t));
     if (illegal) {
-      expect(s.play(illegal, 'head')).toBe(false);
+      expect(s.play(turn, illegal, 'head')).toBe(false);
       expect(s.lastError?.code).toBe('must-lead-required-tile');
     }
-    expect(s.pass()).toBe(false);
+    expect(s.pass(turn)).toBe(false);
     expect(s.lastError?.code).toBe('has-legal-move');
+    const other = ((turn + 1) % 2) as 0 | 1;
+    expect(s.pass(other)).toBe(false); // not their turn: refused before reaching the engine
     expect(s.debugState()).toBe(before);
   });
 });

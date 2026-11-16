@@ -5,9 +5,11 @@ modes are two-player **Draw**, two-player **Block** and four-player **Partnershi
 played solo against AI or by two humans sharing one device. It runs entirely in
 the browser, with no backend, accounts or online play.
 
-> **Status:** Stage 4. Draw and Block can be played solo against Cousin or by two
-> players on one device. Partnership can be played solo with three computer seats.
-> The computer has Easy, Normal and Hard levels; see [docs/AI.md](docs/AI.md). See
+> **Status:** Stage 5. Draw, Block and Partnership can be played solo against the
+> computer (Easy, Normal or Hard; see [docs/AI.md](docs/AI.md)) or by two people
+> sharing one device, with a privacy cover between turns (see
+> [docs/SHARED_DEVICE.md](docs/SHARED_DEVICE.md)). Games autosave locally and can
+> be resumed. See
 > [docs/BUILD_STATUS.md](docs/BUILD_STATUS.md).
 
 ## Setup
@@ -57,7 +59,7 @@ No deployment workflow is set up yet.
 
 ```
 assets/art/        Owner's source art (unaltered, see assets/art/README.md)
-docs/              RULES.md, ENGINE.md, AI.md, ASSETS.md, BUILD_STATUS.md
+docs/              RULES.md, ENGINE.md, AI.md, SHARED_DEVICE.md, ASSETS.md, BUILD_STATUS.md
 scripts/           Asset verification + measurement, dist check
 src/engine/        Pure, deterministic, serializable game engine (no DOM)
   rules/presets.ts Versioned rules presets ("Cousin's House Rules" v1)
@@ -65,7 +67,7 @@ src/engine/        Pure, deterministic, serializable game engine (no DOM)
 src/assets/        Typed asset manifest, runtime URL registry
 src/board/         Pure board layout (wrapping view of the logical chain)
 src/render/        Shared pip geometry, atlas/SVG tile renderer
-src/app/           GameSession (applies commands, schedules AI), UI helpers
+src/app/           GameSession (commands, AI scheduling), TableController + privacy state machine, saves
 src/ai/            Fair AI: sanitized observation, Easy/Normal/Hard policies, worker runner
 src/ui/            Menu, table screen, dialogs
 src/dev/           Dev-only fixtures and tile contact sheet (not in production)

@@ -1,6 +1,8 @@
 /**
- * Two-player table screen. Renders ONLY from the viewer's SeatView (plus
- * public results), and changes the game ONLY through GameSession intents.
+ * Table screen. Renders ONLY from TableController.view() — one revealed
+ * human's view or a concealed public table — and changes the game ONLY through
+ * controller intents. On a shared device, hands are never in the DOM unless
+ * the controller is in 'human-turn' for that human.
  */
 import { assetUrl, getAsset, getFrame } from '../assets';
 import { layoutChain, type BoardLayout, type EndSlot } from '../board/layout';
@@ -10,6 +12,7 @@ import { pipTotal, tileFromId } from '../engine/tiles';
 import type { SeatIndex, TileId } from '../engine/types';
 import type { SeatView } from '../engine/view';
 import { controlStates, SORT_LABELS, SORT_MODES, sortHand, tileLabel, tileShort, whyNotPlayable, type SortMode } from '../app/helpers';
+import type { TableController } from '../app/controller';
 import type { GameSession } from '../app/session';
 import { faceHtml, onBackendChange, tileBoxHtml } from '../render/tile-art';
 import { spriteSvg } from './sprite';
@@ -28,6 +31,7 @@ const BRANCH: Record<EndId, string> = { head: 'upper-left', tail: 'lower-right' 
 
 export class TableScreen {
   #root: HTMLElement;
+  #c: TableController;
   #s: GameSession;
   #cb: TableCallbacks;
   #selected: TileId | null = null;
@@ -42,16 +46,24 @@ export class TableScreen {
   #unsub: (() => void)[] = [];
   #ro: ResizeObserver | null = null;
 
-  constructor(root: HTMLElement, session: GameSession, cb: TableCallbacks) {
+  constructor(root: HTMLElement, controller: TableController, cb: TableCallbacks) {
     this.#root = root;
-    this.#s = session;
+    this.#c = controller;
+    this.#s = controller.session;
     this.#cb = cb;
+  }
+
+  /** Privacy cover is up (pass-the-device or reveal step). */
+  #covered(): boolean {
+    const k = this.#c.state.kind;
+    return k === 'covered' || k === 'revealing';
   }
 
   mount(): void {
     const r = this.#root;
     r.innerHTML = `
-      <div class="table-screen">
+      <div class="privacy-cover" data-region="cover" hidden></div>
+      <div class="table-screen" data-region="table">
         <header class="hud">
           <button type="button" class="btn-ghost" data-act="menu">Menu</button>
           <div class="scoreboard" data-region="scores"></div>
@@ -68,7 +80,6 @@ export class TableScreen {
           <div class="hand" data-region="hand"></div>
         </section>
         <p class="sr-only" aria-live="polite" data-region="announce"></p>
-        <div class="handoff" data-region="handoff" hidden></div>
         <dialog class="sheet results" data-region="results" aria-labelledby="results-title"></dialog>
         <dialog class="sheet confirm" data-region="confirm" aria-labelledby="confirm-title"></dialog>
       </div>`;
@@ -76,21 +87,35 @@ export class TableScreen {
     r.addEventListener('keydown', this.#onKey);
     const results = this.#q<HTMLDialogElement>('results');
     results.addEventListener('cancel', (e) => e.preventDefault());
-    this.#unsub.push(this.#s.subscribe((events) => this.#onEvents(events)));
+    this.#unsub.push(this.#c.subscribe((events) => this.#onEvents(events)));
     this.#unsub.push(onBackendChange(() => this.render()));
     // Layout depends only on the board's width; height changes (e.g. a status line) must not re-render it.
     let lastWidth = -1;
-    // Presentation pause: a hidden tab or an open confirmation stops AI thinking.
-    const onVis = () => {
-      if (document.hidden) this.#s.pause();
-      else if (!this.#pendingConfirm) this.#s.resume();
+    // A hidden tab / app switch pauses the table and covers any hand; returning lands on the cover.
+    const onHide = () => {
+      this.#c.conceal('hidden');
+      this.#c.pause('hidden');
     };
+    const onVis = () => {
+      if (document.hidden) onHide();
+      else if (!this.#pendingConfirm) this.#c.resume();
+    };
+    // Orientation changes can recreate layout: treat them like a handoff risk.
+    const onOrient = () => this.#c.conceal('orientation');
     document.addEventListener('visibilitychange', onVis);
-    this.#unsub.push(() => document.removeEventListener('visibilitychange', onVis));
+    window.addEventListener('pagehide', onHide);
+    window.addEventListener('orientationchange', onOrient);
+    screen.orientation?.addEventListener?.('change', onOrient);
+    this.#unsub.push(() => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('pagehide', onHide);
+      window.removeEventListener('orientationchange', onOrient);
+      screen.orientation?.removeEventListener?.('change', onOrient);
+    });
     const confirmDlg = this.#q<HTMLDialogElement>('confirm');
     confirmDlg.addEventListener('cancel', () => {
       this.#pendingConfirm = null;
-      this.#s.resume();
+      this.#c.resume();
     });
     this.#ro = new ResizeObserver(() => {
       const w = this.#q('board-wrap')?.clientWidth ?? 0;
@@ -99,7 +124,7 @@ export class TableScreen {
       this.#renderBoard();
     });
     this.#ro.observe(this.#q('board-wrap'));
-    this.#message = this.#openingLine(this.#s.view());
+    this.#message = this.#openingLine(this.#c.view());
     const env = assetUrl('env.neighborhood-patio');
     const table = assetUrl('table.weathered');
     if (env) r.style.setProperty('--env-image', `url("${env}")`);
@@ -126,8 +151,13 @@ export class TableScreen {
   }
 
   render(): void {
-    const v = this.#s.view();
+    const v = this.#c.view();
     if (this.#selected && !v.legalMoves.some((m) => m.tile === this.#selected)) this.#selected = null;
+    // Anything about a private hand (status hints, selection) goes away with the hand.
+    if (this.#c.revealed() === null || !this.#c.canAct()) {
+      if (this.#c.revealed() === null) this.#status = '';
+      if (!this.#c.canAct()) this.#selected = null;
+    }
     this.#renderScores(v);
     this.#renderHost();
     this.#renderOpponent(v);
@@ -135,7 +165,7 @@ export class TableScreen {
     this.#renderBoard();
     this.#renderControls(v);
     this.#renderHand(v);
-    this.#renderHandoff();
+    this.#renderCover();
     this.#renderResults(v);
   }
 
@@ -212,13 +242,13 @@ export class TableScreen {
     let text: string;
     if (v.phase === 'match-over') text = 'Match over';
     else if (v.phase !== 'playing') text = 'Hand over';
-    else if (this.#s.handoffPending) text = `Waiting for ${this.#name(v.turn)}`;
-    else if (v.turn === v.viewer) text = this.#s.opponent === 'ai' ? 'Your turn' : `${this.#name(v.turn)} — your turn`;
+    else if (this.#covered()) text = `Waiting for ${this.#name(v.turn)}`;
+    else if (this.#c.canAct()) text = this.#s.opponent === 'ai' ? 'Your turn' : `${this.#name(v.turn)} — your turn`;
     else text = `${this.#name(v.turn)}’s turn${this.#s.aiThinking ? ' — thinking…' : ''}`;
     if (this.#s.paused && v.phase === 'playing') text = 'Paused';
     const el = this.#q('turn');
     el.textContent = text;
-    el.classList.toggle('is-mine', v.phase === 'playing' && v.turn === v.viewer && !this.#s.handoffPending);
+    el.classList.toggle('is-mine', this.#c.canAct());
   }
 
   #defaultUnit(): number {
@@ -231,7 +261,7 @@ export class TableScreen {
     const board = this.#q('board');
     if (!wrap || !board) return;
     if (!this.#unit) this.#unit = this.#defaultUnit();
-    const v = this.#s.view();
+    const v = this.#c.view();
     const u = this.#unit;
     const widthUnits = Math.floor(Math.max(0, wrap.clientWidth - 24) / u);
     const L = layoutChain(v.line, widthUnits);
@@ -263,7 +293,7 @@ export class TableScreen {
       const style = `left:${slot.box.x * u + 1}px;top:${slot.box.y * u + 1}px;width:${slot.box.w * u - 2}px;height:${slot.box.h * u - 2}px`;
       const legal = lead ? legalEnds.length > 0 : legalEnds.includes(slot.end);
       const label = lead ? 'Lead here' : String(slot.pip);
-      if (legal && this.#selected && this.#s.canAct()) {
+      if (legal && this.#selected && this.#c.canAct()) {
         const aria = lead ? `Lead with ${tileLabel(this.#selected)}` : `Play ${tileLabel(this.#selected)} on the ${slot.pip} end (${BRANCH[slot.end]} branch)`;
         return `<button type="button" class="end-slot is-legal" data-act="place" data-end="${lead ? 'head' : slot.end}" style="${style}" aria-label="${esc(aria)}"><span>${esc(label)}</span></button>`;
       }
@@ -276,9 +306,16 @@ export class TableScreen {
 
   #renderControls(v: SeatView): void {
     const waiting = this.#name(v.turn);
-    const c = this.#s.handoffPending
-      ? { draw: { enabled: false, reason: 'Waiting for the next player.' }, pass: { enabled: false, reason: 'Waiting for the next player.' } }
-      : controlStates(v, this.#s.rules, waiting);
+    const st = this.#c.state;
+    const off = (reason: string) => ({ draw: { enabled: false, reason }, pass: { enabled: false, reason } });
+    const c =
+      st.kind === 'paused'
+        ? off('Paused.')
+        : this.#covered()
+          ? off(`Waiting for ${waiting} to take the device.`)
+          : this.#c.canAct()
+            ? controlStates(v, this.#s.rules, waiting)
+            : off(v.phase === 'playing' ? `Waiting for ${waiting}.` : 'The hand is over.');
     const hasDraw = this.#s.rules.noMove.kind === 'draw-until-playable';
     const reasons = c.draw.reason === c.pass.reason || !hasDraw ? [hasDraw ? c.draw.reason : c.pass.reason] : [c.draw.reason, c.pass.reason];
     const ends = v.openEnds
@@ -302,12 +339,22 @@ export class TableScreen {
     const el = this.#q('hand');
     const prevScroll = el.querySelector('.hand-scroll')?.scrollLeft ?? 0;
     const focused = (document.activeElement as HTMLElement | null)?.dataset?.tile;
-    if (this.#s.handoffPending || !this.#s.isHuman(v.viewer)) {
-      el.innerHTML = `<p class="hand-hidden">Tiles hidden until ${esc(this.#name(v.turn))} is ready.</p>`;
+    if (v.concealed || this.#c.revealed() === null) {
+      // No hand in the DOM at all — not hidden with CSS, simply absent.
+      const st = this.#c.state;
+      const msg =
+        st.kind === 'ai-turn'
+          ? `${this.#name(st.seat)} is playing. Hands stay hidden.`
+          : st.kind === 'round-results'
+            ? 'Hand over.'
+            : st.kind === 'paused'
+              ? 'Paused — hands are hidden.'
+              : `Hands hidden until ${this.#name(v.turn)} is ready.`;
+      el.innerHTML = `<p class="hand-hidden">${esc(msg)}</p>`;
       return;
     }
     const tiles = sortHand(v.myHand, this.#sort);
-    const myTurn = this.#s.canAct();
+    const myTurn = this.#c.canAct();
     const buttons = tiles
       .map((id) => {
         const legal = myTurn && v.legalMoves.some((m) => m.tile === id);
@@ -322,17 +369,41 @@ export class TableScreen {
     if (focused) (el.querySelector(`[data-tile="${focused}"]`) as HTMLElement | null)?.focus({ preventScroll: true });
   }
 
-  #renderHandoff(): void {
-    const el = this.#q('handoff');
-    if (!this.#s.handoffPending) {
-      el.hidden = true;
-      el.innerHTML = '';
+  #renderCover(): void {
+    const el = this.#q('cover');
+    const table = this.#q('table');
+    const st = this.#c.state;
+    if (st.kind !== 'covered' && st.kind !== 'revealing') {
+      if (!el.hidden) {
+        el.hidden = true;
+        el.innerHTML = '';
+      }
+      table.inert = false;
+      table.removeAttribute('aria-hidden');
       return;
     }
-    const who = this.#name(this.#s.viewer);
+    // While covered the whole table is inert: unreachable by focus and screen readers.
+    table.inert = true;
+    table.setAttribute('aria-hidden', 'true');
+    const who = esc(this.#name(st.seat));
+    const key = `${st.kind}:${st.seat}`;
+    if (!el.hidden && el.dataset.key === key) return;
+    el.dataset.key = key;
     el.hidden = false;
-    el.innerHTML = `<div class="handoff-card" role="dialog" aria-modal="true" aria-labelledby="handoff-title"><h2 id="handoff-title">Pass the device to ${esc(who)}</h2><p>Only ${esc(who)} should look at the screen.</p><button type="button" class="btn" data-act="handoff-ready">I’m ${esc(who)} — show my tiles</button></div>`;
-    (el.querySelector('button') as HTMLElement).focus();
+    el.innerHTML =
+      st.kind === 'covered'
+        ? `<div class="cover-card" role="dialog" aria-modal="true" aria-labelledby="cover-title" aria-describedby="cover-desc">
+             <p class="cover-kicker">${st.reason === 'resume' || st.reason === 'restored' || st.reason === 'hidden' || st.reason === 'orientation' ? 'Hands hidden' : 'Your turn is next'}</p>
+             <h2 id="cover-title">Pass the device to ${who}</h2>
+             <p id="cover-desc">Only ${who} should look at the screen.</p>
+             <button type="button" class="btn" data-act="cover-ready">I’m ${who} — ready</button>
+           </div>`
+        : `<div class="cover-card" role="dialog" aria-modal="true" aria-labelledby="cover-title">
+             <h2 id="cover-title">${who}, reveal your hand?</h2>
+             <p>Make sure nobody else can see the screen.</p>
+             <div class="sheet-actions"><button type="button" class="btn-ghost dark" data-act="cover-back">Not ${who}</button><button type="button" class="btn" data-act="cover-reveal">Reveal hand</button></div>
+           </div>`;
+    (el.querySelector('[data-act="cover-ready"], [data-act="cover-reveal"]') as HTMLElement | null)?.focus();
   }
 
   #renderResults(v: SeatView): void {
@@ -384,9 +455,12 @@ export class TableScreen {
 
   #showConfirm(kind: 'menu' | 'restart'): void {
     this.#pendingConfirm = kind;
-    this.#s.pause();
+    this.#c.pause('dialog');
     const dlg = this.#q<HTMLDialogElement>('confirm');
-    const text = kind === 'menu' ? ['Leave this match?', 'Your progress in this match will be lost.', 'Leave'] : ['Restart the match?', 'Scores go back to zero and new tiles are dealt.', 'Restart'];
+    const text =
+      kind === 'menu'
+        ? ['Leave this match?', this.#s.opponent === 'dev-both' ? 'This developer match is not saved.' : 'It stays saved on this device — resume it from the menu.', 'Leave']
+        : ['Restart the match?', 'Scores go back to zero and new tiles are dealt.', 'Restart'];
     dlg.innerHTML = `<h2 id="confirm-title">${text[0]}</h2><p>${text[1]}</p><div class="sheet-actions"><button type="button" class="btn-ghost" data-act="confirm-no">Keep playing</button><button type="button" class="btn danger" data-act="confirm-yes">${text[2]}</button></div>`;
     dlg.showModal();
     (dlg.querySelector('[data-act="confirm-no"]') as HTMLElement).focus();
@@ -395,7 +469,7 @@ export class TableScreen {
   // ---------------------------------------------------------------------------
 
   #onEvents(events: readonly GameEvent[]): void {
-    const v = this.#s.view();
+    const v = this.#c.view();
     for (const e of events) {
       switch (e.type) {
         case 'hand-started':
@@ -409,7 +483,9 @@ export class TableScreen {
           this.#mood = this.#s.isHuman(e.seat) ? 'neutral' : 'smirk';
           break;
         case 'tile-drawn':
-          this.#message = e.tile ? `${this.#name(e.seat)} drew ${tileShort(e.tile)}${e.playable ? ' — it plays!' : '.'}` : `${this.#name(e.seat)} drew from the boneyard.`;
+          // The bubble and live region are public on a shared device: never name a drawn tile there.
+          this.#message = e.tile && !this.#c.privacy ? `${this.#name(e.seat)} drew ${tileShort(e.tile)}${e.playable ? ' — it plays!' : '.'}` : `${this.#name(e.seat)} drew from the boneyard.`;
+          if (e.tile && this.#c.privacy) this.#status = `You drew ${tileShort(e.tile)}${e.playable ? ' — it plays!' : '.'}`;
           this.#mood = 'thinking';
           break;
         case 'passed':
@@ -427,13 +503,13 @@ export class TableScreen {
           break;
       }
     }
-    if (events.length) this.#status = '';
+    if (events.length && !events.some((e) => e.type === 'tile-drawn' && e.tile)) this.#status = '';
     if (v.phase === 'playing' && !this.#s.isHuman(v.turn)) this.#mood = 'thinking';
     const err = this.#s.lastError;
     if (err) this.#status = err.message;
     this.#q('announce').textContent = this.#message;
     this.render();
-    if (this.#s.canAct() && events.some((e) => e.type === 'turn' || e.type === 'hand-started')) this.#focusHand();
+    if (this.#c.canAct() && (events.length === 0 || events.some((e) => e.type === 'turn' || e.type === 'hand-started'))) this.#focusHand();
   }
 
   #openingLine(v: SeatView): string {
@@ -449,9 +525,9 @@ export class TableScreen {
   }
 
   #select(id: TileId): void {
-    const v = this.#s.view();
+    const v = this.#c.view();
     const reason = whyNotPlayable(v, id);
-    if (reason || !this.#s.canAct()) {
+    if (reason || !this.#c.canAct()) {
       this.#selected = null;
       this.#status = reason ?? 'Not your turn.';
       this.render();
@@ -472,7 +548,7 @@ export class TableScreen {
     if (!this.#selected) return;
     const tile = this.#selected;
     this.#selected = null;
-    if (!this.#s.play(tile, end)) {
+    if (!this.#c.play(tile, end)) {
       this.#status = this.#s.lastError?.message ?? 'That move was not accepted.';
       this.render();
     }
@@ -490,11 +566,11 @@ export class TableScreen {
         break;
       case 'draw':
         this.#selected = null;
-        this.#s.draw();
+        this.#c.draw();
         break;
       case 'pass':
         this.#selected = null;
-        this.#s.pass();
+        this.#c.pass();
         break;
       case 'sort':
         this.#sort = SORT_MODES[(SORT_MODES.indexOf(this.#sort) + 1) % SORT_MODES.length]!;
@@ -510,14 +586,19 @@ export class TableScreen {
         this.#root.querySelector<HTMLElement>(`[data-end-marker="${end}"], .end-slot[data-end="${end}"]`)?.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
         break;
       }
-      case 'handoff-ready':
-        this.#s.confirmHandoff();
-        this.render();
-        this.#focusHand();
+      case 'cover-ready':
+        this.#c.ready();
+        break;
+      case 'cover-back':
+        // Back to "Pass the device": re-cover without revealing.
+        this.#c.conceal('hidden');
+        break;
+      case 'cover-reveal':
+        this.#c.reveal();
         break;
       case 'next-hand':
         this.#q<HTMLDialogElement>('results').close();
-        this.#s.nextHand();
+        this.#c.nextHand();
         break;
       case 'new-match':
         this.#q<HTMLDialogElement>('results').close();
@@ -536,7 +617,7 @@ export class TableScreen {
       case 'confirm-no':
         this.#pendingConfirm = null;
         this.#q<HTMLDialogElement>('confirm').close();
-        this.#s.resume();
+        this.#c.resume();
         break;
       case 'confirm-yes': {
         const kind = this.#pendingConfirm;

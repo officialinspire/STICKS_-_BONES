@@ -327,10 +327,75 @@
 - Partnership with two humans and pass-and-play isn't exposed in the menu.
 - Carried over: ≈ 8 MB PNG payload, large-atlas bleed, dev-only `minimatch` advisory, no deploy workflow.
 
-## Next stage — Stage 5: Persistence, presentation and polish
+## Stage 5 — Two humans on one device ✅ (2026-11-16)
 
-Local save/resume (`serializeMatch` → localStorage, restored through
-`GameSession.load`), an event-driven animation queue (slide-in, draw, pass, host
-gestures from the 6-frame strips, effect sprites), settings (table setting picker
-from the seven environments, reduced motion, AI speed), two-human Partnership,
-WebP derivatives, and a GitHub Pages deploy workflow if authorized.
+### Completed
+
+- **Two-human play in Draw, Block and Partnership.** Partnership seating is chosen
+  before dealing: Player 2 across (partners), on the right, or on the left
+  (opponents). Computers fill the other two seats. Player names flow into the
+  match config, scores and covers. See `docs/SHARED_DEVICE.md`.
+- **Controller state machine** (`src/app/privacy.ts`): `covered`, `revealing`,
+  `human-turn`, `ai-turn`, `round-results`, `paused`. It is independent of game
+  legality. Two explicit taps reveal a hand (*Ready*, then *Reveal hand*). Pause, tab
+  hide, `pagehide`, orientation change, resume and restore all land on the cover.
+- **TableController** (`src/app/controller.ts`):
+  - The only object the UI talks to. It renders one revealed human's view or a
+    concealed public table.
+  - It redacts events for the revealed seat, and forwards intents only from the
+    revealed human on turn.
+  - Pausing cancels pending AI and resolve timers through the session's epoch tokens.
+- **Engine:** `concealedView(state, perspective)` (no hand from any seat) and
+  `SeatView.concealed`. `createMatchConfig` accepts display names.
+- **GameSession** is now seat-explicit (`play/draw/pass(seat, …)`, `viewFor`,
+  `concealedView`). Its viewer/handoff logic moved to the controller, and it emits
+  raw events for the controller only. It also supports custom human seats, names,
+  and AI RNG export/import.
+- **Table UI:**
+  - An opaque privacy cover outside the table, with the table `inert` and
+    `aria-hidden` while it's up.
+  - No hand in the DOM unless revealed, a public message during computer turns,
+    and public-only bubble/live-region text (never a drawn tile).
+  - Status and selection are cleared when the hand isn't revealed.
+- **Local save/resume** (`src/app/save.ts`): autosave after every change, Resume or
+  Discard in the menu with a public summary, full re-validation on load, and
+  tolerant of storage that throws. Restored two-human games open covered.
+  Developer matches aren't saved.
+- **Menu:** two-player options for every mode (names, Partnership seating), the
+  skill option shown only when a computer plays, and fieldsets fixed so the
+  setup fits at 320 px.
+
+### Commands run and results
+
+| Command | Result |
+| --- | --- |
+| `npm run typecheck` / `npm run lint` | pass |
+| `npm test` | pass, **183 tests in 16 files**. New: `privacy.test.ts` (6 state-machine cases); `controller.test.ts` (9): all five seatings × 3+ complete hands with random tab-hide/resume and orientation events, a privacy scan of the rendered view at every step, covered→revealing before every human turn, no drawn tile while covered, turn order from the public log, scores and team names; AI turns between humans; restore opens covered; solo never covers; covered intents ignored. `save.test.ts` (3): round trip, tampered/finished/dev saves rejected, throwing storage. Session tests updated for the seat-explicit API |
+| `npm run assets:verify` / `npm run build` | pass |
+| `npm run e2e` | pass. Five two-human seatings × 2 complete hands each, with 0 hand flashes recorded by a DOM mutation observer. While covered: no hand tiles or private `data-tile`, table `inert`, the cover is `aria-modal`, the accessibility snapshot has no hand labels, and no drawn tile in the live region or bubble. Tab hide, orientation change and a cancelled menu each re-cover, followed by an explicit re-reveal. Reload → Resume (public summary, no tile ids) → covered with no hydration flash. Menu fits at 320 px. Solo, ghost-tile, pause, pip-rotation, fixture and keyboard checks from earlier stages all still pass |
+
+### Decisions recorded
+
+- "Not \<name\>" on the reveal step returns to the pass-the-device cover.
+- Opening a confirmation dialog pauses the table. In two-human games, cancelling it
+  re-covers the hand, as the spec requires ("on pause … default to covered").
+- Bubble and live-region text are always public on a shared device. Private hints
+  appear only in the status line next to the revealed hand.
+- Leaving a match keeps its save (Resume from the menu). Restart starts fresh.
+
+### Known issues
+
+- Privacy is ordinary shared-device protection: the save and devtools expose
+  everything (documented).
+- The cover is a deliberate two-tap flow, which some players may find slow. A
+  setting could merge the steps later.
+- Carried over: no animation queue or audio, ≈ 8 MB PNG payload, large-atlas
+  bleed, dev-only `minimatch` advisory, no deploy workflow.
+
+## Next stage — Stage 6: Presentation and polish
+
+An event-driven animation queue (slide-in, draw, pass, host gestures from the
+6-frame strips, effect sprites) that is cancelled on reset/cover and never
+animates hidden tiles; settings (table setting picker from the seven
+environments, reduced motion, AI speed); audio hooks for the owner's music;
+WebP derivatives; and a GitHub Pages deploy workflow if authorized.

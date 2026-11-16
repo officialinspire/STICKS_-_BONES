@@ -17,15 +17,15 @@ import { inlineRunner, type AiRunner } from '../ai/runner';
 import type { Decision, Difficulty } from '../ai/types';
 import type { Command, CommandError } from '../engine/commands';
 import { createMatchConfig, type MatchConfig } from '../engine/config';
-import { redactEventsForSeat, type GameEvent } from '../engine/events';
+import type { GameEvent } from '../engine/events';
 import { checkInvariants } from '../engine/invariants';
 import type { EndId } from '../engine/line';
 import { applyCommand, createMatch, rulesOf } from '../engine/match';
-import { seedRng, type RngState } from '../engine/rng';
+import { isRngState, seedRng, type RngState } from '../engine/rng';
 import type { ModeRules } from '../engine/rules/presets';
 import type { MatchState } from '../engine/state';
 import type { ModeId, SeatIndex, TargetScore, TileId } from '../engine/types';
-import { seatView, type SeatView } from '../engine/view';
+import { concealedView, seatView, type SeatView } from '../engine/view';
 
 /** 'ai' = solo vs AI seats; 'local' = two humans pass-and-play; 'dev-both' = developer controls both seats, no handoff. */
 export type OpponentKind = 'ai' | 'local' | 'dev-both';
@@ -33,6 +33,10 @@ export type OpponentKind = 'ai' | 'local' | 'dev-both';
 export interface SessionOptions {
   readonly mode: ModeId;
   readonly opponent: OpponentKind;
+  /** Seats for the local humans in slot order. Defaults: solo [0]; two humans [0, 1]. Partnership allows [0, 1], [0, 2] or [0, 3]. */
+  readonly humanSeats?: readonly SeatIndex[];
+  /** Display names by human slot (Player 1, Player 2). */
+  readonly names?: readonly string[];
   readonly targetScore?: TargetScore;
   readonly difficulty?: Difficulty;
   /** Shuffle seed (secret). */
@@ -79,20 +83,26 @@ interface PendingAi {
 
 const PARTNERSHIP_NAMES = ['You', 'Cousin', 'Luz', 'Tío Rafa'];
 
+/** Sanitize a typed player name: printable, trimmed, at most 20 characters. */
+export function cleanName(raw: string | undefined): string {
+  // eslint-disable-next-line no-control-regex
+  return (raw ?? '').replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim().slice(0, 20);
+}
+
 export class GameSession {
   readonly opponent: OpponentKind;
   readonly difficulty: Difficulty;
   readonly config: MatchConfig;
   readonly rules: ModeRules;
   readonly stats = { aiDecisions: 0, staleDiscarded: 0 };
+  /** Seats controlled by local humans, in slot order. */
+  readonly humanSeats: readonly SeatIndex[];
   #state: MatchState;
   #listeners = new Set<SessionListener>();
   #timer: unknown = null;
   #pending: PendingAi | null = null;
   #epoch = 0;
   #paused = false;
-  #viewer: SeatIndex = 0;
-  #handoffPending = false;
   #lastError: CommandError | null = null;
   #disposed = false;
   #aiRng: RngState[];
@@ -101,7 +111,16 @@ export class GameSession {
   readonly #runner: AiRunner;
 
   constructor(
-    opts: SessionOptions | { readonly state: MatchState; readonly opponent: OpponentKind; readonly difficulty?: Difficulty; readonly aiSeed: number | string },
+    opts:
+      | SessionOptions
+      | {
+          readonly state: MatchState;
+          readonly opponent: OpponentKind;
+          readonly difficulty?: Difficulty;
+          readonly aiSeed?: number | string;
+          /** Restored AI streams (from a save). */
+          readonly aiRng?: readonly RngState[];
+        },
     deps: SessionDeps = {},
   ) {
     this.#scheduler = deps.scheduler ?? realScheduler;
@@ -114,8 +133,13 @@ export class GameSession {
       this.config = opts.state.config;
     } else {
       this.opponent = opts.opponent;
-      const humanSeats: SeatIndex[] = opts.opponent === 'ai' ? [0] : [0, opts.mode === 'partnership4' ? 2 : 1];
-      const cfg = createMatchConfig({ mode: opts.mode, humanSeats, ...(opts.targetScore ? { targetScore: opts.targetScore } : {}) });
+      const humanSeats: readonly SeatIndex[] = opts.opponent === 'ai' ? [0] : (opts.humanSeats ?? [0, 1]);
+      const displayNames: Record<number, string> = {};
+      humanSeats.forEach((seat, slot) => {
+        const n = cleanName(opts.names?.[slot]);
+        if (n && opts.opponent !== 'ai') displayNames[seat] = n;
+      });
+      const cfg = createMatchConfig({ mode: opts.mode, humanSeats, displayNames, ...(opts.targetScore ? { targetScore: opts.targetScore } : {}) });
       if (!cfg.ok) throw new Error(cfg.errors.map((e) => e.message).join('; '));
       const created = createMatch(cfg.config, opts.seed);
       if (!created.ok) throw new Error(created.errors.join('; '));
@@ -124,19 +148,17 @@ export class GameSession {
     }
     this.rules = rulesOf(this.config);
     // One independent AI stream per seat, never derived from the shuffle RNG.
-    this.#aiRng = Array.from({ length: this.rules.seatCount }, (_, s) => seedRng(`ai:${String(opts.aiSeed)}:${s}`));
-    this.#syncViewer(true);
+    const restored = 'state' in opts ? opts.aiRng : undefined;
+    this.#aiRng =
+      restored && restored.length === this.rules.seatCount && restored.every(isRngState)
+        ? [...restored]
+        : Array.from({ length: this.rules.seatCount }, (_, s) => seedRng(`ai:${String(opts.aiSeed ?? 0)}:${s}`));
+    this.humanSeats = this.config.seats.filter((x) => x.controller.kind === 'human').map((x) => x.seat);
     this.#schedule();
   }
 
   // ---- reading --------------------------------------------------------------
 
-  get viewer(): SeatIndex {
-    return this.#viewer;
-  }
-  get handoffPending(): boolean {
-    return this.#handoffPending;
-  }
   get lastError(): CommandError | null {
     return this.#lastError;
   }
@@ -150,13 +172,29 @@ export class GameSession {
   get aiThinking(): boolean {
     return this.#pending !== null;
   }
-  view(): SeatView {
-    return seatView(this.#state, this.#viewer);
+  /** Private view for one seat. Only the TableController decides when this may be shown. */
+  viewFor(seat: SeatIndex): SeatView {
+    return seatView(this.#state, seat);
+  }
+  /** Public table with every hand concealed, laid out from `perspective`. */
+  concealedView(perspective: SeatIndex): SeatView {
+    return concealedView(this.#state, perspective);
+  }
+  get phase(): MatchState['phase'] {
+    return this.#state.phase;
+  }
+  get turn(): SeatIndex {
+    return this.#state.hand.turn;
+  }
+  get seq(): number {
+    return this.#state.seq;
   }
   isHuman(seat: SeatIndex): boolean {
     return this.config.seats[seat]?.controller.kind === 'human';
   }
   seatName(seat: SeatIndex): string {
+    const custom = this.config.seats[seat]?.displayName;
+    if (custom) return custom;
     if (this.rules.seatCount === 4) {
       const c = this.config.seats[seat]!.controller;
       if (c.kind === 'human' && this.opponent !== 'ai') return `Player ${c.slot + 1}`;
@@ -169,17 +207,25 @@ export class GameSession {
     const seats = this.rules.teams[team]!;
     return seats.map((s) => this.seatName(s)).join(' & ');
   }
-  /** True when the viewer may act right now (their turn, no handoff screen, not paused). */
-  canAct(): boolean {
-    const v = this.view();
-    return v.phase === 'playing' && v.turn === this.#viewer && this.isHuman(this.#viewer) && !this.#handoffPending && !this.#paused;
+  /** True when `seat` is a human on turn and the session is not paused. */
+  canAct(seat: SeatIndex): boolean {
+    const s = this.#state;
+    return s.phase === 'playing' && s.hand.turn === seat && this.isHuman(seat) && !this.#paused && !this.#disposed;
+  }
+  /** AI RNG streams, for saving. */
+  exportAiRng(): RngState[] {
+    return [...this.#aiRng];
   }
 
-  /** Dev/test hook: the full secret state. Never call from production UI. */
+  /** The full secret state — for saves, tests and dev tools only. Never render from it. */
   debugState(): MatchState {
     return this.#state;
   }
 
+  /**
+   * Raw (unredacted) engine events. Only the TableController may subscribe; it
+   * redacts them for whichever seat, if any, is currently revealed.
+   */
   subscribe(fn: SessionListener): () => void {
     this.#listeners.add(fn);
     return () => this.#listeners.delete(fn);
@@ -187,23 +233,18 @@ export class GameSession {
 
   // ---- intents ----------------------------------------------------------------
 
-  play(tile: TileId, end: EndId): boolean {
-    return this.#humanCommand({ type: 'play', seq: this.#state.seq, seat: this.#viewer, tile, end });
+  play(seat: SeatIndex, tile: TileId, end: EndId): boolean {
+    return this.#humanCommand(seat, { type: 'play', seq: this.#state.seq, seat, tile, end });
   }
-  draw(): boolean {
-    return this.#humanCommand({ type: 'draw', seq: this.#state.seq, seat: this.#viewer });
+  draw(seat: SeatIndex): boolean {
+    return this.#humanCommand(seat, { type: 'draw', seq: this.#state.seq, seat });
   }
-  pass(): boolean {
-    return this.#humanCommand({ type: 'pass', seq: this.#state.seq, seat: this.#viewer });
+  pass(seat: SeatIndex): boolean {
+    return this.#humanCommand(seat, { type: 'pass', seq: this.#state.seq, seat });
   }
   nextHand(): boolean {
     if (this.#state.phase !== 'hand-resolved' || this.#paused) return false;
     return this.#apply({ type: 'start-next-hand', seq: this.#state.seq });
-  }
-  confirmHandoff(): void {
-    if (!this.#handoffPending) return;
-    this.#handoffPending = false;
-    this.#emit([]);
   }
   /** Stop all automation (AI thinking, auto-resolve). Outstanding decisions become stale. */
   pause(): void {
@@ -223,7 +264,6 @@ export class GameSession {
     if (this.#disposed || checkInvariants(state).length || state.config.mode !== this.config.mode) return false;
     this.#cancelAutomation();
     this.#state = state;
-    this.#syncViewer(true);
     this.#emit([]);
     this.#schedule();
     return true;
@@ -236,8 +276,8 @@ export class GameSession {
 
   // ---- internals --------------------------------------------------------------
 
-  #humanCommand(cmd: Command): boolean {
-    if (!this.canAct()) return false;
+  #humanCommand(seat: SeatIndex, cmd: Command): boolean {
+    if (!this.canAct(seat)) return false;
     return this.#apply(cmd);
   }
 
@@ -251,31 +291,13 @@ export class GameSession {
     }
     this.#lastError = null;
     this.#state = r.state;
-    this.#syncViewer(cmd.type === 'start-next-hand');
     this.#emit(r.events);
     this.#schedule();
     return true;
   }
 
-  /** Pick which seat's private view is shown, raising a handoff screen between two humans. */
-  #syncViewer(newHand: boolean): void {
-    const s = this.#state;
-    if (s.phase !== 'playing') return;
-    const turn = s.hand.turn;
-    if (!this.isHuman(turn)) return;
-    if (this.opponent === 'local') {
-      if (turn !== this.#viewer || newHand) {
-        this.#viewer = turn;
-        this.#handoffPending = true;
-      }
-    } else {
-      this.#viewer = turn;
-    }
-  }
-
   #emit(events: readonly GameEvent[]): void {
-    const visible = redactEventsForSeat(events, this.#viewer);
-    for (const fn of this.#listeners) fn(visible);
+    for (const fn of this.#listeners) fn(events);
   }
 
   #cancelAutomation(): void {

@@ -43,6 +43,12 @@ export interface SeatView {
   readonly openingRule: OpeningRule['kind'];
   /** Public action log for the current hand. */
   readonly log: readonly PublicAction[];
+  /**
+   * True for a concealed (public-table) view: no seat's hand, no legal moves,
+   * and the opening requirement hidden until played. Used on shared devices
+   * while no human's hand should be visible.
+   */
+  readonly concealed: boolean;
 }
 
 export function seatView(state: MatchState, viewer: SeatIndex): SeatView {
@@ -76,5 +82,23 @@ export function seatView(state: MatchState, viewer: SeatIndex): SeatView {
     teams: rules.teams,
     openingRule: h.openingRule,
     log: h.log,
+    concealed: false,
+  };
+}
+
+/**
+ * The public table as seen from `perspective` (which seat sits at the bottom),
+ * with every hand concealed. Contains no tile from any hand; past results
+ * (revealed at hand end) and the board are public.
+ */
+export function concealedView(state: MatchState, perspective: SeatIndex): SeatView {
+  const v = seatView(state, perspective);
+  const h = state.hand;
+  return {
+    ...v,
+    myHand: [],
+    legalMoves: [],
+    requirement: h.line.tiles.length === 0 && h.requirement.kind === 'tile' ? { kind: 'hidden-tile' } : v.requirement,
+    concealed: true,
   };
 }

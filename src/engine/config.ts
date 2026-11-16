@@ -178,6 +178,8 @@ export interface CreateMatchOptions {
    * makes them opponents; both are allowed.
    */
   readonly humanSeats?: readonly SeatIndex[];
+  /** Optional display names by seat (validated like any displayName). */
+  readonly displayNames?: Readonly<Partial<Record<number, string>>>;
   readonly preset?: RulesPreset;
 }
 
@@ -190,9 +192,11 @@ export function createMatchConfig(opts: CreateMatchOptions): ValidationResult {
   const humanSeats = opts.humanSeats ?? [0];
   const seats = Array.from({ length: rules.seatCount }, (_, seat) => {
     const slot = humanSeats.indexOf(seat as SeatIndex);
+    const name = opts.displayNames?.[seat];
     return {
       seat,
       controller: slot >= 0 ? { kind: 'human', slot } : { kind: 'ai', profile: 'standard' },
+      ...(name !== undefined ? { displayName: name } : {}),
     };
   });
   const extra = humanSeats.filter((s) => s >= rules.seatCount || humanSeats.indexOf(s) !== humanSeats.lastIndexOf(s));

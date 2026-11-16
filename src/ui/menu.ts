@@ -17,11 +17,29 @@ export interface MenuChoice {
   devFixture?: string;
   devForceSvg?: boolean;
   devFastAi?: boolean;
+  /** Two humans: names for Player 1 and Player 2. */
+  names?: string[];
+  /** Two humans in Partnership: where Player 2 sits relative to Player 1. */
+  seating?: 'across' | 'right' | 'left';
+}
+
+export interface ResumeOffer {
+  readonly summary: string;
+  readonly twoHumans: boolean;
+}
+
+export interface MenuHandlers {
+  readonly dev: boolean;
+  readonly resume: ResumeOffer | null;
+  onStart(c: MenuChoice): void;
+  onResume(): void;
+  onDiscard(): void;
 }
 
 const PLAYABLE: ModeId[] = ['draw2', 'block2', 'partnership4'];
 
-export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, onStart: (c: MenuChoice) => void, dev: boolean): void {
+export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: MenuHandlers): void {
+  const { dev, onStart } = h;
   const preset = DEFAULT_RULES_PRESET;
   const env = assetUrl('env.neighborhood-patio');
   if (env) root.style.setProperty('--env-image', `url("${env}")`);
@@ -61,14 +79,33 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, onSt
         <p class="speech">¡Wepa! Pull up a chair, primo. Pick a game and let’s shuffle the bones.</p>
       </section>
       <section class="table" aria-hidden="true"><div class="line">${dominoSvg(6, 6, { className: 'is-double' })}${dominoSvg(6, 4, { orientation: 'horizontal' })}${dominoSvg(4, 1, { orientation: 'horizontal' })}${dominoSvg(1, 1, { className: 'is-double' })}${dominoSvg(1, 0, { orientation: 'horizontal' })}</div></section>
+      ${
+        h.resume
+          ? `<section class="resume" aria-labelledby="resume-heading"><h2 id="resume-heading">Game in progress</h2><p>${esc(h.resume.summary)}</p>${h.resume.twoHumans ? '<p class="note">Hands stay hidden until the right player reveals them.</p>' : ''}<div class="row"><button type="button" class="btn" data-act="resume">Resume</button><button type="button" class="btn-ghost dark" data-act="discard">Discard</button></div></section>`
+          : ''
+      }
       <form class="modes" aria-labelledby="modes-heading">
         <h2 id="modes-heading">New game</h2>
         <fieldset><legend>Game</legend><div class="choice-grid">${modeCards}</div></fieldset>
         <fieldset><legend>Opponent</legend><div class="row">
           <label class="check"><input type="radio" name="opponent" value="ai" ${initial.opponent !== 'local' ? 'checked' : ''}> Play the computer</label>
           <label class="check" data-local><input type="radio" name="opponent" value="local" ${initial.opponent === 'local' ? 'checked' : ''}> Two players, one device</label>
-        </div><p class="note" data-p4-note hidden>Partnership: you and Luz (computer) against Cousin and Tío Rafa (computer).</p></fieldset>
-        <fieldset><legend>Computer skill</legend><div class="row">
+        </div><p class="note" data-p4-note hidden>Partnership: you and Luz (computer) against Cousin and Tío Rafa (computer).</p>
+        <div class="two-players" data-two hidden>
+          <div class="row">
+            <label class="field">Player 1 <input name="name1" type="text" maxlength="20" autocomplete="off" value="${esc(initial.names?.[0] ?? '')}" placeholder="Player 1"></label>
+            <label class="field">Player 2 <input name="name2" type="text" maxlength="20" autocomplete="off" value="${esc(initial.names?.[1] ?? '')}" placeholder="Player 2"></label>
+          </div>
+          <label class="field" data-seating hidden>Where does Player 2 sit?
+            <select name="seating">
+              <option value="across" ${initial.seating === 'across' || !initial.seating ? 'selected' : ''}>Across — partners</option>
+              <option value="right" ${initial.seating === 'right' ? 'selected' : ''}>Right of Player 1 — opponents (plays next)</option>
+              <option value="left" ${initial.seating === 'left' ? 'selected' : ''}>Left of Player 1 — opponents (plays before)</option>
+            </select>
+          </label>
+          <p class="note">You’ll pass the device between turns. Each hand stays covered until its owner taps Reveal.</p>
+        </div></fieldset>
+        <fieldset data-skill><legend>Computer skill</legend><div class="row">
           ${(['easy', 'normal', 'hard'] as Difficulty[])
             .map(
               (d) =>
@@ -96,21 +133,36 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, onSt
       difficulty: (fd.get('difficulty') as Difficulty) ?? 'normal',
       ...(dev && seed ? { devSeed: seed } : {}),
       ...(dev && String(fd.get('aiSeed') ?? '').trim() ? { devAiSeed: String(fd.get('aiSeed')).trim() } : {}),
+      names: [String(fd.get('name1') ?? ''), String(fd.get('name2') ?? '')],
+      seating: (fd.get('seating') as MenuChoice['seating']) ?? 'across',
       ...(dev ? { devForceSvg: fd.get('forceSvg') === 'on', devFastAi: fd.get('fastAi') === 'on' } : {}),
     };
   };
-  // Partnership is solo-only for now: three computer seats.
-  const syncMode = () => {
+  // Show only the options that apply: names/seating for two humans, skill when a computer plays.
+  const syncOptions = () => {
     const p4 = (form.querySelector('input[name="mode"]:checked') as HTMLInputElement | null)?.value === 'partnership4';
-    const local = form.querySelector('input[name="opponent"][value="local"]') as HTMLInputElement;
-    local.disabled = p4;
-    if (p4 && local.checked) (form.querySelector('input[name="opponent"][value="ai"]') as HTMLInputElement).checked = true;
-    (form.querySelector('[data-p4-note]') as HTMLElement).hidden = !p4;
-    const target = Number((form.querySelector(`input[name="mode"]:checked`) as HTMLInputElement | null)?.value === 'partnership4' ? 200 : 100);
-    (form.querySelector(`input[name="target"][value="${target}"]`) as HTMLInputElement).checked = true;
+    const opp = (form.querySelector('input[name="opponent"]:checked') as HTMLInputElement | null)?.value;
+    const two = opp === 'local' || opp === 'dev-both';
+    (form.querySelector('[data-p4-note]') as HTMLElement).hidden = !(p4 && !two);
+    (form.querySelector('[data-two]') as HTMLElement).hidden = !two;
+    (form.querySelector('[data-seating]') as HTMLElement).hidden = !(p4 && two);
+    (form.querySelector('[data-skill]') as HTMLElement).hidden = two && !p4;
   };
-  form.querySelectorAll('input[name="mode"]').forEach((i) => i.addEventListener('change', syncMode));
-  syncMode();
+  const syncTarget = () => {
+    const p4 = (form.querySelector('input[name="mode"]:checked') as HTMLInputElement | null)?.value === 'partnership4';
+    (form.querySelector(`input[name="target"][value="${p4 ? 200 : 100}"]`) as HTMLInputElement).checked = true;
+  };
+  form.querySelectorAll('input[name="mode"]').forEach((i) =>
+    i.addEventListener('change', () => {
+      syncTarget();
+      syncOptions();
+    }),
+  );
+  form.querySelectorAll('input[name="opponent"]').forEach((i) => i.addEventListener('change', syncOptions));
+  syncTarget();
+  syncOptions();
+  root.querySelector('[data-act="resume"]')?.addEventListener('click', () => h.onResume());
+  root.querySelector('[data-act="discard"]')?.addEventListener('click', () => h.onDiscard());
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     onStart(read());
