@@ -722,9 +722,65 @@ What `npm run pwa` covered:
 - Music and the (unsupplied) intro video are never cached: offline play is silent.
 - Storage is best effort (no `navigator.storage.persist()` request).
 
-## Next stage — Stage 11: Release prep
+## Stage 11 — Release prep: analytics adapter, CI, Pages workflow, handoff ✅ (2026-11-16)
 
-A table setting picker for the other six environments (new derivatives through
-`assets:derive`), stripped-cover music derivatives, the real-device and
-Firefox/WebKit passes from `docs/QA.md`, and a GitHub Pages deploy workflow if
-authorized.
+Full handoff: `docs/RELEASE_HANDOFF.md`. Also new: `RELEASE_NOTES.md`,
+`docs/ANALYTICS.md`, `docs/PLAYTEST.md`.
+
+### Completed
+
+- **Analytics: inspected first, then a disabled adapter.**
+  - This repository has no analytics implementation, configuration, consent
+    behaviour, keys or attribution contract.
+  - A code search of the owner's account found one in `officialinspire/SPIRITBALL`
+    (`js/analytics.js` + QA). Attaching that repository was **refused**, so it was
+    not inspected and nothing from it was copied.
+  - `src/app/analytics.ts` covers these events: `game_launch`, `match_start`
+    (fresh/rematch/restart, on the first real move), `match_resume` (explicit,
+    never a start), `round_end`, `match_end`, and sanitised `app_error`.
+  - Every payload is rebuilt from a per-event allowlist, so no hands, seeds,
+    moves, names, saves or images can be included. Events are de-duplicated
+    against re-renders, restores, rematches and double taps.
+  - It is **disabled**: no transport, consent treated as "not granted". No
+    query parameters are read; promo/launch-ID support is pending a contract.
+- **Complete matches in every supported arrangement** (`npm run matches`): 3 vs
+  the computer + 5 two-human (Draw, Block, Partnership across/right/left).
+- **Grammar fix:** team names now take "win" ("Cousin & Tío Rafa win the match!").
+- **CI** (`.github/workflows/ci.yml`): typecheck, lint, unit/engine tests, asset
+  verify, build (budget + base path + PWA), browser smoke (`npm run smoke`) on
+  every push and pull request.
+- **Pages deploy** (`.github/workflows/deploy-pages.yml`): runs only on a push to
+  `main` or a manual dispatch; check + smoke, then upload `dist/`. **Not run, and
+  nothing is deployed.**
+
+### Commands run and results
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | pass, 250 tests in 27 files |
+| `npm run e2e` | pass |
+| `npm run matches` | pass: 8/8 complete matches, clean console, analytics labels correct |
+| `npm run pwa` | pass, offline cache 1,672,882 B |
+| `npm run qa` / `npm run a11y` | 0 failures / 0 failures |
+| `npm run smoke` | pass |
+| GitHub Actions CI | run 1 on c6fd219 (https://github.com/officialinspire/STICKS_-_BONES/actions/runs/43943799338): in progress when this was written; result recorded in the next commit |
+
+### Known issues
+
+The list is in `docs/RELEASE_HANDOFF.md` §3:
+- analytics inputs are still needed;
+- placeholder SFX and ambience;
+- music loops unauditioned;
+- intro video missing;
+- Firefox, WebKit and real devices untested;
+- platform PWA limits.
+
+## Next stage
+
+Owner actions:
+1. Supply the analytics contract.
+2. Enable Pages (Source: GitHub Actions) and authorize the merge to `main`; the
+   deploy runs on that push.
+3. Confirm the live URL.
+4. Run `docs/PLAYTEST.md` on real devices.
+5. Supply final SFX and the intro video, and audition the music loops.
