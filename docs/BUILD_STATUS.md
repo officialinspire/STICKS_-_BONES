@@ -527,9 +527,68 @@
   diagnostics now print the full table state if it happens again.
 - Music files embed 1.4 MB of cover art (a stripped derivative would save space).
 
-## Next stage — Stage 8: Versioned saves, statistics, help and results arithmetic
+## Stage 8 — Versioned saves, statistics, help and results arithmetic ✅ (2026-11-16)
 
-Versioned match/settings saves with validation and graceful recovery, restore
-without double scoring or stale moves, local statistics (completed, wins/losses,
-abandoned kept separate), a rules/help screen grounded in RULES.md, and pip
-arithmetic on the results sheet.
+### Completed
+
+- **Versioned local records** (`src/app/storage.ts`): `{format, version, data}`
+  envelopes for the match save (v2, migrates the Stage 5 save), settings (v2,
+  migrates the legacy object) and statistics (v1).
+  - Reading never throws.
+  - Damaged data is "corrupt"; newer data or an unknown rules preset is
+    "incompatible". Either way it is quarantined to `<key>.quarantine` and the menu
+    explains what happened.
+  - Blocked storage is announced too.
+- **Match saves** (`src/app/save.ts`): full deterministic engine state with the
+  preset id and version, the AI RNG streams, the setup and a match id. No
+  presentation state.
+  - Restore re-derives everything: an AI turn asks once afresh (a stale in-flight
+    decision is dropped), a finished hand is scored exactly once, an already-scored
+    hand keeps its score.
+  - Two-human games open covered.
+  - Autosave after every change; a finished match clears its save.
+- **Actions in every state:** resume, next hand, rematch/restart, menu and reset
+  all work during human turns, AI thinking, results and handoffs. The cover has a
+  new "Save & leave to menu" button, because under the cover the table is
+  inert, so Pause was unreachable.
+- **Statistics** (`src/app/stats.ts`, menu → Statistics):
+  - wins and losses vs the computer by mode × difficulty;
+  - two-player completed matches, plus the partners' win–loss record;
+  - **abandoned kept separate from losses** (discard, restart, or replacement by a
+    new game; leaving to the menu keeps the save);
+  - recorded once per match id; a two-tap reset.
+- **Help screen** (`src/ui/help.ts`): written from RULES.md, covering opening,
+  drawing/passing, blocked scoring, counterclockwise turn order (diagram) and the
+  bonus exclusions. Tests cross-check it against RULES.md and the presets.
+- **Results arithmetic** (`src/app/explain.ts`): per-hand pip sums (zero-pip tiles
+  and empty hands shown), team sums, the decision, and the points rule with its
+  arithmetic. Always equal to the engine's points.
+- **Fixed — a Stage 7 regression in `main.ts`:** a script edit had duplicated the
+  boot block into `onDiscard` and `resume`, so **Discard re-ran the start screen**.
+  It compiled and wasn't covered by a test. `main.ts` is rewritten, and e2e now
+  checks Discard.
+- New dev fixture `match-point-solo` (counts in statistics).
+- Docs: `docs/SAVES.md`.
+
+### Commands run and results
+
+| Command | Result |
+| --- | --- |
+| `npm run typecheck` / `npm run lint` | pass |
+| `npm test` | pass, **232 tests in 24 files**. New: storage recovery (missing/ok/migrated/corrupt/newer/unavailable, quarantine), settings migration and fallback, save v2 round trip, v1 migration, tampered/unknown-preset/truncated/future saves, restore at hand end (scored once), after scoring (not re-scored, Next hand works), during AI thinking (old decision dropped, one fresh move), uninterrupted vs save-and-resume giving an identical history and scores, statistics (once per id, abandoned ≠ loss, two-player and partners, damaged data), results arithmetic against engine points on more than 150 simulated hands plus tie, zero-pip and preset wording, and the help screen against RULES.md |
+| `npm run assets:verify` / `npm run build` | pass |
+| `npm run e2e` | pass. Refresh during a human turn → Resume gives an identical engine state and match id. Refresh during AI thinking → restored = saved, then fresh AI decisions, 0 stale. Damaged save + settings → notice, quarantined, defaults. Statistics: a win counted once and persisted across reload; leaving to the menu isn't abandoned; replacing or restarting counts as abandoned, never lost. Discard returns to the menu with feedback. Leave/resume during a handoff (covered) and with the results sheet up (no double score, Next hand works). No dead buttons (home, statistics, rules, pause sheet). All earlier stages still pass |
+
+### Known issues
+
+- Statistics and saves are per device and browser (by design, no accounts).
+- The quarantine keeps one slot per record; a second damaged copy replaces the first.
+- Carried over: intro video not yet supplied; placeholder SFX/ambience; music loops
+  await the owner's audition; ≈ 18 MB dist (music streamed on demand).
+
+## Next stage — Stage 9: Performance, accessibility pass and release prep
+
+WebP/AVIF derivatives and stripped-cover music derivatives (as new manifest
+entries), a full accessibility audit (axe + keyboard + screen-reader passes on
+every screen), a table setting picker for the other six environments, and a
+GitHub Pages deploy workflow if authorized.

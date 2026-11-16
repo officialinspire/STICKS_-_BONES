@@ -1,6 +1,6 @@
 # Agent / contributor notes
 
-Read this file, `docs/BUILD_STATUS.md`, `docs/RULES.md`, `docs/ENGINE.md`, `docs/AI.md`, `docs/SHARED_DEVICE.md`, `docs/PRESENTATION.md` and `docs/ASSETS.md`
+Read this file, `docs/BUILD_STATUS.md`, `docs/RULES.md`, `docs/ENGINE.md`, `docs/AI.md`, `docs/SHARED_DEVICE.md`, `docs/PRESENTATION.md`, `docs/AUDIO.md`, `docs/SAVES.md` and `docs/ASSETS.md`
 before you change anything.
 
 ## Ground rules
@@ -37,6 +37,8 @@ before you change anything.
 - **Presentation never drives the game:** animations, effects, banter and host frames react to events
   after they are applied, are never awaited, honour reduced motion, stay `pointer-events: none` and
   below end targets/HUD. Character art renders through `src/render/stage.ts` boxes only.
+- **Local records are versioned envelopes** (`src/app/storage.ts`). Bump the version and add a migration
+  for any shape change; never save presentation state; a restore must not re-score or replay an AI move.
 - **Scope:** no campaign, economy, shops, quests, online multiplayer or required backend.
 
 ## Before you finish a stage

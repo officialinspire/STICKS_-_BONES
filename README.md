@@ -9,7 +9,7 @@ the browser, with no backend, accounts or online play.
 > computer (Easy, Normal or Hard; see [docs/AI.md](docs/AI.md)) or by two people
 > sharing one device, with a privacy cover between turns (see
 > [docs/SHARED_DEVICE.md](docs/SHARED_DEVICE.md)). Games autosave locally and can
-> be resumed. Cousin hosts with expressions, a slam animation and optional table
+> be resumed (versioned saves; see [docs/SAVES.md](docs/SAVES.md)). Cousin hosts with expressions, a slam animation and optional table
 > talk; see [docs/PRESENTATION.md](docs/PRESENTATION.md). See
 > [docs/BUILD_STATUS.md](docs/BUILD_STATUS.md).
 
@@ -60,7 +60,7 @@ No deployment workflow is set up yet.
 
 ```
 assets/art/        Owner's source art (unaltered, see assets/art/README.md)
-docs/              RULES.md, ENGINE.md, AI.md, SHARED_DEVICE.md, PRESENTATION.md, ASSETS.md, BUILD_STATUS.md
+docs/              RULES.md, ENGINE.md, AI.md, SHARED_DEVICE.md, PRESENTATION.md, AUDIO.md, SAVES.md, ASSETS.md, BUILD_STATUS.md
 scripts/           Asset verification + measurement, dist check
 src/engine/        Pure, deterministic, serializable game engine (no DOM)
   rules/presets.ts Versioned rules presets ("Cousin's House Rules" v1)
