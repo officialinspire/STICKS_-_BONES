@@ -1,10 +1,16 @@
-/** Start menu: mode, opponent, target. Dev tools appear only in development builds. */
-import { assetUrl, getAsset, getFrame } from '../assets';
+/**
+ * Menus: home, game setup (mode, opponent, seating, difficulty, target, and the
+ * selected mode's rules — visible before dealing), rules, and settings.
+ * Dev tools appear only in development builds.
+ */
+import { assetUrl } from '../assets';
 import type { OpponentKind } from '../app/session';
 import type { Difficulty } from '../ai/types';
 import { DEFAULT_RULES_PRESET, type ModeId, type TargetScore } from '../engine';
 import { dominoSvg } from './domino';
-import { spriteSvg } from './sprite';
+import { hostFigureHtml } from './host';
+import { rulesHtml } from './rules-summary';
+import { bindSettingsPanel, settingsPanelHtml, type SettingsApi } from './settings-panel';
 import { esc } from './svg';
 
 export interface MenuChoice {
@@ -28,9 +34,13 @@ export interface ResumeOffer {
   readonly twoHumans: boolean;
 }
 
+export type MenuScreen = 'home' | 'setup' | 'rules' | 'settings';
+
 export interface MenuHandlers {
   readonly dev: boolean;
   readonly resume: ResumeOffer | null;
+  readonly settings: SettingsApi;
+  readonly screen?: MenuScreen;
   onStart(c: MenuChoice): void;
   onResume(): void;
   onDiscard(): void;
@@ -38,13 +48,69 @@ export interface MenuHandlers {
 
 const PLAYABLE: ModeId[] = ['draw2', 'block2', 'partnership4'];
 
+function shell(inner: string, speech: string, mood: Parameters<typeof hostFigureHtml>[0] = 'explaining'): string {
+  return `
+    <div class="scene">
+      <header class="brand">
+        <h1 class="title">STICKS <span class="amp">&amp;</span> BONES</h1>
+        <p class="tagline">Dominoes in Puerto Rico · hosted by Roberto “Cousin”</p>
+      </header>
+      <section class="host" aria-label="Your host">
+        <div class="host-figure">${hostFigureHtml(mood, 'full')}</div>
+        <p class="speech">${esc(speech)}</p>
+      </section>
+      ${inner}
+      <footer class="footer"><p><strong>${esc(DEFAULT_RULES_PRESET.name)}</strong> v${DEFAULT_RULES_PRESET.version}. ${esc(DEFAULT_RULES_PRESET.disclaimer)}</p></footer>
+    </div>`;
+}
+
+const SAMPLE_LINE = `<section class="table" aria-hidden="true"><div class="line">${dominoSvg(6, 6, { className: 'is-double' })}${dominoSvg(6, 4, { orientation: 'horizontal' })}${dominoSvg(4, 1, { orientation: 'horizontal' })}${dominoSvg(1, 1, { className: 'is-double' })}${dominoSvg(1, 0, { orientation: 'horizontal' })}</div></section>`;
+
 export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: MenuHandlers): void {
-  const { dev, onStart } = h;
-  const preset = DEFAULT_RULES_PRESET;
   const env = assetUrl('env.neighborhood-patio');
   if (env) root.style.setProperty('--env-image', `url("${env}")`);
-  const sheet = getAsset('cousin.atlas.portrait');
-  const portrait = spriteSvg({ url: assetUrl('cousin.atlas.portrait'), sheetWidth: sheet.width, sheetHeight: sheet.height, rect: getFrame('cousin.atlas.portrait', 'explaining').rect, label: 'Roberto, known as Cousin, your host', className: 'host-portrait' });
+  const go = (screen: MenuScreen) => renderMenu(root, initial, { ...h, screen });
+  const screen = h.screen ?? 'home';
+  const preset = DEFAULT_RULES_PRESET;
+  const back = `<button type="button" class="btn-ghost dark back" data-act="home">← Back</button>`;
+  const wire = () => {
+    root.querySelectorAll<HTMLElement>('[data-act="home"]').forEach((b) => b.addEventListener('click', () => go('home')));
+    root.querySelectorAll<HTMLElement>('[data-go]').forEach((b) => b.addEventListener('click', () => go(b.dataset.go as MenuScreen)));
+  };
+  if (screen === 'home') {
+    root.innerHTML = shell(
+      `${SAMPLE_LINE}
+      <nav class="panel home-nav" aria-label="Main menu">
+        ${h.resume ? `<div class="resume"><h2>Game in progress</h2><p>${esc(h.resume.summary)}</p>${h.resume.twoHumans ? '<p class="note">Hands stay hidden until the right player reveals them.</p>' : ''}<div class="row"><button type="button" class="btn" data-act="resume">Resume</button><button type="button" class="btn-ghost dark" data-act="discard">Discard</button></div></div>` : ''}
+        <button type="button" class="btn btn-start" data-go="setup">New game</button>
+        <div class="row home-row">
+          <button type="button" class="btn-ghost dark" data-go="rules">How to play</button>
+          <button type="button" class="btn-ghost dark" data-go="settings">Settings</button>
+        </div>
+      </nav>`,
+      'Pull up a chair. Pick a game and let’s get the tiles moving.',
+    );
+    wire();
+    root.querySelector('[data-act="resume"]')?.addEventListener('click', () => h.onResume());
+    root.querySelector('[data-act="discard"]')?.addEventListener('click', () => h.onDiscard());
+    return;
+  }
+  if (screen === 'rules') {
+    root.innerHTML = shell(
+      `<section class="panel" aria-labelledby="rules-heading">${back}<h2 id="rules-heading">How to play — ${esc(preset.name)}</h2><p class="note">${esc(preset.disclaimer)}</p><div class="rules-grid">${(['draw2', 'block2', 'partnership4'] as ModeId[]).map((m) => rulesHtml(preset.modes[m])).join('')}</div></section>`,
+      'Same bones, three ways to play. Here’s how my table runs.',
+      'thinking',
+    );
+    wire();
+    return;
+  }
+  if (screen === 'settings') {
+    root.innerHTML = shell(`<section class="panel" aria-labelledby="settings-heading">${back}<h2 id="settings-heading">Settings</h2>${settingsPanelHtml(h.settings.get())}</section>`, 'Set the table how you like it.', 'smirk');
+    wire();
+    bindSettingsPanel(root.querySelector('.settings-panel') as HTMLElement, h.settings);
+    return;
+  }
+  const { dev, onStart } = h;
   const mode = initial.mode ?? 'draw2';
   const modeCards = (['draw2', 'block2', 'partnership4'] as ModeId[])
     .map((m) => {
@@ -64,27 +130,15 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
           <button type="button" class="btn-ghost small" data-fixture="max-board">Max board</button>
           <button type="button" class="btn-ghost small" data-fixture="max-hand">21-tile hand</button>
           <button type="button" class="btn-ghost small" data-fixture="both-ends">Both ends</button>
+          <button type="button" class="btn-ghost small" data-fixture="match-point">Match point</button>
         </div>
         <a class="dev-link" href="./dev/contact-sheet.html">Tile contact sheet →</a>
       </details>`
     : '';
-  root.innerHTML = `
-    <div class="scene">
-      <header class="brand">
-        <h1 class="title">STICKS <span class="amp">&amp;</span> BONES</h1>
-        <p class="tagline">Dominoes in Puerto Rico · hosted by Roberto “Cousin”</p>
-      </header>
-      <section class="host" aria-label="Your host">
-        <div class="host-figure"><div class="host-fallback" aria-hidden="true">R</div>${portrait}</div>
-        <p class="speech">¡Wepa! Pull up a chair, primo. Pick a game and let’s shuffle the bones.</p>
-      </section>
-      <section class="table" aria-hidden="true"><div class="line">${dominoSvg(6, 6, { className: 'is-double' })}${dominoSvg(6, 4, { orientation: 'horizontal' })}${dominoSvg(4, 1, { orientation: 'horizontal' })}${dominoSvg(1, 1, { className: 'is-double' })}${dominoSvg(1, 0, { orientation: 'horizontal' })}</div></section>
-      ${
-        h.resume
-          ? `<section class="resume" aria-labelledby="resume-heading"><h2 id="resume-heading">Game in progress</h2><p>${esc(h.resume.summary)}</p>${h.resume.twoHumans ? '<p class="note">Hands stay hidden until the right player reveals them.</p>' : ''}<div class="row"><button type="button" class="btn" data-act="resume">Resume</button><button type="button" class="btn-ghost dark" data-act="discard">Discard</button></div></section>`
-          : ''
-      }
+  root.innerHTML = shell(
+    `
       <form class="modes" aria-labelledby="modes-heading">
+        ${back}
         <h2 id="modes-heading">New game</h2>
         <fieldset><legend>Game</legend><div class="choice-grid">${modeCards}</div></fieldset>
         <fieldset><legend>Opponent</legend><div class="row">
@@ -117,11 +171,13 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
           <label class="check"><input type="radio" name="target" value="100" checked> 100 points</label>
           <label class="check"><input type="radio" name="target" value="200"> 200 points</label>
         </div></fieldset>
+        <div class="rules-preview" data-rules-preview aria-live="polite"></div>
         <button type="submit" class="btn btn-start">Deal the tiles</button>
         ${devPanel}
-      </form>
-      <footer class="footer"><p><strong>${esc(preset.name)}</strong> v${preset.version}. ${esc(preset.disclaimer)}</p></footer>
-    </div>`;
+      </form>`,
+    'Choose your game. The rules for it are right there before we deal.',
+  );
+  wire();
   const form = root.querySelector('form') as HTMLFormElement;
   const read = (): MenuChoice => {
     const fd = new FormData(form);
@@ -148,6 +204,10 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
     (form.querySelector('[data-seating]') as HTMLElement).hidden = !(p4 && two);
     (form.querySelector('[data-skill]') as HTMLElement).hidden = two && !p4;
   };
+  const syncRules = () => {
+    const m = ((form.querySelector('input[name="mode"]:checked') as HTMLInputElement | null)?.value ?? 'draw2') as ModeId;
+    (form.querySelector('[data-rules-preview]') as HTMLElement).innerHTML = `<p class="kicker">Rules for this game</p>${rulesHtml(preset.modes[m])}`;
+  };
   const syncTarget = () => {
     const p4 = (form.querySelector('input[name="mode"]:checked') as HTMLInputElement | null)?.value === 'partnership4';
     (form.querySelector(`input[name="target"][value="${p4 ? 200 : 100}"]`) as HTMLInputElement).checked = true;
@@ -156,13 +216,13 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
     i.addEventListener('change', () => {
       syncTarget();
       syncOptions();
+      syncRules();
     }),
   );
   form.querySelectorAll('input[name="opponent"]').forEach((i) => i.addEventListener('change', syncOptions));
   syncTarget();
   syncOptions();
-  root.querySelector('[data-act="resume"]')?.addEventListener('click', () => h.onResume());
-  root.querySelector('[data-act="discard"]')?.addEventListener('click', () => h.onDiscard());
+  syncRules();
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     onStart(read());

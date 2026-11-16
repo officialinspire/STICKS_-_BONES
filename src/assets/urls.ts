@@ -13,6 +13,9 @@ export const RUNTIME_ASSET_URLS = {
     '../../assets/art/characters/Eight-expression transparent portrait atlas-2.png',
     import.meta.url,
   ).href,
+  // Optional presentation art: loaded only when an animation/effect first needs it.
+  'cousin.anim.slam': new URL('../../assets/art/characters/Confident six-frame domino slam.png', import.meta.url).href,
+  'fx.sheet': new URL('../../assets/art/effects/Eight polished dominoes effect sprites.png', import.meta.url).href,
   'tile.atlas': new URL('../../assets/generated/tiles/double-six-atlas.png', import.meta.url).href,
   'table.weathered': new URL('../../assets/art/tables/Weathered Caribbean game tabletop.png', import.meta.url).href,
   'env.neighborhood-patio': new URL(

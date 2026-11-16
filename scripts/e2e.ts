@@ -18,6 +18,8 @@ import { fileURLToPath } from 'node:url';
 import { PNG } from 'pngjs';
 import { createServer } from 'vite';
 import { countBlobs } from './lib/raster.ts';
+import { getAsset } from '../src/assets/index.ts';
+import { bustBox, stageFor } from '../src/render/stage.ts';
 
 type Page = import('playwright').Page;
 type Ctx = { message: string; type(): string; text(): string };
@@ -39,11 +41,13 @@ await server.listen();
 const BASE = 'http://localhost:5199/';
 const browser = await chromium.launch();
 
-async function newPage(viewport: { width: number; height: number }, dsf = 1): Promise<Page> {
+async function newPage(viewport: { width: number; height: number }, dsf = 1, opts: { blockedImages?: boolean } = {}): Promise<Page> {
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: dsf });
   const page = await ctx.newPage();
   page.on('pageerror', (e: Ctx) => failures.push(`page error: ${e.message}`));
   page.on('console', (m: Ctx) => {
+    // When a test deliberately blocks images, the browser's own load errors are expected.
+    if (opts.blockedImages && /Failed to load resource/.test(m.text())) return;
     if (m.type() === 'error') failures.push(`console error: ${m.text()}`);
   });
   return page;
@@ -54,6 +58,7 @@ async function startMatch(
   o: { mode?: string; opponent?: string; seed?: string; aiSeed?: string; difficulty?: string; fast?: boolean; fixture?: string; svg?: boolean; names?: [string, string]; seating?: string },
 ) {
   await page.goto(BASE);
+  await page.click('[data-go="setup"]');
   await page.locator('details.dev-panel summary').click();
   if (o.seed) await page.fill('input[name="seed"]', o.seed);
   if (o.aiSeed) await page.fill('input[name="aiSeed"]', o.aiSeed);
@@ -101,6 +106,16 @@ async function assertNoForeignHand(page: Page, label: string) {
   if (st.kind !== 'human-turn') check(st.tiles === 0, `${label}: ${st.tiles} hand tiles rendered during ${st.kind}`);
 }
 
+/** Click if still actionable; the table may legitimately change state (cover, results) between lookup and click. */
+async function tryClick(loc: { click(o: { timeout: number }): Promise<void> }): Promise<boolean> {
+  try {
+    await loc.click({ timeout: 3000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function playRound(page: Page, label: string, opts: { checkHidden?: boolean; preferTail?: boolean; privacy?: boolean } = {}): Promise<number> {
   let actions = 0;
   for (let i = 0; i < 2000; i++) {
@@ -108,32 +123,29 @@ async function playRound(page: Page, label: string, opts: { checkHidden?: boolea
     if (await page.locator('.privacy-cover:not([hidden])').count()) {
       if (opts.privacy) await assertCovered(page, label);
       const ready = page.locator('[data-act="cover-ready"]');
-      if (await ready.count()) await ready.click();
-      else await page.click('[data-act="cover-reveal"]');
+      if (await ready.count()) await tryClick(ready);
+      else await tryClick(page.locator('[data-act="cover-reveal"]'));
       continue;
     }
     if (opts.privacy) await assertNoForeignHand(page, label);
     if (opts.checkHidden) await assertAiHandHidden(page, label);
     const legal = page.locator('.hand-tile.is-legal');
     if (await legal.count()) {
-      await legal.first().click();
+      if (!(await tryClick(legal.first()))) continue;
       const slots = page.locator('.end-slot.is-legal');
       const n = await slots.count();
       check(n >= 1, `${label}: selecting a legal tile showed no legal end`);
-      await (opts.preferTail || actions % 2 ? slots.last() : slots.first()).click();
-      actions++;
+      if (await tryClick(opts.preferTail || actions % 2 ? slots.last() : slots.first())) actions++;
       continue;
     }
     const draw = page.locator('[data-act="draw"]:not([disabled])');
     if (await draw.count()) {
-      await draw.click();
-      actions++;
+      if (await tryClick(draw)) actions++;
       continue;
     }
     const pass = page.locator('[data-act="pass"]:not([disabled])');
     if (await pass.count()) {
-      await pass.click();
-      actions++;
+      if (await tryClick(pass)) actions++;
       continue;
     }
     await page.waitForTimeout(120);
@@ -291,6 +303,7 @@ try {
   {
     const page = await newPage({ width: 320, height: 800 });
     await page.goto(BASE);
+    await page.click('[data-go="setup"]');
     await page.check('input[name="mode"][value="partnership4"]');
     await page.check('input[name="opponent"][value="local"]');
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
@@ -350,9 +363,9 @@ try {
           `),
       ],
       ['orientation change', async () => page.evaluate(() => window.dispatchEvent(new Event('orientationchange')))],
-      ['menu opened then cancelled', async () => {
-        await page.click('[data-act="menu"]');
-        await page.click('[data-act="confirm-no"]');
+      ['pause sheet opened then resumed', async () => {
+        await page.click('[data-act="pause"]');
+        await page.click('[data-act="pause-resume"]');
       }],
     ];
     for (const [what, act] of scenarios) {
@@ -389,7 +402,8 @@ try {
     await page.waitForTimeout(150); // Cousin (seat 1) is now thinking
     const thinking = await page.evaluate(() => (window as unknown as { __sb: { session: { aiThinking: boolean } } }).__sb.session.aiThinking);
     check(thinking, 'ghost test: expected the AI to be thinking after the human lead');
-    await page.click('[data-act="restart"]');
+    await page.click('[data-act="pause"]');
+    await page.click('dialog.pause [data-act="restart"]');
     await page.click('[data-act="confirm-yes"]');
     await page.waitForTimeout(2500);
     const after = await page.evaluate(() => {
@@ -403,10 +417,10 @@ try {
 
     const p2 = await newPage({ width: 390, height: 844 });
     await startMatch(p2, { mode: 'partnership4', opponent: 'ai', difficulty: 'hard', seed: 'e2e-p4-2', aiSeed: 'pause' });
-    await p2.click('[data-act="menu"]'); // opening the confirmation pauses the table
+    await p2.click('[data-act="pause"]'); // the pause sheet pauses the table
     await p2.waitForTimeout(2200);
     const whilePaused = await p2.locator('.board-tile').count();
-    await p2.click('[data-act="confirm-no"]');
+    await p2.click('[data-act="pause-resume"]');
     await p2.waitForTimeout(2200);
     const afterResume = await p2.locator('.board-tile').count();
     check(whilePaused === 0, `pause test: AI moved while paused (${whilePaused} tiles)`);
@@ -501,16 +515,202 @@ try {
     // Disabled controls explain themselves.
     const reasons = await page.locator('.reason').allTextContents();
     check(reasons.every((r: string) => r.trim().length > 0), 'controls: empty disabled reason');
-    // Restart and menu need confirmation.
-    await page.click('[data-act="restart"]');
+    // Restart and leaving need confirmation (both live in the pause sheet).
+    await page.click('[data-act="pause"]');
+    check((await page.locator('dialog.pause[open] details').count()) === 2, 'pause: rules and settings missing from the pause sheet');
+    await page.click('dialog.pause [data-act="restart"]');
     check(await page.locator('dialog.confirm[open]').count() === 1, 'restart: no confirmation');
     await page.click('[data-act="confirm-no"]');
     check(await page.locator('.board-tile').count() === 3, 'restart: cancel changed the game');
-    await page.click('[data-act="menu"]');
+    await page.click('[data-act="pause"]');
+    await page.click('dialog.pause [data-act="menu"]');
     await page.click('[data-act="confirm-yes"]');
-    check(await page.locator('.btn-start').count() === 1, 'menu: confirming did not return to the menu');
+    check(await page.locator('[data-go="setup"]').count() === 1, 'menu: confirming did not return to the menu');
     await page.context().close();
   }
+  // 6. Presentation: opening line & language setting, rules before play, art positions,
+  //    effects that never block input or hide scores, reduced motion, slam, rematch, missing art.
+  {
+    const quipOf = async (page: Page) => ({
+      quip: ((await page.locator('.bubble .quip').textContent().catch(() => '')) ?? '').trim(),
+      announce: ((await page.textContent('[data-region="announce"]')) ?? '').trim(),
+    });
+    // 6a. Opening line, explicit (default) then clean, then banter off.
+    const page = await newPage({ width: 390, height: 844 });
+    await startMatch(page, { mode: 'draw2', opponent: 'ai', seed: 'e2e-open', aiSeed: 'o' });
+    let q = await quipOf(page);
+    check(q.quip === 'Fuck that, we playing DOMINOES!', `opening line (explicit) was "${q.quip}"`);
+    await page.goto(BASE);
+    await page.click('[data-go="settings"]');
+    await page.check('input[name="set-language"][value="clean"]');
+    await page.click('[data-act="home"]');
+    await startMatch(page, { mode: 'draw2', opponent: 'ai', seed: 'e2e-open', aiSeed: 'o' });
+    q = await quipOf(page);
+    check(q.quip === 'Forget that, we playing DOMINOES!', `opening line (clean) was "${q.quip}"`);
+    check(q.announce.startsWith(q.quip), `subtitle/live region differ: "${q.announce}" vs "${q.quip}"`);
+    notes.push(`opening line: explicit and clean variants shown; live region matches the bubble`);
+    // Banter off from the pause sheet: Cousin goes quiet, facts stay.
+    await page.click('[data-act="pause"]');
+    await page.locator('dialog.pause details').nth(1).locator('summary').click();
+    await page.uncheck('dialog.pause input[name="set-banter"]');
+    await page.click('[data-act="pause-resume"]');
+    for (let i = 0; i < 6; i++) {
+      const legal = page.locator('.hand-tile.is-legal');
+      if (await legal.count()) {
+        await legal.first().click();
+        await page.locator('.end-slot.is-legal').first().click();
+      }
+      await page.waitForTimeout(900);
+    }
+    q = await quipOf(page);
+    const fact = ((await page.textContent('.bubble .fact')) ?? '').trim();
+    check(q.quip === '' && fact.length > 0, `banter off still shows a quip ("${q.quip}") or lost the fact`);
+    await page.context().close();
+
+    // 6b. Rules are visible on the setup screen before dealing, and follow the selected mode.
+    const p2 = await newPage({ width: 390, height: 844 });
+    await p2.goto(BASE);
+    await p2.click('[data-go="setup"]');
+    const drawRules = (await p2.textContent('.rules-preview')) ?? '';
+    await p2.check('input[name="mode"][value="partnership4"]');
+    const p4Rules = (await p2.textContent('.rules-preview')) ?? '';
+    check(/boneyard/.test(drawRules) && /6\|6/.test(p4Rules) && /two teams/.test(p4Rules), 'setup: mode rules not shown/updated before play');
+    const box = await p2.locator('.rules-preview').boundingBox();
+    const start = await p2.locator('.btn-start').boundingBox();
+    check(!!box && !!start && box.y < start.y, 'setup: rules should appear above the Deal button');
+    notes.push('rules: selected mode’s rules shown on setup before dealing (Draw → Partnership updates)');
+    await p2.context().close();
+
+    // 6c. Art positions: every rendered Cousin frame uses its stable stage box (no crop, no neighbours).
+    const stage = stageFor(getAsset('cousin.atlas.portrait'));
+    const slamStage = stageFor(getAsset('cousin.anim.slam'));
+    const expected = (frame: string, variant: string) => {
+      const [sheet, id] = frame.split('/') as [string, string];
+      const b = sheet === 'cousin.anim.slam' ? slamStage.boxes[id]! : variant === 'bust' ? bustBox(stage, id) : stage.boxes[id]!;
+      return `${b.x} ${b.y} ${b.w} ${b.h}`;
+    };
+    for (const vp of [
+      { width: 390, height: 844, variant: 'bust' },
+      { width: 1366, height: 900, variant: 'full' },
+    ]) {
+      const p3 = await newPage(vp, 1);
+      await p3.addInitScript(() => {
+        const w = window as unknown as { __frames: string[]; __fx: number };
+        w.__frames = [];
+        w.__fx = 0;
+        new MutationObserver((ms) => {
+          for (const m of ms) {
+            const t = m.target as Element;
+            if (m.type === 'attributes' && t instanceof SVGSVGElement && t.dataset.frame) w.__frames.push(`${t.dataset.frame}|${t.getAttribute('viewBox')}`);
+            m.addedNodes.forEach((n) => {
+              if (n instanceof HTMLElement && n.classList.contains('fx')) w.__fx++;
+            });
+          }
+        }).observe(document, { subtree: true, attributes: true, attributeFilter: ['viewBox', 'data-frame'], childList: true });
+      });
+      await startMatch(p3, { fixture: 'max-board' });
+      await p3.waitForTimeout(300);
+      // Effects never cover the playable ends or swallow input; scores stay on top.
+      await p3.click('.hand-tile[data-tile="t66"]');
+      const slotsTopmost = await p3.evaluate(() =>
+        [...document.querySelectorAll('.end-slot.is-legal')].every((el) => {
+          el.scrollIntoView({ block: 'center' });
+          const r = el.getBoundingClientRect();
+          const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          return hit === el || el.contains(hit);
+        }),
+      );
+      check(slotsTopmost, `${vp.variant}: something covers a playable end`);
+      await p3.locator('.end-slot.is-legal').first().click();
+      await p3.waitForTimeout(60); // effects are mid-flight now
+      const during = await p3.evaluate(() => {
+        const fx = [...document.querySelectorAll('.fx')];
+        const sb = document.querySelector('.scoreboard')!.getBoundingClientRect();
+        const hit = document.elementFromPoint(sb.left + sb.width / 2, sb.top + sb.height / 2);
+        return { fx: fx.length, blocking: fx.filter((e) => getComputedStyle(e).pointerEvents !== 'none').length, scoresOnTop: !!hit && !!hit.closest('.scoreboard') };
+      });
+      check(during.blocking === 0, `${vp.variant}: an effect accepts pointer input`);
+      check(during.scoresOnTop, `${vp.variant}: scores hidden during effects`);
+      await p3.waitForSelector('dialog.results[open]', { timeout: 6000 });
+      await p3.waitForTimeout(900);
+      const frames: string[] = await p3.evaluate(() => (window as unknown as { __frames: string[] }).__frames);
+      const bad = frames.filter((f) => {
+        const [frame, vb] = f.split('|') as [string, string];
+        return expected(frame, vp.variant) !== vb;
+      });
+      check(bad.length === 0, `${vp.variant}: frames off their stage boxes: ${bad.slice(0, 3).join(', ')}`);
+      const slammed = frames.some((f) => f.startsWith('cousin.anim.slam/slam'));
+      if (vp.variant === 'full') check(slammed, 'desktop: domino did not trigger the slam');
+      const fxCount = await p3.evaluate(() => (window as unknown as { __fx: number }).__fx);
+      notes.push(`${vp.variant}: ${frames.length} host frame swaps all on stage boxes${slammed ? ', slam played' : ''}; ${fxCount} effects, none blocking input or scores`);
+      // Results: larger art, tally, and (after match point) rematch.
+      check((await p3.locator('dialog.results .results-host svg').count()) === 1, `${vp.variant}: results lack Cousin art`);
+      await p3.context().close();
+    }
+
+    // 6d. Reduced motion: no effects, no slam, static art; controls unchanged.
+    const ctx = await browser.newContext({ viewport: { width: 1366, height: 900 }, reducedMotion: 'reduce' });
+    const p4 = await ctx.newPage();
+    p4.on('pageerror', (e: { message: string }) => failures.push(`page error: ${e.message}`));
+    await p4.addInitScript(() => {
+      const w = window as unknown as { __fx: number; __slam: number };
+      w.__fx = 0;
+      w.__slam = 0;
+      new MutationObserver((ms) => {
+        for (const m of ms) {
+          m.addedNodes.forEach((n) => {
+            if (n instanceof HTMLElement && n.classList.contains('fx')) w.__fx++;
+          });
+          const t = m.target as Element;
+          if (m.type === 'attributes' && t instanceof SVGSVGElement && (t.dataset.frame ?? '').startsWith('cousin.anim.slam')) w.__slam++;
+        }
+      }).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-frame'] });
+    });
+    await startMatch(p4, { fixture: 'match-point' });
+    const rm = await p4.evaluate(() => document.getElementById('app')!.classList.contains('reduce-motion'));
+    await p4.click('.hand-tile[data-tile="t61"]');
+    await p4.locator('.end-slot.is-legal').first().click();
+    await p4.waitForSelector('dialog.results[open]', { timeout: 6000 });
+    const motion = await p4.evaluate(() => ({ fx: (window as unknown as { __fx: number }).__fx, slam: (window as unknown as { __slam: number }).__slam }));
+    check(rm && motion.fx === 0 && motion.slam === 0, `reduced motion: effects ${motion.fx}, slam frames ${motion.slam}, class ${rm}`);
+    // Match over → Rematch starts a fresh match.
+    const matchLine = await p4.textContent('.match-line');
+    check(/wins the match/.test(matchLine ?? ''), `match point: no match result (${matchLine})`);
+    const tally = await p4.textContent('.tally');
+    check(tally === '115' || tally === '115', `reduced motion: tally should show the final score immediately (${tally})`);
+    await p4.click('[data-act="new-match"]');
+    await p4.waitForTimeout(400);
+    const meta = await p4.textContent('.score-meta');
+    check(/Hand 1/.test(meta ?? '') && !(await p4.locator('dialog.results[open]').count()), `rematch did not start a fresh match (${meta})`);
+    notes.push('reduced motion: 0 effects, no slam, tally instant; match point → match result → Rematch → Hand 1');
+    await ctx.close();
+
+    // 6e. Optional art missing: everything still renders and plays with code-drawn fallbacks.
+    const p5 = await newPage({ width: 390, height: 844 }, 1, { blockedImages: true });
+    await p5.route('**/*.png', (r: { abort(): Promise<void> }) => r.abort());
+    await startMatch(p5, { mode: 'block2', opponent: 'ai', seed: 'e2e-noart', aiSeed: 'n', fast: true });
+    for (let i = 0; i < 4; i++) {
+      const legal = p5.locator('.hand-tile.is-legal');
+      if (await legal.count()) {
+        await legal.first().click();
+        await p5.locator('.end-slot.is-legal').first().click();
+      }
+      await p5.waitForTimeout(300);
+    }
+    const fb = await p5.evaluate(() => ({
+      tiles: document.querySelectorAll('.board-tile').length,
+      svgFaces: document.querySelectorAll('.board-tile .face-svg').length,
+      fallback: (() => {
+        const f = document.querySelector('.host-avatar .host-fallback');
+        return !!f && getComputedStyle(f).display !== 'none';
+      })(),
+      overflow: document.documentElement.scrollWidth - innerWidth,
+    }));
+    check(fb.tiles > 0 && fb.svgFaces === fb.tiles && fb.fallback && fb.overflow <= 0, `missing art: fallbacks failed ${JSON.stringify(fb)}`);
+    notes.push(`missing art: ${fb.tiles} board tiles drawn as vector faces, host monogram shown, no overflow`);
+    await p5.context().close();
+  }
+
 } catch (e) {
   failures.push(`exception: ${(e as Error).stack ?? e}`);
 } finally {

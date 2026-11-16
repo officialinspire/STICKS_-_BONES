@@ -106,6 +106,7 @@ export class GameSession {
   #lastError: CommandError | null = null;
   #disposed = false;
   #aiRng: RngState[];
+  #speed = 1;
   readonly #scheduler: Scheduler;
   readonly #timing: Timing;
   readonly #runner: AiRunner;
@@ -211,6 +212,10 @@ export class GameSession {
   canAct(seat: SeatIndex): boolean {
     const s = this.#state;
     return s.phase === 'playing' && s.hand.turn === seat && this.isHuman(seat) && !this.#paused && !this.#disposed;
+  }
+  /** Presentation-only multiplier for AI thinking delays (settings). Never affects decisions or rules. */
+  setThinkingSpeed(factor: number): void {
+    this.#speed = Math.min(3, Math.max(0.2, factor));
   }
   /** AI RNG streams, for saving. */
   exportAiRng(): RngState[] {
@@ -331,7 +336,7 @@ export class GameSession {
     const obs = buildObservation(seatView(s, seat), this.rules);
     const pending: PendingAi = { token, decision: null, delayDone: false };
     this.#pending = pending;
-    const thinking = obs.legal.length > 1 ? this.#timing.aiPlay[this.difficulty] : this.#timing.aiForced;
+    const thinking = Math.round((obs.legal.length > 1 ? this.#timing.aiPlay[this.difficulty] : this.#timing.aiForced) * this.#speed);
     this.#timer = this.#scheduler.set(() => {
       pending.delayDone = true;
       this.#tryApplyAi(pending);

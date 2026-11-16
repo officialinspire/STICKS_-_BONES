@@ -4,7 +4,7 @@
  * controller intents. On a shared device, hands are never in the DOM unless
  * the controller is in 'human-turn' for that human.
  */
-import { assetUrl, getAsset, getFrame } from '../assets';
+import { assetUrl } from '../assets';
 import { layoutChain, type BoardLayout, type EndSlot } from '../board/layout';
 import type { GameEvent } from '../engine/events';
 import type { EndId } from '../engine/line';
@@ -15,14 +15,21 @@ import { controlStates, SORT_LABELS, SORT_MODES, sortHand, tileLabel, tileShort,
 import type { TableController } from '../app/controller';
 import type { GameSession } from '../app/session';
 import { faceHtml, onBackendChange, tileBoxHtml } from '../render/tile-art';
-import { spriteSvg } from './sprite';
+import { Banter, type BanterContext } from '../app/banter';
+import { AI_SPEED_FACTOR, reduceMotion } from '../app/settings';
+import { opposite, rotationFor } from '../render/pips';
+import { Effects, preloadEffects } from './effects';
+import { HostView, hostFigureHtml, type Mood } from './host';
+import { rulesHtml } from './rules-summary';
+import { bindSettingsPanel, settingsPanelHtml, type SettingsApi } from './settings-panel';
 import { esc } from './svg';
 
-type Mood = 'neutral' | 'smirk' | 'thinking' | 'explaining' | 'laughing' | 'surprised' | 'delighted' | 'pumped';
 
 export interface TableCallbacks {
   onMenu(): void;
+  /** Restart / rematch: a fresh match with the same setup. */
   onRestart(): void;
+  readonly settings: SettingsApi;
 }
 
 const UNIT_MIN = 26;
@@ -39,6 +46,12 @@ export class TableScreen {
   #unit = 0;
   #message = '';
   #mood: Mood = 'neutral';
+  #quip: string | null = null;
+  #banter: Banter;
+  #host: HostView | null = null;
+  #fx: Effects;
+  #mqWide: MediaQueryList | null = null;
+  #mqMotion: MediaQueryList | null = null;
   #status = '';
   #lastPlayed: TileId | null = null;
   #resultsShownFor = -1;
@@ -51,6 +64,23 @@ export class TableScreen {
     this.#c = controller;
     this.#s = controller.session;
     this.#cb = cb;
+    const st = cb.settings.get();
+    this.#banter = new Banter({ explicitLanguage: st.explicitLanguage, enabled: st.banter });
+    this.#fx = new Effects(() => this.#reduce());
+  }
+
+  #reduce(): boolean {
+    return reduceMotion(this.#cb.settings.get(), this.#mqMotion?.matches ?? false);
+  }
+
+  /** Re-read settings (called after they change). Presentation only. */
+  applySettings(): void {
+    const st = this.#cb.settings.get();
+    this.#banter.configure({ explicitLanguage: st.explicitLanguage, enabled: st.banter });
+    this.#s.setThinkingSpeed(AI_SPEED_FACTOR[st.aiSpeed]);
+    this.#root.classList.toggle('reduce-motion', this.#reduce());
+    if (this.#reduce() || !st.hostAnimation) this.#host?.cancel();
+    this.render();
   }
 
   /** Privacy cover is up (pass-the-device or reveal step). */
@@ -65,12 +95,11 @@ export class TableScreen {
       <div class="privacy-cover" data-region="cover" hidden></div>
       <div class="table-screen" data-region="table">
         <header class="hud">
-          <button type="button" class="btn-ghost" data-act="menu">Menu</button>
+          <button type="button" class="btn-ghost" data-act="pause" aria-label="Pause — rules, settings, restart, leave">❚❚ Pause</button>
           <div class="scoreboard" data-region="scores"></div>
-          <button type="button" class="btn-ghost" data-act="restart">Restart</button>
         </header>
         <aside class="side">
-          <div class="host-card" data-region="host"></div>
+          <div class="host-card"><div class="host-avatar" data-region="host-art"></div><p class="bubble" data-region="bubble"></p></div>
           <div class="opponent" data-region="opponent"></div>
         </aside>
         <section class="play" aria-label="Table">
@@ -82,6 +111,7 @@ export class TableScreen {
         <p class="sr-only" aria-live="polite" data-region="announce"></p>
         <dialog class="sheet results" data-region="results" aria-labelledby="results-title"></dialog>
         <dialog class="sheet confirm" data-region="confirm" aria-labelledby="confirm-title"></dialog>
+        <dialog class="sheet pause" data-region="pause" aria-labelledby="pause-title"></dialog>
       </div>`;
     r.addEventListener('click', this.#onClick);
     r.addEventListener('keydown', this.#onKey);
@@ -124,7 +154,36 @@ export class TableScreen {
       this.#renderBoard();
     });
     this.#ro.observe(this.#q('board-wrap'));
+    // Cousin: compact bust on small screens, full figure on wide ones; same stable stage either way.
+    this.#mqWide = window.matchMedia('(min-width: 900px)');
+    this.#mqMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    this.#host = new HostView(this.#q('host-art'), this.#mqWide.matches ? 'full' : 'bust', {
+      reduceMotion: () => this.#reduce(),
+      animations: () => this.#cb.settings.get().hostAnimation,
+    });
+    const onWide = () => this.#host?.setVariant(this.#mqWide!.matches ? 'full' : 'bust');
+    const onMotion = () => this.applySettings();
+    this.#mqWide.addEventListener('change', onWide);
+    this.#mqMotion.addEventListener('change', onMotion);
+    this.#unsub.push(() => {
+      this.#mqWide?.removeEventListener('change', onWide);
+      this.#mqMotion?.removeEventListener('change', onMotion);
+      this.#host?.cancel();
+    });
+    preloadEffects();
+    const pauseDlg = this.#q<HTMLDialogElement>('pause');
+    pauseDlg.addEventListener('cancel', (e) => {
+      e.preventDefault();
+      this.#closePause();
+    });
     this.#message = this.#openingLine(this.#c.view());
+    // The opening line: a brand-new match (not a restored one) starts with Cousin's call.
+    const fresh = this.#s.seq === 0 && this.#s.debugState().history.length === 0;
+    this.#quip = fresh ? this.#banter.say('opening') : null;
+    // Voice/subtitle consistency from the very first frame.
+    this.#q('announce').textContent = [this.#quip, this.#message].filter(Boolean).join(' ');
+    this.#root.classList.toggle('reduce-motion', this.#reduce());
+    this.#s.setThinkingSpeed(AI_SPEED_FACTOR[this.#cb.settings.get().aiSpeed]);
     const env = assetUrl('env.neighborhood-patio');
     const table = assetUrl('table.weathered');
     if (env) r.style.setProperty('--env-image', `url("${env}")`);
@@ -133,6 +192,7 @@ export class TableScreen {
   }
 
   destroy(): void {
+    this.#fx.clear(this.#root);
     this.#unsub.forEach((u) => u());
     this.#ro?.disconnect();
     this.#root.removeEventListener('click', this.#onClick);
@@ -182,16 +242,10 @@ export class TableScreen {
   }
 
   #renderHost(): void {
-    const sheet = getAsset('cousin.atlas.portrait');
-    const portrait = spriteSvg({
-      url: assetUrl('cousin.atlas.portrait'),
-      sheetWidth: sheet.width,
-      sheetHeight: sheet.height,
-      rect: getFrame('cousin.atlas.portrait', this.#mood).rect,
-      label: 'Cousin',
-      className: 'host-portrait',
-    });
-    this.#q('host').innerHTML = `<div class="host-avatar"><span class="host-fallback" aria-hidden="true">R</span>${portrait}</div><p class="bubble">${esc(this.#message)}</p>`;
+    this.#host?.setMood(this.#mood);
+    const b = this.#q('bubble');
+    const html = `${this.#quip ? `<strong class="quip">${esc(this.#quip)}</strong>` : ''}<span class="fact">${esc(this.#message)}</span>`;
+    if (b.innerHTML !== html) b.innerHTML = html;
   }
 
   /** Other seats in table order from the viewer: left, top (partner in Partnership), right. */
@@ -221,7 +275,7 @@ export class TableScreen {
           break;
         }
         const turn = v.phase === 'playing' && v.turn === seat;
-        return `<div class="seat-chip seat-${pos}${turn ? ' is-turn' : ''}${role === 'Partner' ? ' is-partner' : ''}" data-seat-pos="${pos}">
+        return `<div class="seat-chip seat-${pos}${turn ? ' is-turn' : ''}${role === 'Partner' ? ' is-partner' : ''}" data-seat-pos="${pos}" data-seat="${seat}">
           <div class="opp-head"><strong>${esc(this.#name(seat))}</strong> <span class="role">${role}</span></div>
           <div class="opp-meta"><span>${n} tile${n === 1 ? '' : 's'}</span>${last ? `<span class="badge">${last}</span>` : ''}${turn && this.#s.aiThinking ? '<span class="badge think">thinking…</span>' : ''}</div>
           <div class="opp-backs" aria-hidden="true">${backs}</div>
@@ -295,7 +349,19 @@ export class TableScreen {
       const label = lead ? 'Lead here' : String(slot.pip);
       if (legal && this.#selected && this.#c.canAct()) {
         const aria = lead ? `Lead with ${tileLabel(this.#selected)}` : `Play ${tileLabel(this.#selected)} on the ${slot.pip} end (${BRANCH[slot.end]} branch)`;
-        return `<button type="button" class="end-slot is-legal" data-act="place" data-end="${lead ? 'head' : slot.end}" style="${style}" aria-label="${esc(aria)}"><span>${esc(label)}</span></button>`;
+        // Endpoint preview: a ghost of the selected tile, oriented exactly as it would land.
+        const move = v.legalMoves.find((m) => m.tile === this.#selected && (lead || m.end === slot.end))!;
+        const t = tileFromId(move.tile);
+        const w = slot.box.w * u - 8;
+        const h = slot.box.h * u - 8;
+        const tall = h > w;
+        let rotation: number;
+        if (t.high === t.low || !slot.towardChain) rotation = tall ? 0 : 270;
+        else {
+          const inward = slot.end === 'head' ? move.tailPip : move.headPip; // the half that touches the chain
+          rotation = rotationFor(t.high === inward ? slot.towardChain : opposite(slot.towardChain));
+        }
+        return `<button type="button" class="end-slot is-legal" data-act="place" data-end="${lead ? 'head' : slot.end}" style="${style}" aria-label="${esc(aria)}"><span class="ghost">${tileBoxHtml(move.tile, w, h, rotation)}</span><span class="slot-cue" aria-hidden="true">▼</span></button>`;
       }
       if (lead) return `<span class="end-slot is-marker is-lead" style="${style}" aria-hidden="true"><span>${v.phase === 'playing' ? 'Lead' : ''}</span></span>`;
       return `<span class="end-slot is-marker" data-end-marker="${slot.end}" style="${style}" aria-hidden="true"><span>${esc(label)}</span></span>`;
@@ -442,15 +508,64 @@ export class TableScreen {
         : r.points === 0
           ? `${esc(this.#s.teamName(r.winnerTeam))} take${this.#s.opponent === 'ai' && r.winnerTeam === 0 ? '' : 's'} the hand — but there are no pips left to count.`
           : `+${r.points} for ${this.#s.opponent === 'ai' && r.winnerTeam === 0 ? 'you' : esc(this.#s.teamName(r.winnerTeam))}`;
-    const scores = this.#s.rules.teams.map((_, t) => `<span>${esc(this.#s.teamName(t))}: <strong>${v.scores[t]}</strong></span>`).join(' · ');
+    const before = r.scoresAfter.map((sc, t) => (t === r.winnerTeam ? sc - r.points : sc));
+    const scores = this.#s.rules.teams
+      .map((_, t) => `<span>${esc(this.#s.teamName(t))}: <strong class="tally" data-from="${before[t]}" data-to="${v.scores[t]}">${v.scores[t]}</strong></span>`)
+      .join(' · ');
     const over = v.phase === 'match-over' && v.winnerTeam !== null;
     const matchLine = over ? `<p class="match-line">${esc(this.#s.teamName(v.winnerTeam!))} ${this.#s.opponent === 'ai' && v.winnerTeam === 0 ? 'win' : 'wins'} the match!</p>` : '';
     const buttons = over
-      ? `<button type="button" class="btn" data-act="new-match">Play again</button><button type="button" class="btn-ghost" data-act="menu-now">Menu</button>`
+      ? `<button type="button" class="btn" data-act="new-match">Rematch</button><button type="button" class="btn-ghost" data-act="menu-now">Menu</button>`
       : `<button type="button" class="btn" data-act="next-hand">Next hand</button>`;
-    dlg.innerHTML = `<h2 id="results-title">${esc(title)}</h2><p class="why">${esc(why)}</p>${hands}${teamLine}<p class="points">${pts}</p><p class="scores-line">${scores} · to ${v.targetScore}</p>${matchLine}<div class="sheet-actions">${buttons}</div>`;
+    const mood: Mood = r.winnerTeam === null ? 'thinking' : this.#s.opponent === 'ai' ? (r.winnerTeam === 0 ? (over ? 'delighted' : 'surprised') : over ? 'pumped' : 'laughing') : over ? 'delighted' : 'explaining';
+    dlg.innerHTML = `<div class="results-head"><div class="results-host">${hostFigureHtml(mood, 'full')}</div><div><h2 id="results-title">${esc(title)}</h2><p class="why">${esc(why)}</p></div></div>${hands}${teamLine}<p class="points">${pts}</p><p class="scores-line">${scores} · to ${v.targetScore}</p>${matchLine}<div class="sheet-actions">${buttons}</div>`;
     if (!dlg.open) dlg.showModal();
     (dlg.querySelector('.btn') as HTMLElement).focus();
+    this.#tally(dlg);
+  }
+
+  /** Count scores up from their pre-hand values (instant under reduced motion). Width is fixed via tabular numerals. */
+  #tally(root: HTMLElement): void {
+    const els = [...root.querySelectorAll<HTMLElement>('.tally')];
+    if (this.#reduce()) return;
+    const start = performance.now();
+    const DURATION = 700;
+    const step = (now: number) => {
+      const k = Math.min(1, (now - start) / DURATION);
+      const ease = 1 - (1 - k) ** 3;
+      for (const el of els) {
+        const from = Number(el.dataset.from);
+        const to = Number(el.dataset.to);
+        el.textContent = String(Math.round(from + (to - from) * ease));
+      }
+      if (k < 1 && root.isConnected) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  #openPause(): void {
+    const dlg = this.#q<HTMLDialogElement>('pause');
+    this.#c.pause('dialog');
+    const rules = this.#s.rules;
+    dlg.innerHTML = `<h2 id="pause-title">Paused</h2>
+      <div class="pause-actions"><button type="button" class="btn" data-act="pause-resume">Resume</button><button type="button" class="btn-ghost dark" data-act="restart">Restart match</button><button type="button" class="btn-ghost dark" data-act="menu">Leave to menu</button></div>
+      <details class="pause-more"><summary>Rules</summary>${rulesHtml(rules)}</details>
+      <details class="pause-more"><summary>Settings</summary>${settingsPanelHtml(this.#cb.settings.get())}</details>`;
+    bindSettingsPanel(dlg.querySelector('.settings-panel') as HTMLElement, {
+      get: () => this.#cb.settings.get(),
+      set: (p) => {
+        this.#cb.settings.set(p);
+        this.applySettings();
+      },
+    });
+    if (!dlg.open) dlg.showModal();
+    (dlg.querySelector('[data-act="pause-resume"]') as HTMLElement).focus();
+  }
+
+  #closePause(): void {
+    const dlg = this.#q<HTMLDialogElement>('pause');
+    if (dlg.open) dlg.close();
+    this.#c.resume();
   }
 
   #showConfirm(kind: 'menu' | 'restart'): void {
@@ -468,47 +583,99 @@ export class TableScreen {
 
   // ---------------------------------------------------------------------------
 
+  /** Who is "Cousin" for banter: the AI seat named Cousin. */
+  #isCousin(seat: SeatIndex): boolean {
+    return !this.#s.isHuman(seat) && this.#name(seat) === 'Cousin';
+  }
+
   #onEvents(events: readonly GameEvent[]): void {
     const v = this.#c.view();
+    let quip: string | null | undefined; // undefined = keep current quip
+    let slam = false;
+    let impact: { big: boolean } | null = null;
+    const knocks: SeatIndex[] = [];
+    const say = (ctx: BanterContext) => {
+      const line = this.#banter.say(ctx);
+      if (line) quip = line;
+      else if (quip === undefined) quip = null;
+    };
     for (const e of events) {
       switch (e.type) {
         case 'hand-started':
           this.#lastPlayed = null;
           this.#message = this.#openingLine(v);
           this.#mood = 'explaining';
+          say('hand-start');
           break;
-        case 'tile-played':
+        case 'tile-played': {
           this.#lastPlayed = e.tile;
           this.#message = `${this.#name(e.seat)} played ${tileShort(e.tile)}.`;
           this.#mood = this.#s.isHuman(e.seat) ? 'neutral' : 'smirk';
+          const t = tileFromId(e.tile);
+          impact = { big: false };
+          if (t.high === t.low) {
+            say('double');
+            if (this.#isCousin(e.seat)) slam = true;
+          } else say(this.#s.isHuman(e.seat) ? 'player-play' : this.#isCousin(e.seat) ? 'cousin-play' : 'other-play');
           break;
+        }
         case 'tile-drawn':
           // The bubble and live region are public on a shared device: never name a drawn tile there.
           this.#message = e.tile && !this.#c.privacy ? `${this.#name(e.seat)} drew ${tileShort(e.tile)}${e.playable ? ' — it plays!' : '.'}` : `${this.#name(e.seat)} drew from the boneyard.`;
           if (e.tile && this.#c.privacy) this.#status = `You drew ${tileShort(e.tile)}${e.playable ? ' — it plays!' : '.'}`;
           this.#mood = 'thinking';
+          say('draw');
           break;
         case 'passed':
-          this.#message = `${this.#name(e.seat)} ${this.#s.opponent === 'ai' && e.seat === 0 ? 'pass' : 'passes'}. ¡Paso!`;
+          this.#message = `${this.#name(e.seat)} ${this.#s.opponent === 'ai' && e.seat === 0 ? 'knock' : 'knocks'} — pass.`;
           this.#mood = 'explaining';
+          knocks.push(e.seat);
+          say(this.#s.isHuman(e.seat) ? 'player-pass' : 'cousin-pass');
           break;
         case 'hand-ended':
           this.#message = e.end.kind === 'out' ? `¡Dominó! ${this.#name(e.end.seat)} ${this.#s.opponent === 'ai' && e.end.seat === 0 ? 'are' : 'is'} out.` : '¡Tranque! Nobody can play.';
           this.#mood = e.end.kind === 'out' && !this.#s.isHuman(e.end.seat) ? 'laughing' : 'surprised';
+          if (e.end.kind === 'out') {
+            slam = true;
+            impact = { big: true };
+            const seat = e.end.seat;
+            const team = this.#s.rules.teams.find((tm) => tm.includes(seat))!;
+            say(this.#s.isHuman(seat) ? 'player-out' : team.some((x) => this.#s.isHuman(x)) ? 'team-out' : 'cousin-out');
+          } else say('tranque');
           break;
-        case 'match-won':
-          this.#mood = this.#s.opponent === 'ai' && e.team !== 0 ? 'pumped' : 'delighted';
+        case 'hand-resolved':
+          if (e.result.winnerTeam === null) say('tie');
           break;
+        case 'match-won': {
+          const humansWon = this.#s.rules.teams[e.team]!.some((x) => this.#s.isHuman(x));
+          this.#mood = this.#s.opponent === 'ai' && !humansWon ? 'pumped' : 'delighted';
+          say(this.#s.opponent === 'ai' && !humansWon ? 'match-lost' : 'match-won');
+          break;
+        }
         default:
           break;
       }
     }
+    if (quip !== undefined && events.length) this.#quip = quip;
     if (events.length && !events.some((e) => e.type === 'tile-drawn' && e.tile)) this.#status = '';
     if (v.phase === 'playing' && !this.#s.isHuman(v.turn)) this.#mood = 'thinking';
     const err = this.#s.lastError;
     if (err) this.#status = err.message;
-    this.#q('announce').textContent = this.#message;
+    // Voice/subtitle consistency: the live region announces exactly what the bubble shows.
+    this.#q('announce').textContent = [this.#quip, this.#message].filter(Boolean).join(' ');
+    if (this.#covered()) this.#fx.clear(this.#root);
     this.render();
+    // Presentation only — fired after the state is already applied; nothing waits on these.
+    if (slam) this.#host?.slam();
+    if (impact) {
+      const board = this.#q('board');
+      const tile = board.querySelector<HTMLElement>('.board-tile.is-new');
+      if (tile) this.#fx.impact(board, tile, this.#unit, impact.big);
+    }
+    for (const seat of knocks) {
+      const target = seat === v.viewer && !v.concealed ? this.#q('hand') : this.#root.querySelector<HTMLElement>(`.seat-chip[data-seat="${seat}"]`);
+      if (target) this.#fx.knock(target);
+    }
     if (this.#c.canAct() && (events.length === 0 || events.some((e) => e.type === 'turn' || e.type === 'hand-started'))) this.#focusHand();
   }
 
@@ -608,12 +775,19 @@ export class TableScreen {
         this.#q<HTMLDialogElement>('results').close();
         this.#cb.onMenu();
         break;
+      case 'pause':
+        this.#openPause();
+        break;
+      case 'pause-resume':
+        this.#closePause();
+        break;
       case 'menu':
-        this.#showConfirm('menu');
+      case 'restart': {
+        const pauseDlg = this.#q<HTMLDialogElement>('pause');
+        if (pauseDlg.open) pauseDlg.close(); // stays paused while confirming
+        this.#showConfirm(target.dataset.act);
         break;
-      case 'restart':
-        this.#showConfirm('restart');
-        break;
+      }
       case 'confirm-no':
         this.#pendingConfirm = null;
         this.#q<HTMLDialogElement>('confirm').close();

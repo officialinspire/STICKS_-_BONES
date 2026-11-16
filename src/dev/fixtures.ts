@@ -5,7 +5,7 @@
 import { chain, complement, craft } from '../engine/testing/craft';
 import type { MatchState } from '../engine/state';
 
-export type FixtureId = 'max-board' | 'max-hand' | 'both-ends';
+export type FixtureId = 'max-board' | 'max-hand' | 'both-ends' | 'match-point';
 
 export const FIXTURES: Record<FixtureId, { label: string; build: () => MatchState }> = {
   'max-board': {
@@ -30,6 +30,11 @@ export const FIXTURES: Record<FixtureId, { label: string; build: () => MatchStat
       const mine = complement(line.map((l) => l[0]), opp);
       return craft({ mode: 'draw2', humanSeats: [0, 1], hands: [mine, opp], line, stock: [], turn: 0, opener: 1 });
     },
+  },
+  'match-point': {
+    label: 'Match point: Player 1 at 95, one tile from going out',
+    build: () =>
+      craft({ mode: 'draw2', humanSeats: [0, 1], hands: [['t61'], ['t55', 't44', 't20']], line: [['t66', 6, 6]], turn: 0, opener: 1, scores: [95, 0] }),
   },
   'both-ends': {
     label: 'Both ends: 5|3 fits ends 3 and 5',

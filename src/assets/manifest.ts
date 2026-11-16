@@ -91,7 +91,7 @@ export const IMAGE_ASSETS = [
   {
     id: "cousin.anim.slam",
     category: "character",
-    status: "variant",
+    status: "runtime",
     path: "assets/art/characters/Confident six-frame domino slam.png",
     originalName: "Confident six-frame domino slam.png",
     bytes: 1783741,
@@ -218,7 +218,7 @@ export const IMAGE_ASSETS = [
   {
     id: "fx.sheet",
     category: "effect",
-    status: "variant",
+    status: "runtime",
     path: "assets/art/effects/Eight polished dominoes effect sprites.png",
     originalName: "Eight polished dominoes effect sprites.png",
     bytes: 649575,

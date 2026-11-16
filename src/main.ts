@@ -3,6 +3,7 @@ import { createWorkerRunner, inlineRunner, type AiRunner } from './ai/runner';
 import { TableController } from './app/controller';
 import { browserStore, clearSave, readSave, writeSave, type SavedGame } from './app/save';
 import { secureSeed } from './app/seed';
+import { loadSettings, saveSettings, type Settings } from './app/settings';
 import { DEFAULT_TIMING, GameSession, type Timing } from './app/session';
 import type { SeatIndex } from './engine/types';
 import { initTileArt, setForceSvg } from './render/tile-art';
@@ -12,6 +13,14 @@ import { TableScreen } from './ui/table';
 const DEV = import.meta.env.DEV;
 const root = document.getElementById('app')!;
 const store = browserStore();
+let settings: Settings = loadSettings(store);
+const settingsApi = {
+  get: () => settings,
+  set: (p: Partial<Settings>) => {
+    settings = { ...settings, ...p };
+    saveSettings(store, settings);
+  },
+};
 let table: TableScreen | null = null;
 let controller: TableController | null = null;
 let last: MenuChoice | null = null;
@@ -21,6 +30,17 @@ const FAST_TIMING: Timing = { aiPlay: { easy: 60, normal: 60, hard: 60 }, aiForc
 const SEATING: Record<NonNullable<MenuChoice['seating']>, SeatIndex> = { across: 2, right: 1, left: 3 };
 
 initTileArt();
+// Missing optional art: drop the broken image and reveal the code-drawn placeholder (menus, table, results).
+document.addEventListener(
+  'error',
+  (e) => {
+    const t = e.target;
+    if (!(t instanceof SVGImageElement)) return;
+    t.closest('.host-figure-art')?.classList.add('art-missing');
+    t.remove();
+  },
+  true,
+);
 
 function teardown(): void {
   table?.destroy();
@@ -43,6 +63,7 @@ function showMenu(): void {
   const saved = readSave(store);
   renderMenu(root, last ?? {}, {
     dev: DEV,
+    settings: settingsApi,
     resume: saved ? resumeOffer(saved) : null,
     onStart: (c) => void start(c),
     onResume: () => resume(),
@@ -56,7 +77,7 @@ function showMenu(): void {
 function mount(c: TableController, onRestart: () => void): void {
   controller = c;
   root.className = 'is-table';
-  table = new TableScreen(root, c, { onMenu: showMenu, onRestart });
+  table = new TableScreen(root, c, { onMenu: showMenu, onRestart, settings: settingsApi });
   table.mount();
   // Autosave after every game change (local only; see save.ts for what this is and isn't).
   c.subscribe((events) => {
@@ -97,16 +118,27 @@ async function start(c: MenuChoice): Promise<void> {
   mount(new TableController(session), () => void start({ ...c, devFixture: undefined }));
 }
 
+/** Rebuild the setup of a (possibly resumed) match for a rematch: same mode, seats, names, target, skill. */
+function choiceFromSession(s: GameSession): MenuChoice {
+  const humans = s.humanSeats;
+  const seat2 = humans[1];
+  return {
+    mode: s.config.mode,
+    opponent: s.opponent,
+    targetScore: s.config.targetScore,
+    difficulty: s.difficulty,
+    names: humans.map((h) => s.config.seats[h]?.displayName ?? ''),
+    seating: seat2 === 1 ? 'right' : seat2 === 3 ? 'left' : 'across',
+  };
+}
+
 function resume(): void {
   const saved = readSave(store);
   if (!saved) return showMenu();
   teardown();
   const session = new GameSession({ state: saved.state, opponent: saved.opponent, difficulty: saved.difficulty, aiRng: saved.aiRng }, { runner });
   // A restored game always starts covered when two humans share the device.
-  mount(new TableController(session, { restored: true }), () => {
-    clearSave(store);
-    showMenu();
-  });
+  mount(new TableController(session, { restored: true }), () => void start(choiceFromSession(session)));
 }
 
 showMenu();

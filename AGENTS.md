@@ -1,6 +1,6 @@
 # Agent / contributor notes
 
-Read this file, `docs/BUILD_STATUS.md`, `docs/RULES.md`, `docs/ENGINE.md`, `docs/AI.md`, `docs/SHARED_DEVICE.md` and `docs/ASSETS.md`
+Read this file, `docs/BUILD_STATUS.md`, `docs/RULES.md`, `docs/ENGINE.md`, `docs/AI.md`, `docs/SHARED_DEVICE.md`, `docs/PRESENTATION.md` and `docs/ASSETS.md`
 before you change anything.
 
 ## Ground rules
@@ -34,6 +34,9 @@ before you change anything.
   concealed public table). No hand in the DOM, labels, live regions or animations unless the
   controller is in `human-turn` for that human; opponent tiles never before the results sheet.
   Only the TableController may subscribe to the session's raw events.
+- **Presentation never drives the game:** animations, effects, banter and host frames react to events
+  after they are applied, are never awaited, honour reduced motion, stay `pointer-events: none` and
+  below end targets/HUD. Character art renders through `src/render/stage.ts` boxes only.
 - **Scope:** no campaign, economy, shops, quests, online multiplayer or required backend.
 
 ## Before you finish a stage

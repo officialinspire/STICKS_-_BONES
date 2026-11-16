@@ -223,11 +223,14 @@ the source sheet is only read.
 | Selected/highlight tile skin | `tile.materials` / `face-ivory-rimmed` | planned |
 | Table setting picker | the other six `env.*` | planned |
 | Alternate board | `table.worn` | planned |
-| Host play reactions | `cousin.anim.place`, `cousin.anim.slam` (6 frames each) | planned |
-| Play/win feedback | `fx.sheet` (8 independent effects) | planned |
+| Host slam | `cousin.anim.slam` (6 frames, shared stage, loaded on first use) | **in use** (optional) |
+| Host place gesture | `cousin.anim.place` | not used (slam covers the reaction) |
+| Play/pass/win feedback | `fx.sheet`: impact-burst, star-gold, ripple (cell-safe square boxes) | **in use** (optional; CSS ring fallback) |
 | Opponent seat placeholder | `cousin.ref.silhouette` / `silhouette-seated` → needs cut-out derivative | planned |
 
 Rendering contracts:
+
+- Character frames render through a **shared stage box per sheet** (`src/render/stage.ts`): bottom-centre anchor, full content included, never outside the frame's cell. Tested for every frame (see `docs/PRESENTATION.md`).
 
 - Frames are cropped with an SVG `viewBox` set to the manifest rect (`src/ui/sprite.ts`),
   which scales to any CSS size.
