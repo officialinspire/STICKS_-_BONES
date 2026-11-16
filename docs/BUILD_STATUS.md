@@ -763,7 +763,7 @@ Full handoff: `docs/RELEASE_HANDOFF.md`. Also new: `RELEASE_NOTES.md`,
 | `npm run pwa` | pass, offline cache 1,672,882 B |
 | `npm run qa` / `npm run a11y` | 0 failures / 0 failures |
 | `npm run smoke` | pass |
-| GitHub Actions CI | run 1 on c6fd219 (https://github.com/officialinspire/STICKS_-_BONES/actions/runs/43943799338): in progress when this was written; result recorded in the next commit |
+| GitHub Actions CI | **success**: run 2 on da30779 (https://github.com/officialinspire/STICKS_-_BONES/actions/runs/43944065875). npm ci, typecheck, lint, tests, assets:verify, build and the Playwright browser smoke all passed on ubuntu-latest in 2 min 20 s. Run 1 (c6fd219, same code) was superseded by run 2 through the workflow's concurrency setting. |
 
 ### Known issues
 

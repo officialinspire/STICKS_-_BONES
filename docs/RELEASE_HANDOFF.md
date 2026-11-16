@@ -46,7 +46,7 @@ gradients, a monogram) is an error fallback, never shown as final art.
 | `npm run qa` | **pass**: 0 failures (6 viewports × 9 screens) |
 | `npm run a11y` | **pass**: 0 failures, axe clean |
 | `npm run smoke` | **pass**: subpath, offline-ready, a full hand, offline restart, clean console |
-| GitHub Actions CI | see §5 (on the branch push) |
+| GitHub Actions CI | **success**, run 2 on `da30779` (see §5) |
 
 What `npm run pwa` covered:
 - subpath first visit;
@@ -117,5 +117,8 @@ then see **Update available**, and their saves and settings are kept.
 - asset verify and build;
 - Playwright Chromium install, then `npm run smoke`.
 
-The result of the run for the pushed commit is recorded in
-`docs/BUILD_STATUS.md` (Stage 11).
+**Observed result:** run 2 on `da30779` —
+https://github.com/officialinspire/STICKS_-_BONES/actions/runs/43944065875 —
+**success**. Every step passed, including the browser smoke on the Pages subpath.
+
+The **deploy workflow has never run**, so nothing is live.
