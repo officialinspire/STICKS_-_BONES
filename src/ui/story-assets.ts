@@ -28,16 +28,17 @@ export interface CastFrame {
   readonly h: number;
 }
 /**
- * The frame shown on a character's lines: e1, each sheet's composed default (expression labels are not
- * supplied). Cropped to the visible figure — the head top (a few px of hair margin) to just below the
- * baseline, side padding trimmed — and identical for every frame of a sheet (cells are baseline-aligned),
- * so an expression change can never alter scale or footing.
+ * A character's frame (e1–e8; default e1), cropped to the visible figure: from the HIGHEST head top of
+ * any frame on the sheet (a few px of hair margin) to just below the shared baseline, side padding
+ * trimmed. The crop is the same offset in every cell (the cells are baseline- and centre-aligned by
+ * build-cast), so changing expression never changes scale, footing or framing; only the face changes.
  */
-export function castFrame(id: RuntimeAssetId): CastFrame | null {
+export function castFrame(id: RuntimeAssetId, frame: string = 'e1'): CastFrame | null {
   const c = castJson.cast.find((x) => x.of === id);
-  const f = c?.frames.find((x) => x.id === c.defaultFrame);
+  const f = c?.frames.find((x) => x.id === frame) ?? c?.frames.find((x) => x.id === c.defaultFrame);
   if (!c || !f) return null;
-  const top = Math.max(0, f.headTopY - 6);
+  const head = Math.min(...c.frames.map((x) => x.headTopY));
+  const top = Math.max(0, head - 6);
   const bottom = Math.min(f.h, f.baselineY + 3);
   const inset = 4;
   return { sheetW: c.width, sheetH: c.height, x: f.x + inset, y: f.y + top, w: f.w - 2 * inset, h: bottom - top };

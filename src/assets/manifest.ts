@@ -386,7 +386,7 @@ export const IMAGE_ASSETS = [
       { id: "e7", label: "Tomás Vale — expression 7 (row 2, column 3; meaning not yet labelled by the owner)", rect: { x: 918, y: 467, w: 365, h: 402 }, cell: { x: 878, y: 446, w: 444, h: 441 }, touchesNeighbor: false },
       { id: "e8", label: "Tomás Vale — expression 8 (row 2, column 4; meaning not yet labelled by the owner)", rect: { x: 1361, y: 471, w: 365, h: 398 }, cell: { x: 1322, y: 446, w: 452, h: 441 }, touchesNeighbor: false }
     ],
-    proposedUse: "Tomás Vale (tan suit) — eight-expression portrait atlas from the owner's asset-production upload (Nov 16, 2026) for NO REST FOR COUSIN. Story cast art; Runtime: cleaned derivative (src/assets/cast.json), frame e1 only until expressions are labelled."
+    proposedUse: "Tomás Vale (tan suit) — eight-expression portrait atlas from the owner's asset-production upload (Nov 16, 2026) for NO REST FOR COUSIN. Story cast art; Runtime: cleaned derivative (src/assets/cast.json); all eight frames, with meanings verified by inspection and mapped in src/story/expressions.ts."
   },
   {
     id: "cast.luz.atlas",
@@ -410,7 +410,7 @@ export const IMAGE_ASSETS = [
       { id: "e7", label: "Luz Rivera — expression 7 (row 2, column 3; meaning not yet labelled by the owner)", rect: { x: 934, y: 472, w: 351, h: 397 }, cell: { x: 887, y: 448, w: 444, h: 439 }, touchesNeighbor: false },
       { id: "e8", label: "Luz Rivera — expression 8 (row 2, column 4; meaning not yet labelled by the owner)", rect: { x: 1378, y: 472, w: 351, h: 397 }, cell: { x: 1331, y: 448, w: 443, h: 439 }, touchesNeighbor: false }
     ],
-    proposedUse: "Luz Rivera (green field shirt and satchel) — eight-expression portrait atlas from the owner's asset-production upload (Nov 16, 2026) for NO REST FOR COUSIN. Story cast art; Runtime: cleaned derivative (src/assets/cast.json), frame e1 only until expressions are labelled."
+    proposedUse: "Luz Rivera (green field shirt and satchel) — eight-expression portrait atlas from the owner's asset-production upload (Nov 16, 2026) for NO REST FOR COUSIN. Story cast art; Runtime: cleaned derivative (src/assets/cast.json); all eight frames, with meanings verified by inspection and mapped in src/story/expressions.ts."
   },
   {
     id: "cast.marisol.atlas",
@@ -434,7 +434,7 @@ export const IMAGE_ASSETS = [
       { id: "e7", label: "Marisol Vélez — expression 7 (row 2, column 3; meaning not yet labelled by the owner)", rect: { x: 920, y: 456, w: 366, h: 417 }, cell: { x: 881, y: 442, w: 443, h: 445 }, touchesNeighbor: false },
       { id: "e8", label: "Marisol Vélez — expression 8 (row 2, column 4; meaning not yet labelled by the owner)", rect: { x: 1363, y: 456, w: 366, h: 417 }, cell: { x: 1324, y: 442, w: 450, h: 445 }, touchesNeighbor: false }
     ],
-    proposedUse: "Marisol Vélez (coral polo with staff lanyard) — eight-expression portrait atlas from the owner's asset-production upload (Nov 16, 2026) for NO REST FOR COUSIN. Story cast art; Runtime: cleaned derivative (src/assets/cast.json), frame e1 only until expressions are labelled."
+    proposedUse: "Marisol Vélez (coral polo with staff lanyard) — eight-expression portrait atlas from the owner's asset-production upload (Nov 16, 2026) for NO REST FOR COUSIN. Story cast art; Runtime: cleaned derivative (src/assets/cast.json); all eight frames, with meanings verified by inspection and mapped in src/story/expressions.ts."
   },
   {
     id: "cast.rafa.atlas",
@@ -458,7 +458,7 @@ export const IMAGE_ASSETS = [
       { id: "e7", label: "Tío Rafa — expression 7 (row 2, column 3; meaning not yet labelled by the owner)", rect: { x: 921, y: 473, w: 372, h: 397 }, cell: { x: 886, y: 450, w: 443, h: 437 }, touchesNeighbor: false },
       { id: "e8", label: "Tío Rafa — expression 8 (row 2, column 4; meaning not yet labelled by the owner)", rect: { x: 1366, y: 477, w: 372, h: 393 }, cell: { x: 1329, y: 450, w: 445, h: 437 }, touchesNeighbor: false }
     ],
-    proposedUse: "Tío Rafa (cream guayabera) — eight-expression portrait atlas from the owner's asset-production upload (Nov 16, 2026) for NO REST FOR COUSIN. Story cast art; Runtime: cleaned derivative (src/assets/cast.json), frame e1 only until expressions are labelled."
+    proposedUse: "Tío Rafa (cream guayabera) — eight-expression portrait atlas from the owner's asset-production upload (Nov 16, 2026) for NO REST FOR COUSIN. Story cast art; Runtime: cleaned derivative (src/assets/cast.json); all eight frames, with meanings verified by inspection and mapped in src/story/expressions.ts."
   }
 ] as const satisfies readonly ImageAsset[];
 

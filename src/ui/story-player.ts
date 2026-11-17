@@ -20,9 +20,10 @@ import { HANDS, insertLines, outcomeFor, segments, type Outcome } from '../story
 import { DEFAULT_TIMINGS, REDUCED_TIMINGS, SceneDirector, type DirectorState, type StageView } from '../story/director';
 import type { Block, Scene } from '../story/parse';
 import { newProgress, readStory, TEXT_SCALES, type Part, type SceneId, type StoryProgress } from '../story/progress';
-import { cuesFor, STAGING, type Cue, type Light } from '../story/staging';
+import { cuesFor, STAGING, type Cue, type Light, type Mood } from '../story/staging';
 import { STATE_CUES } from '../audio/manager';
 import { phaseEnd, phaseStart } from '../story/timing';
+import { castFrameFor, lineExpression, lineNumbers, robertoMood, type Character, type Expression } from '../story/expressions';
 import { wrapTab } from './focus-trap';
 import { dialogueSourceSize, HostView } from './host';
 import { captionPanelHtml, captionText, chapterCardHtml, loadScript, renderStoryHome, save, speakerLabelHtml, speakerOf, type StoryDeps } from './story-ui';
@@ -53,6 +54,12 @@ function tableFaces(names: Readonly<Partial<Record<number, string>>>): Partial<R
 // ---- the DOM stage ------------------------------------------------------------------
 /** Who is on stage: Roberto, a cast sheet, or nobody. */
 type Figure = 'cousin' | RuntimeAssetId | null;
+const CHARACTER_OF: Readonly<Partial<Record<RuntimeAssetId, Exclude<Character, 'roberto'>>>> = {
+  'cast.vale.atlas': 'vale',
+  'cast.luz.atlas': 'luz',
+  'cast.marisol.atlas': 'marisol',
+  'cast.rafa.atlas': 'rafa',
+};
 /** Speaker change: the current figure fades out over this long, then the next fades in. */
 const FADE_OUT_MS = 160;
 
@@ -70,8 +77,14 @@ class DomStage implements StageView<Beat> {
   #want: Figure = null;
   /** Who is on stage now (faded in). */
   #shown: Figure = null;
-  /** The cast sheet loaded in the cast box. */
+  /** The cast sheet loaded in the cast box, and the frame (expression) shown. */
   #castLoaded: RuntimeAssetId | null = null;
+  #castFrameShown = '';
+  /** The frame the current cast line wants (verified mapping, src/story/expressions.ts). */
+  #castFrameWant = 'e1';
+  /** Roberto's mood as the stage directions last set it (unlisted lines keep it). */
+  #cueMood: Mood = 'neutral';
+  readonly #lineNo: (b: Block) => number | undefined;
   #swap = 0;
   #disposed = false;
   #onResize = () => this.#layoutFigures();
@@ -80,8 +93,10 @@ class DomStage implements StageView<Beat> {
     private readonly sceneId: SceneId,
     private readonly reduce: () => boolean,
     private readonly cue: (c: Cue) => void,
+    scene?: Scene,
   ) {
     this.#root = root;
+    this.#lineNo = scene ? lineNumbers(scene) : () => undefined;
   }
   q<T extends HTMLElement>(sel: string): T {
     return this.#root.querySelector(sel) as T;
@@ -221,6 +236,14 @@ class DomStage implements StageView<Beat> {
     const castId = blk.kind === 'line' && !narration ? speakerKey(blk.speaker!) : null;
     const reaction = blk.kind === 'direction' && b.cues.some((c) => c.kind === 'expr');
     if (own && !this.#cousinIn) this.apply({ kind: 'cousin', to: 'in' });
+    // The line's verified expression (stable dialogue id → expression → this character's frame). Untagged
+    // lines are neutral; Roberto's untagged lines keep the stage directions' mood. Never random.
+    const n = blk.kind === 'line' ? this.#lineNo(blk) : undefined;
+    const expr: Expression | undefined = n !== undefined ? lineExpression(this.sceneId, n) : undefined;
+    if (own) this.#host?.setMood(expr ? robertoMood(expr) : this.#cueMood);
+    const who = castId ? CHARACTER_OF[castId] : undefined;
+    this.#castFrameWant = who ? castFrameFor(who, expr ?? 'neutral') : 'e1';
+    this.#root.dataset.expression = own ? (expr ?? 'cue') : castId ? (expr ?? 'neutral') : 'none';
     this.#root.dataset.speaking = own || reaction ? 'cousin' : castId ? 'cast' : blk.kind === 'line' ? 'other' : 'none';
     this.#layoutFigures();
     this.#present(own || reaction ? 'cousin' : castId);
@@ -232,7 +255,11 @@ class DomStage implements StageView<Beat> {
    */
   #present(who: Figure): void {
     this.#want = who;
-    if (who === this.#shown) return;
+    if (who === this.#shown) {
+      // Same speaker: an expression change swaps the frame in place: same box, no fade, no dissolve.
+      if (who && who !== 'cousin') this.#loadCast(who);
+      return;
+    }
     if (who && who !== 'cousin' && warmState(who) !== 'ready') {
       this.#show(null);
       void warm([who], { front: true }).then(([ok]) => ok && this.#want === who && !this.#disposed && this.#present(who));
@@ -258,17 +285,20 @@ class DomStage implements StageView<Beat> {
     this.#root.toggleAttribute('data-actor-visible', who === 'cousin');
     this.#root.toggleAttribute('data-cast-visible', who !== null && who !== 'cousin');
   }
-  /** Put a cast member's default frame in the cast box (visible-bounds crop, its own aspect). */
+  /** Put a cast member's wanted frame in the cast box (visible-bounds crop shared by all their frames). */
   #loadCast(id: RuntimeAssetId): void {
     const box = this.q<HTMLElement>('.st-cast-art');
     const fig = this.q<HTMLElement>('.st-cast');
-    const f = castFrame(id);
-    if (!f || !box || !fig || this.#castLoaded === id) return;
+    const frame = this.#castFrameWant;
+    const f = castFrame(id, frame);
+    if (!f || !box || !fig || (this.#castLoaded === id && this.#castFrameShown === frame)) return;
     box.style.cssText = regionStyle(urlFor(id)!, f);
     fig.style.setProperty('--ar', String(f.w / f.h));
     fig.style.setProperty('--cast-cap-h', `${Math.round((f.h * 1.6) / Math.max(1, window.devicePixelRatio || 1))}px`);
     box.dataset.cast = id;
+    box.dataset.frame = frame;
     this.#castLoaded = id;
+    this.#castFrameShown = frame;
   }
   finishReveal(): void {
     this.q<HTMLElement>('.dialogue-panel')?.classList.remove('is-revealing');
@@ -309,6 +339,7 @@ class DomStage implements StageView<Beat> {
         return;
       }
       case 'expr':
+        this.#cueMood = c.mood;
         this.#host?.setMood(c.mood);
         return;
       case 'audio':
@@ -415,9 +446,15 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
     // Resuming a saved position: the beat you land on shows its staging, but its one-shot sound (a knock)
     // is not replayed — only mix-state cues are. Cleared once that first beat is on screen.
     let quietOnce = false;
-    stage = new DomStage(root.querySelector('.story-stage')!, sceneId, reduce, (c) => {
-      if (c.kind === 'audio' && !(quietOnce && !STATE_CUES.has(c.cue))) d.cue(c.cue);
-    });
+    stage = new DomStage(
+      root.querySelector('.story-stage')!,
+      sceneId,
+      reduce,
+      (c) => {
+        if (c.kind === 'audio' && !(quietOnce && !STATE_CUES.has(c.cue))) d.cue(c.cue);
+      },
+      scene,
+    );
     stage.mountActor();
     stage.cousinPresent(st.cousin);
     const s = stage;

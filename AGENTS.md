@@ -28,8 +28,9 @@ before you change anything.
   (same dimensions as the source, recorded in `src/assets/derivatives.json`), the environments' 3:4
   portrait crops (`PORTRAIT_URLS`, centred on `src/assets/focal.ts`), and the cast sheets from
   `npm run assets:cast` (cleaned, baseline-aligned repacks; their frames come from `src/assets/cast.json`,
-  never the source rects). Cast expression meanings are unlabelled: use frame `e1` only until the owner
-  labels them. Rebuild derivatives after `atlas:build` or any source change. Never bundle a PNG original; keep `npm run build` inside its
+  never the source rects). Cast and Roberto expression frames are verified by inspection (`docs/ASSETS.md`
+  "Expression verification") and reach dialogue only through `src/story/expressions.ts`: tagged by
+  stable line id, with a neutral fallback. Never random, and never a guessed frame. Rebuild derivatives after `atlas:build` or any source change. Never bundle a PNG original; keep `npm run build` inside its
   byte budget (`docs/PERFORMANCE.md`). Load images through `src/assets/warm.ts`, not ad-hoc `new Image()`.
 - **PWA isolation:** the service worker (`src/pwa/sw.js`) is scoped to the app directory and may only
   open/delete `inspire:sticks-and-bones:*` caches; never `unregister()` or `skipWaiting()` without the

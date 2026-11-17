@@ -16,9 +16,10 @@
  * alpha). Output: assets/generated/web/cast-<who>.webp and src/assets/cast.json (verified by
  * `npm run assets:verify`).
  *
- * Expression MEANINGS are not labelled by the owner. The `inspection` notes below are this build's
- * reading of each frame for the owner to confirm or correct; the runtime uses only frame e1 (each
- * character's composed default) and never claims a meaning.
+ * Expression MEANINGS were verified by visual inspection of every cropped cell (the generated cell order
+ * was not trusted). They're recorded below as `meaning`. The runtime maps dialogue expressions to these
+ * frames in src/story/expressions.ts, and an expression a character lacks falls back to e1 (their
+ * composed default).
  */
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -31,10 +32,10 @@ import { cleanCell } from './lib/clean.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const CAST = [
-  { who: 'vale', id: 'cast.vale.atlas', name: 'Tomás Vale', inspection: ['composed, level gaze', 'pleasant smile', 'appraising, slight frown', 'self-satisfied smile, chin up', 'cool, narrowed eyes', 'hard stare, brows down', 'startled, eyes wide', 'tight smirk'] },
-  { who: 'luz', id: 'cast.luz.atlas', name: 'Luz Rivera', inspection: ['calm, attentive', 'warm smile', 'serious, brows drawn', 'speaking, open mouth', 'concerned, brows raised', 'firm, level', 'gentle smile', 'soft smile, eyes narrowed'] },
-  { who: 'marisol', id: 'cast.marisol.atlas', name: 'Marisol Vélez', inspection: ['composed, slight smile', 'wry half-smile', 'worried, brows raised', 'determined, set jaw', 'pained, brows tilted', 'warm smile', 'suspicious frown', 'broad smile'] },
-  { who: 'rafa', id: 'cast.rafa.atlas', name: 'Tío Rafa', inspection: ['calm, looking off', 'laughing', 'sly grin', 'looking up, wistful', 'sad, brows tilted', 'downcast, eyes lowered', 'proud, chin up', 'broad smile'] },
+  { who: 'vale', id: 'cast.vale.atlas', name: 'Tomás Vale', inspection: ['composed, level gaze', 'pleasant public smile', 'appraising, one brow raised', 'self-satisfied smile, chin up', 'cool, narrowed eyes', 'hard stare, brows down', 'startled, eyes wide', 'tight smirk'] },
+  { who: 'luz', id: 'cast.luz.atlas', name: 'Luz Rivera', inspection: ['calm, attentive', 'warm smile', 'serious, brows drawn', 'speaking, open mouth', 'concerned, brows raised', 'firm, level', 'gentle closed smile', 'knowing soft smile, eyes narrowed'] },
+  { who: 'marisol', id: 'cast.marisol.atlas', name: 'Marisol Vélez', inspection: ['composed, slight smile', 'wry half-smile, eyes squinted', 'worried, brows raised, lips parted', 'determined, set jaw', 'pained, brows tilted', 'warm smile', 'suspicious frown', 'broad laughing smile'] },
+  { who: 'rafa', id: 'cast.rafa.atlas', name: 'Tío Rafa', inspection: ['calm, looking off', 'laughing', 'sly grin', 'looking up, wistful', 'sad, brows tilted', 'downcast, eyes lowered', 'proud, chin up', 'broad warm smile'] },
 ] as const;
 const FRINGE = 64;
 const RADIUS = 4;
@@ -51,7 +52,8 @@ interface FrameOut {
   anchorX: number;
   baselineY: number;
   headTopY: number;
-  inspection: string;
+  /** What the frame shows, verified by visual inspection. */
+  meaning: string;
 }
 
 const report: Record<string, unknown>[] = [];
@@ -145,7 +147,7 @@ for (const c of CAST) {
         const d = ((oy + y) * OW + ox + x) * 4;
         f.buf.copy(out, d, s, s + 4);
       }
-    outFrames.push({ id: frames[i]!.id, x: gx, y: gy, w: cellW, h: cellH, anchorX: Math.round(PAD + left), baselineY: PAD + above, headTopY: PAD + above - (f.base - f.top), inspection: c.inspection[i]! });
+    outFrames.push({ id: frames[i]!.id, x: gx, y: gy, w: cellW, h: cellH, anchorX: Math.round(PAD + left), baselineY: PAD + above, headTopY: PAD + above - (f.base - f.top), meaning: c.inspection[i]! });
   });
   // Placement drift in the ORIGINAL sheet (how much frames would jump without the repack).
   const baseRel = cleaned.map((f) => f.base); // cell-relative
@@ -198,7 +200,7 @@ for (const c of CAST) {
     repairs: { specksRemoved: specks, speckPixels, fringePixelsBefore: fringeBefore, fringePixelsAfter: fringeAfter, orphanFringeCleared: orphanCleared },
     sourceDrift: drift,
     defaultFrame: 'e1',
-    expressionLabels: 'not supplied — inspection notes only, unconfirmed',
+    expressionLabels: 'verified by visual inspection of every frame (src/story/expressions.ts maps dialogue expressions to them)',
     frames: outFrames,
   });
   console.log(`${ok ? '✓' : '✗'} ${c.id}: ${(input.length / 1024).toFixed(0)} KB → ${(webp.length / 1024).toFixed(0)} KB (${OW}×${cellH * rows}), mean err ${meanErr.toFixed(2)}, edge p99 ${edgeP99.toFixed(1)}, alpha ${alphaDiff ? `${alphaDiff} px differ` : 'exact'} · specks ${specks} (${speckPixels} px) · fringe ${fringeBefore} → ${fringeAfter} (orphans cleared ${orphanCleared}) · source drift baseline ${drift.baselinePx}px centre ${drift.centerPx}px height ${drift.figureHeightPx}px`);

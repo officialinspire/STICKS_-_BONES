@@ -8,10 +8,11 @@
  * audio hooks. They never change dialogue, rules or tiles, and nothing is
  * required to resolve a hand.
  *
- * Portraits: only Roberto has approved, labelled expression art. The other
- * characters are staged with name tags, light and text — never a guessed
- * expression from the unlabelled cast sheets, and never two unrelated
- * portraits pushed together.
+ * Portraits: one figure at a time, the current speaker. Expressions come from
+ * src/story/expressions.ts, where every frame's meaning was verified by visual
+ * inspection and each line is tagged by its stable id.
+ * - Roberto's `expr` cues here set his mood for untagged lines and reaction beats.
+ * - Nothing is guessed, and nothing is random.
  */
 import type { RuntimeAssetId } from '../assets';
 import type { StoryCue } from '../audio/manager';

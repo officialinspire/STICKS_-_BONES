@@ -72,7 +72,7 @@ v0.2, committed to `main` by the owner as 242ee60). The general project log stay
 | | Intro: touch-to-start → video (Skip) → black → menu retained; no SFX or music during init/intro | ✅ (video **still missing**: the fallback runs) |
 | | Original music briefs: night-investigation bed, cave suspense bed, four stingers (`docs/MUSIC_BRIEFS.md`); no music generated | ✅ (briefs; music **missing**) |
 | **Integration stage: assets, loading, offline, analytics** | Re-audit: nothing new supplied on `main`; remaining final assets listed explicitly (`docs/ASSETS.md`), none relabelled as final | ✅ |
-| | Cast portraits (Vale, Luz, Marisol, Rafa) in dialogue: cleaned repacked derivatives (specks removed, colour fringes repaired, baselines/centres aligned), identity checked, scene assignments tested; frame e1 only | ✅ (expression labels **missing**) |
+| | Cast portraits (Vale, Luz, Marisol, Rafa) in dialogue: cleaned repacked derivatives (specks removed, colour fringes repaired, baselines/centres aligned), identity checked, scene assignments tested; all eight frames with meanings verified by inspection | ✅ |
 | | Portrait 3:4 crops for all seven environments from one focal table; chosen by viewport, re-picked on rotation; next chapter prefetched (bounded queue), decoded before reveal | ✅ |
 | | Measured startup, chapter entry, decode cost, tap latency and memory; 8 repeated chapter visits: no growth in nodes, listeners, timers, workers, audio sources, media (`npm run perf:story`) | ✅ |
 | | Budgets revisited: core vs on-demand Story images, per-chapter limit; startup/code limits unchanged (manifest prose stripped from the bundle) | ✅ |
@@ -85,7 +85,7 @@ v0.2, committed to `main` by the owner as 242ee60). The general project log stay
 | | One-speaker staging: only the current speaker is on stage (none for narration and captions); centred, standing on the panel (beside it in short landscape); speaker changes fade out, then in; same speaker never moves; compact cast portraits at story tables | ✅ |
 | | Cousin's portrait derivative cleaned (specks/fringes); story stage no longer drawn under the table (fixed + regression check) | ✅ |
 | | Checked at 390×844, 844×390, 768×1024, 1366×768 (and QA's 8 viewports); faces clear of panel and bar; reduced motion | ✅ (emulation only) |
-| **Next** | Cast expressions in dialogue (needs the owner's expression labels) | ☐ |
+| | Expressions in dialogue: verified frame meanings for all five characters, 311 lines tagged by stable id (`src/story/expressions.ts`), neutral fallback, same box for every expression | ✅ |
 | | Owner listening pass: SFX choices, bed seams (`/dev/audio-audition.html`), levels on headphones and speakers; mark `auditioned` / `final` | ☐ |
 | | Commissioned music (night bed, cave bed, stingers) and recorded domino foley | ☐ |
 | | Finish Hand with AI assistance, skip with recap, optional table banter in safe gaps | ☐ |
@@ -111,7 +111,7 @@ stage entry of `docs/BUILD_STATUS.md` and `docs/AUDIO.md` § Verification.
 
 | Input | Needed for |
 | --- | --- |
-| **Expression labels** for the four cast atlases (which frame is neutral, angry, smiling…) | Expression changes in dialogue. Portraits now show frame e1; inspection notes for the owner to confirm are in `docs/ASSETS.md`. |
+| ~~**Expression labels** for the four cast atlases~~ | Done by visual inspection in this build (`docs/ASSETS.md` "Expression verification"). The owner may still correct any reading; the mapping is one data file. |
 | Owner's listening approval of the selected sounds and bed seams | Marking any sound `final` / any seam `auditioned` |
 | Permission to read `officialinspire/SPIRITBALL` (`js/analytics.js`, `js/attribution.js`), or the analytics contract itself (service + key for this game, consent, event mapping, attribution) | Turning analytics on (the session's attempt to attach SPIRITBALL was refused) |
 | Portraits for Worker, Representative, the contractor speaker | Those speakers (name tags today) |
@@ -140,6 +140,6 @@ stage entry of `docs/BUILD_STATUS.md` and `docs/AUDIO.md` § Verification.
    - bounded music recovery;
    - AI worker timeouts, `messageerror` and cancellation tests.
 3. **Version alignment:** pick one label (package, release notes, handoff).
-4. **Cast portraits** once their expressions are labelled.
+4. **Larger Roberto on DPR 3 phones:** a cleaned derivative of `cousin.atlas.large` (same expressions, more pixels).
 5. **Commissioned music and recorded foley** when delivered (wire through the profiles).
 6. **Firefox/WebKit and real-device passes**, and timed playtests.

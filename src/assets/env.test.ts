@@ -32,13 +32,14 @@ describe('environment focal points and portrait crops', () => {
 });
 
 describe('cast derivatives', () => {
-  it('four sheets, eight uniform baseline-aligned frames each, default e1, no expression meanings claimed', () => {
+  it('four sheets, eight uniform baseline-aligned frames each, default e1, verified meanings recorded', () => {
     expect(cast.cast.map((c) => c.who).sort()).toEqual(['luz', 'marisol', 'rafa', 'vale']);
     for (const c of cast.cast) {
       expect(c.frames).toHaveLength(8);
       expect(new Set(c.frames.map((f) => `${f.w}x${f.h}/${f.anchorX}/${f.baselineY}`)).size).toBe(1);
       expect(c.defaultFrame).toBe('e1');
-      expect(c.expressionLabels).toMatch(/not supplied/);
+      expect(c.expressionLabels).toMatch(/verified by visual inspection/);
+      for (const f of c.frames) expect(f.meaning.length, `${c.who} ${f.id}`).toBeGreaterThan(4);
       expect(c.alphaExact).toBe(true);
       expect(c.repairs.fringePixelsAfter).toBe(0);
     }
@@ -72,8 +73,16 @@ describe('cast dialogue crops (visible bounds)', () => {
       expect(f.w).toBeLessThanOrEqual(cell.w);
       expect(f.h).toBeLessThanOrEqual(cell.h);
       expect(f.h).toBeGreaterThan(f.w * 0.95); // head-and-shoulders, not a sliver
-      // The visible crop trims the padding: it starts at the head top (minus a hair margin) and ends at the baseline.
-      expect(f.y - cell.y).toBe(Math.max(0, cell.headTopY - 6));
+      // The visible crop trims the padding: it starts at the highest head top of any frame (minus a hair
+      // margin) and ends at the baseline. Every frame gets the same offsets, so an expression change can
+      // never move or rescale the figure.
+      const head = Math.min(...c.frames.map((x) => x.headTopY));
+      expect(f.y - cell.y).toBe(Math.max(0, head - 6));
+      for (const fr of c.frames) {
+        const g = castFrame(c.of as 'cast.vale.atlas', fr.id)!;
+        expect([g.w, g.h, g.x - fr.x, g.y - fr.y]).toEqual([f.w, f.h, f.x - cell.x, f.y - cell.y]);
+        expect(g.y + g.h).toBeLessThanOrEqual(fr.y + fr.h);
+      }
       const face = castFace(c.of as 'cast.vale.atlas')!;
       expect(face.w).toBe(face.h);
       expect(face.x).toBeGreaterThanOrEqual(cell.x);

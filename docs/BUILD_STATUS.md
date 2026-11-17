@@ -1377,10 +1377,10 @@ audio manager. No new manager.
 | Command | Result |
 | --- | --- |
 | `npm run story:e2e` | pass. § G now checks one figure: at most one on stage, none for captions and narration, Roberto only while he speaks, face clear of the panel and the scene bar, nothing into the controls, ≤ 1.6× upscale (10 moments × portrait/landscape). New § K: Rafa → Roberto is never two figures; fade out, then in, after 184 ms; reduced motion swaps instantly; Roberto's box identical on his next line |
-| `npm run check` | running at commit time; result recorded in the next commit |
-| `npm run e2e` | OSP_E2E |
-| `npm run qa` / `npm run a11y` | running at commit time; result recorded in the next commit |
-| `npm run perf:story` | running at commit time; result recorded in the next commit |
+| `npm run check` | run together with the expressions stage below (one suite for both) |
+| `npm run e2e` | run together with the expressions stage below (one suite for both) |
+| `npm run qa` / `npm run a11y` | run together with the expressions stage below (one suite for both) |
+| `npm run perf:story` | run together with the expressions stage below (one suite for both) |
 
 ### Known limitations
 - **Phones are limited by the art's resolution:** at DPR 3 most phones get about 194 px (Roberto) and
@@ -1388,6 +1388,83 @@ audio manager. No new manager.
 - **Desktop and tablet at DPR 2:** the figures are at their cap (290 / 325 px) in a large scene.
 - **Expressions:** cast expression labels are still missing, so the cast stay on frame `e1`.
 - Only Chromium; no real devices.
+
+## Verified expressions stage (2026-11-17)
+
+### Completed
+- **Inspected every sprite:**
+  - All 32 cast cells (Vale, Luz, Marisol, Rafa).
+  - Roberto's runtime atlas and every other Roberto sheet: the larger atlas and its copy, the slam and
+    placing strips, the host reference and the silhouette sheet.
+  - Each cell was cropped and looked at; the generated cell order was not trusted.
+- **Recorded:**
+  - Frame rectangles, crop offsets and verified meanings: `docs/ASSETS.md` "Expression verification",
+    and `src/assets/cast.json` (`meaning`; `npm run assets:cast` regenerated it, with byte-identical
+    WebPs).
+  - Identity findings:
+    - Roberto's portrait atlas, its large variant and the gesture strips share one outfit and likeness.
+    - The host reference is a different render and stays reference-only.
+    - Each cast sheet keeps one outfit across all eight frames.
+- **The "e1 only" restriction is replaced** by verified mappings (`src/story/expressions.ts`):
+  - **17 semantic expressions:** teasing, concern, firmness, vulnerability, affection, menace, fear,
+    amusement, surprise, suspicion, pride, wistful, thinking, explaining, delight, charm, neutral.
+  - **Per-character frame maps** with a neutral fallback where the art lacks an expression:
+    - Roberto: concern, vulnerability and wistful use his contemplative frame; menace and fear use his
+      calm one.
+    - Cast: e1.
+  - **311 of 358 spoken lines tagged by stable dialogue id** (`<scene>#<n>`), each chosen from the line
+    and the script's stage directions. A test pins every id to its speaker and opening text.
+    - Untagged cast lines are neutral.
+    - Untagged Roberto lines keep the stage directions' mood.
+- **Stable scale and anchors:**
+  - Every cast frame uses one crop (the highest head on the sheet to the shared baseline, the same
+    offsets in every cell), so an expression change only changes the face.
+  - Roberto keeps one `bustBox`.
+  - The swap is instant within the box: no dissolve, no second face.
+  - A speaker change still fades the old figure out completely before the next fades in.
+  - Nothing is random; no outfit changes.
+
+### Verified scenes (390×844)
+- **Vale:** menace on "I've read enough about your old profession…" (e6); fear on "It repeats things…"
+  (e7); public charm (e2).
+- **Marisol:** pained on "They suspended me…" (e5); warm on "I'm offering to stay." (e6); laughing on the
+  printer-toner line (e8).
+- **Rafa:** laughing on "See? Relaxing helps." (e2); downcast on "I knew enough to ask more questions…"
+  (e6).
+- **Luz:** concern on the dreams line (e5); knowing smile on "You expecting to move in?" (e8).
+- **Roberto:** contemplative on "I was scared." (no grin); fists-up on "Fuck THAT, we playing
+  DOMINOES!".
+
+### Tests
+- **`src/story/expressions.test.ts` (5):**
+  - Every tagged id is pinned to its speaker and opening text.
+  - Runtime numbering matches the script, including outcome inserts (unique).
+  - Every expression resolves to a verified frame or e1.
+  - Each cast member uses at least 6 distinct frames.
+  - Representative beats get the intended faces.
+- **`src/assets/env.test.ts`:** verified meanings recorded; every frame's crop has identical size and
+  offsets.
+- **story e2e § K:** Rafa e1 → e3 and Roberto smirk → laughing each keep an identical box, and the
+  expressions are applied.
+
+### Commands run and results (Chromium)
+
+| Command | Result |
+| --- | --- |
+| `npm run assets:cast` | ✓ all four sheets; WebPs byte-identical; `cast.json` meanings updated |
+| `npm run check` | running at commit time; result recorded in the next commit |
+| `npm run story:e2e` | running at commit time; result recorded in the next commit |
+| `npm run e2e` | running at commit time; result recorded in the next commit |
+| `npm run qa` / `npm run a11y` | running at commit time; result recorded in the next commit |
+| `npm run perf:story` | running at commit time; result recorded in the next commit |
+
+### Known limitations
+- **Readings are this build's, not the owner's:** the meanings come from visual inspection here. The
+  owner may correct any reading in one place (`FRAMES` in `src/story/expressions.ts`).
+- **Roberto's art has no somber, frightened or hostile frame:** those lines use his contemplative or
+  calm frame.
+- **The cast's speaking lines never directly follow each other**, so a cast expression change always
+  happens while the figure is faded out. The in-place swap is exercised by the § K test.
 
 ## Next stage
 
@@ -1402,6 +1479,5 @@ Still waiting on the owner:
 - the analytics contract;
 - enabling Pages and authorising the merge;
 - the intro video;
-- cast expression labels;
 - a listening pass on the selected sounds and bed seams; commissioned music; recorded domino foley;
 - real-device and Firefox/WebKit playtests.

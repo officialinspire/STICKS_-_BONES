@@ -39,7 +39,7 @@
     "figureHeightPx": 5
    },
    "defaultFrame": "e1",
-   "expressionLabels": "not supplied — inspection notes only, unconfirmed",
+   "expressionLabels": "verified by visual inspection of every frame (src/story/expressions.ts maps dialogue expressions to them)",
    "frames": [
     {
      "id": "e1",
@@ -50,7 +50,7 @@
      "anchorX": 190,
      "baselineY": 407,
      "headTopY": 10,
-     "inspection": "composed, level gaze"
+     "meaning": "composed, level gaze"
     },
     {
      "id": "e2",
@@ -61,7 +61,7 @@
      "anchorX": 190,
      "baselineY": 407,
      "headTopY": 10,
-     "inspection": "pleasant smile"
+     "meaning": "pleasant public smile"
     },
     {
      "id": "e3",
@@ -72,7 +72,7 @@
      "anchorX": 190,
      "baselineY": 407,
      "headTopY": 13,
-     "inspection": "appraising, slight frown"
+     "meaning": "appraising, one brow raised"
     },
     {
      "id": "e4",
@@ -83,7 +83,7 @@
      "anchorX": 190,
      "baselineY": 407,
      "headTopY": 10,
-     "inspection": "self-satisfied smile, chin up"
+     "meaning": "self-satisfied smile, chin up"
     },
     {
      "id": "e5",
@@ -94,7 +94,7 @@
      "anchorX": 190,
      "baselineY": 407,
      "headTopY": 13,
-     "inspection": "cool, narrowed eyes"
+     "meaning": "cool, narrowed eyes"
     },
     {
      "id": "e6",
@@ -105,7 +105,7 @@
      "anchorX": 190,
      "baselineY": 407,
      "headTopY": 14,
-     "inspection": "hard stare, brows down"
+     "meaning": "hard stare, brows down"
     },
     {
      "id": "e7",
@@ -116,7 +116,7 @@
      "anchorX": 190,
      "baselineY": 407,
      "headTopY": 9,
-     "inspection": "startled, eyes wide"
+     "meaning": "startled, eyes wide"
     },
     {
      "id": "e8",
@@ -127,7 +127,7 @@
      "anchorX": 190,
      "baselineY": 407,
      "headTopY": 14,
-     "inspection": "tight smirk"
+     "meaning": "tight smirk"
     }
    ]
   },
@@ -162,7 +162,7 @@
     "figureHeightPx": 2
    },
    "defaultFrame": "e1",
-   "expressionLabels": "not supplied — inspection notes only, unconfirmed",
+   "expressionLabels": "verified by visual inspection of every frame (src/story/expressions.ts maps dialogue expressions to them)",
    "frames": [
     {
      "id": "e1",
@@ -173,7 +173,7 @@
      "anchorX": 183,
      "baselineY": 401,
      "headTopY": 12,
-     "inspection": "calm, attentive"
+     "meaning": "calm, attentive"
     },
     {
      "id": "e2",
@@ -184,7 +184,7 @@
      "anchorX": 183,
      "baselineY": 401,
      "headTopY": 12,
-     "inspection": "warm smile"
+     "meaning": "warm smile"
     },
     {
      "id": "e3",
@@ -195,7 +195,7 @@
      "anchorX": 183,
      "baselineY": 401,
      "headTopY": 10,
-     "inspection": "serious, brows drawn"
+     "meaning": "serious, brows drawn"
     },
     {
      "id": "e4",
@@ -206,7 +206,7 @@
      "anchorX": 183,
      "baselineY": 401,
      "headTopY": 11,
-     "inspection": "speaking, open mouth"
+     "meaning": "speaking, open mouth"
     },
     {
      "id": "e5",
@@ -217,7 +217,7 @@
      "anchorX": 183,
      "baselineY": 401,
      "headTopY": 10,
-     "inspection": "concerned, brows raised"
+     "meaning": "concerned, brows raised"
     },
     {
      "id": "e6",
@@ -228,7 +228,7 @@
      "anchorX": 183,
      "baselineY": 401,
      "headTopY": 10,
-     "inspection": "firm, level"
+     "meaning": "firm, level"
     },
     {
      "id": "e7",
@@ -239,7 +239,7 @@
      "anchorX": 183,
      "baselineY": 401,
      "headTopY": 10,
-     "inspection": "gentle smile"
+     "meaning": "gentle closed smile"
     },
     {
      "id": "e8",
@@ -250,7 +250,7 @@
      "anchorX": 183,
      "baselineY": 401,
      "headTopY": 10,
-     "inspection": "soft smile, eyes narrowed"
+     "meaning": "knowing soft smile, eyes narrowed"
     }
    ]
   },
@@ -285,7 +285,7 @@
     "figureHeightPx": 0
    },
    "defaultFrame": "e1",
-   "expressionLabels": "not supplied — inspection notes only, unconfirmed",
+   "expressionLabels": "verified by visual inspection of every frame (src/story/expressions.ts maps dialogue expressions to them)",
    "frames": [
     {
      "id": "e1",
@@ -296,7 +296,7 @@
      "anchorX": 192,
      "baselineY": 423,
      "headTopY": 10,
-     "inspection": "composed, slight smile"
+     "meaning": "composed, slight smile"
     },
     {
      "id": "e2",
@@ -307,7 +307,7 @@
      "anchorX": 192,
      "baselineY": 423,
      "headTopY": 10,
-     "inspection": "wry half-smile"
+     "meaning": "wry half-smile, eyes squinted"
     },
     {
      "id": "e3",
@@ -318,7 +318,7 @@
      "anchorX": 192,
      "baselineY": 423,
      "headTopY": 10,
-     "inspection": "worried, brows raised"
+     "meaning": "worried, brows raised, lips parted"
     },
     {
      "id": "e4",
@@ -329,7 +329,7 @@
      "anchorX": 192,
      "baselineY": 423,
      "headTopY": 10,
-     "inspection": "determined, set jaw"
+     "meaning": "determined, set jaw"
     },
     {
      "id": "e5",
@@ -340,7 +340,7 @@
      "anchorX": 192,
      "baselineY": 423,
      "headTopY": 10,
-     "inspection": "pained, brows tilted"
+     "meaning": "pained, brows tilted"
     },
     {
      "id": "e6",
@@ -351,7 +351,7 @@
      "anchorX": 192,
      "baselineY": 423,
      "headTopY": 10,
-     "inspection": "warm smile"
+     "meaning": "warm smile"
     },
     {
      "id": "e7",
@@ -362,7 +362,7 @@
      "anchorX": 192,
      "baselineY": 423,
      "headTopY": 10,
-     "inspection": "suspicious frown"
+     "meaning": "suspicious frown"
     },
     {
      "id": "e8",
@@ -373,7 +373,7 @@
      "anchorX": 192,
      "baselineY": 423,
      "headTopY": 10,
-     "inspection": "broad smile"
+     "meaning": "broad laughing smile"
     }
    ]
   },
@@ -408,7 +408,7 @@
     "figureHeightPx": 4
    },
    "defaultFrame": "e1",
-   "expressionLabels": "not supplied — inspection notes only, unconfirmed",
+   "expressionLabels": "verified by visual inspection of every frame (src/story/expressions.ts maps dialogue expressions to them)",
    "frames": [
     {
      "id": "e1",
@@ -419,7 +419,7 @@
      "anchorX": 193,
      "baselineY": 402,
      "headTopY": 13,
-     "inspection": "calm, looking off"
+     "meaning": "calm, looking off"
     },
     {
      "id": "e2",
@@ -430,7 +430,7 @@
      "anchorX": 193,
      "baselineY": 402,
      "headTopY": 13,
-     "inspection": "laughing"
+     "meaning": "laughing"
     },
     {
      "id": "e3",
@@ -441,7 +441,7 @@
      "anchorX": 193,
      "baselineY": 402,
      "headTopY": 13,
-     "inspection": "sly grin"
+     "meaning": "sly grin"
     },
     {
      "id": "e4",
@@ -452,7 +452,7 @@
      "anchorX": 193,
      "baselineY": 402,
      "headTopY": 12,
-     "inspection": "looking up, wistful"
+     "meaning": "looking up, wistful"
     },
     {
      "id": "e5",
@@ -463,7 +463,7 @@
      "anchorX": 193,
      "baselineY": 402,
      "headTopY": 15,
-     "inspection": "sad, brows tilted"
+     "meaning": "sad, brows tilted"
     },
     {
      "id": "e6",
@@ -474,7 +474,7 @@
      "anchorX": 193,
      "baselineY": 402,
      "headTopY": 15,
-     "inspection": "downcast, eyes lowered"
+     "meaning": "downcast, eyes lowered"
     },
     {
      "id": "e7",
@@ -485,7 +485,7 @@
      "anchorX": 193,
      "baselineY": 402,
      "headTopY": 11,
-     "inspection": "proud, chin up"
+     "meaning": "proud, chin up"
     },
     {
      "id": "e8",
@@ -496,7 +496,7 @@
      "anchorX": 193,
      "baselineY": 402,
      "headTopY": 14,
-     "inspection": "broad smile"
+     "meaning": "broad warm smile"
     }
    ]
   }

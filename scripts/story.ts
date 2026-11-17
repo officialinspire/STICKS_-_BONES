@@ -327,6 +327,8 @@ try {
     // Let the line settle (a tap during its reveal only completes the reveal).
     await waitState(page, 'presenting');
     await page.waitForTimeout(1200);
+    const castBox = () => page.evaluate(() => { const b = document.querySelector('.st-cast')!.getBoundingClientRect(); return `${Math.round(b.x)},${Math.round(b.y)},${Math.round(b.width)}x${Math.round(b.height)}|${(document.querySelector('.st-cast-art') as HTMLElement).dataset.frame}|${document.querySelector('.story-stage')!.getAttribute('data-expression')}`; });
+    const rafa1 = await castBox(); // Rafa #1: untagged → neutral (e1)
     // Next: sample which figure is on stage every 20 ms for 700 ms.
     const timeline = (await page.evaluate(`new Promise((res) => {
       const out = [];
@@ -347,8 +349,10 @@ try {
     if (reduce) check(firstOn - castOff <= 60, `K: reduced motion should swap at once (gap ${firstOn - castOff} ms)`);
     else check(firstOn - castOff >= 120 && timeline.some((x) => !x.actor && !x.cast && x.cOp > 0 && x.cOp < 1), `K: the speaker change should fade out first, then in (gap ${firstOn - castOff} ms)`);
     const rect = () => page.evaluate(() => { const b = document.querySelector('.st-actor')!.getBoundingClientRect(); return `${Math.round(b.x)},${Math.round(b.y)},${Math.round(b.width)}x${Math.round(b.height)}`; });
+    const expr = () => page.evaluate(() => document.querySelector('.story-stage')!.getAttribute('data-expression'));
     await page.waitForTimeout(500);
     const first = await rect();
+    const firstExpr = await expr(); // Roberto #2: teasing (smirk)
     const next = async () => {
       await waitState(page, 'presenting');
       await page.waitForTimeout(900);
@@ -356,11 +360,17 @@ try {
       await page.waitForTimeout(700);
     };
     await next(); // Rafa
+    const rafa3 = await castBox(); // Rafa #3: teasing → sly grin (e3)
     await next(); // Cousin again
     const again = await rect();
+    const againExpr = await expr(); // Roberto #4: amusement (laughing)
     check(first === again, `K: Roberto moved between his lines (${first} → ${again})`);
+    check(firstExpr === 'teasing' && againExpr === 'amusement', `K: Roberto's verified expressions not applied (${firstExpr} → ${againExpr})`);
+    const [box1, fr1] = rafa1.split('|');
+    const [box3, fr3] = rafa3.split('|');
+    check(fr1 === 'e1' && fr3 === 'e3' && box1 === box3, `K: Rafa's expression change must keep the same box (${rafa1} → ${rafa3})`);
     check(errors.length === 0, `K: errors ${errors.join(' | ')}`);
-    notes.push(`K (reduce ${reduce}): Rafa → Roberto: never two figures; ${reduce ? `instant swap (${firstOn - castOff} ms)` : `fade out, then in after ${firstOn - castOff} ms`}; Roberto's box identical on his next line (${again})`);
+    notes.push(`K (reduce ${reduce}): Rafa → Roberto: never two figures; ${reduce ? `instant swap (${firstOn - castOff} ms)` : `fade out, then in after ${firstOn - castOff} ms`}; Roberto's box identical across smirk → laugh (${again}); Rafa e1 → e3 in the same box`);
     await page.context().close();
   }
 
