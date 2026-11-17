@@ -21,7 +21,7 @@
 import type { AudioSettings } from '../app/settings';
 import type { Scheduler } from '../app/session';
 import { PROFILES, QUICK_PLAY_BED, type StoryProfileId } from './profiles';
-import { ALL_SAMPLES, MOTIF, VARIANTS, type BedId } from './sounds';
+import { MOTIF, samplesFor, VARIANTS, type BedId } from './sounds';
 
 export type Scene = 'init' | 'intro' | 'menu' | 'story' | 'gameplay' | 'paused' | 'results';
 export type Bus = 'music' | 'sfx' | 'voice' | 'ambience';
@@ -174,7 +174,7 @@ export class AudioManager {
   #bedOff = false;
   #swell = false;
   #lastBed: { bed: BedId | null; level: number } = { bed: null, level: 0 };
-  #samplesRequested = false;
+  #samplesRequested = new Set<'ui' | 'table' | 'story'>();
   #lastVariant = new Map<SfxId, number>();
   #rng = 0x2545f491;
   readonly stats = { musicStarts: 0, staleDropped: 0, playRejected: 0, sfxPlayed: 0, sfxDropped: 0, cuesPlayed: 0, cuesCancelled: 0, cuesCaptionOnly: 0, cuesRefused: 0 };
@@ -505,9 +505,13 @@ export class AudioManager {
   #apply(token: number): void {
     this.#clearTimers();
     const mix = this.#mix();
-    if (mix.sfx && !this.#samplesRequested) {
-      this.#samplesRequested = true;
-      this.#b.preloadSamples(ALL_SAMPLES);
+    if (mix.sfx) {
+      // Decode only what this scene can play (UI always; table sounds at a table; story accents in Story).
+      const groups: ('ui' | 'table' | 'story')[] = ['ui', ...(this.#scene === 'story' ? (['story'] as const) : this.#scene === 'menu' ? [] : (['table'] as const))];
+      for (const g of groups) if (!this.#samplesRequested.has(g)) {
+        this.#samplesRequested.add(g);
+        this.#b.preloadSamples(samplesFor(g));
+      }
     }
     this.#applyBed(BED_FADE_SEC);
     // An old track is still fading out: its timer will re-apply the then-current scene.

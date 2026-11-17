@@ -317,7 +317,9 @@ describe('AudioManager: samples, variations and voices', () => {
     const { m, fb } = make();
     await m.unlock();
     m.setScene('gameplay');
-    expect(fb.preloaded.length).toBeGreaterThan(20); // short samples decode once audio is live
+    // Only what a table can play is decoded (UI + tile/pass sounds), never the story accents.
+    expect(fb.preloaded.some((x) => x.startsWith('tile-'))).toBe(true);
+    expect(fb.preloaded.some((x) => x.startsWith('motif-'))).toBe(false);
     const picks: string[] = [];
     for (let i = 0; i < 30; i++) {
       m.playSfx('place');

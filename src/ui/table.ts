@@ -4,7 +4,8 @@
  * controller intents. On a shared device, hands are never in the DOM unless
  * the controller is in 'human-turn' for that human.
  */
-import { assetUrl } from '../assets';
+import { assetUrl, urlFor } from '../assets';
+import { envKey } from '../assets/env';
 import { warm } from '../assets/warm';
 import { layoutChain, type BoardLayout, type EndSlot } from '../board/layout';
 import type { GameEvent } from '../engine/events';
@@ -209,7 +210,7 @@ export class TableScreen {
     this.#q('announce').textContent = [this.#quip, this.#message].filter(Boolean).join(' ');
     this.#root.classList.toggle('reduce-motion', this.#reduce());
     this.#s.setThinkingSpeed(AI_SPEED_FACTOR[this.#cb.settings.get().aiSpeed]);
-    const env = assetUrl('env.neighborhood-patio');
+    const env = urlFor(envKey('env.neighborhood-patio')); // the 3:4 crop on portrait screens
     const table = assetUrl('table.weathered');
     if (env) r.style.setProperty('--env-image', `url("${env}")`);
     if (table) r.style.setProperty('--table-image', `url("${table}")`);

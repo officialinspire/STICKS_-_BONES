@@ -223,5 +223,175 @@
    "edgePixels": 507837,
    "alphaExact": true
   }
+ ],
+ "portrait": [
+  {
+   "id": "env.neighborhood-patio@portrait",
+   "of": "env.neighborhood-patio",
+   "path": "assets/generated/web/neighborhood-patio-portrait.webp",
+   "format": "webp",
+   "encoder": "q82 smartSubsample",
+   "crop": {
+    "x": 483,
+    "y": 0,
+    "w": 706,
+    "h": 941
+   },
+   "focus": {
+    "x": 0.5,
+    "y": 0.55
+   },
+   "width": 706,
+   "height": 941,
+   "bytes": 91794,
+   "sha256": "d8bafb2912484a34b2f991cbb6595afe2ed776ab12da62fe1ebc27b25a5a5dc4",
+   "sourceSha256": "31966bdf144ab39c8fffc901b45264fd3c351d8febf865a14a51a96a7469c9e2",
+   "maxMeanErr": 6,
+   "meanErr": 4.38
+  },
+  {
+   "id": "env.cave-waterfall@portrait",
+   "of": "env.cave-waterfall",
+   "path": "assets/generated/web/cave-waterfall-portrait.webp",
+   "format": "webp",
+   "encoder": "q80 smartSubsample",
+   "crop": {
+    "x": 483,
+    "y": 0,
+    "w": 706,
+    "h": 941
+   },
+   "focus": {
+    "x": 0.5,
+    "y": 0.4
+   },
+   "width": 706,
+   "height": 941,
+   "bytes": 94906,
+   "sha256": "13aa7562f7113079e00d2e41dd79c7d0f28791ebbea688f44a617ef50ec6a95c",
+   "sourceSha256": "e1548692a36bb34690c0a34d6b4dbebdd9abfc8977b90eedc9a5de4f9ed81265",
+   "maxMeanErr": 6,
+   "meanErr": 4.9
+  },
+  {
+   "id": "env.back-alley@portrait",
+   "of": "env.back-alley",
+   "path": "assets/generated/web/back-alley-portrait.webp",
+   "format": "webp",
+   "encoder": "q80 smartSubsample",
+   "crop": {
+    "x": 399,
+    "y": 0,
+    "w": 706,
+    "h": 941
+   },
+   "focus": {
+    "x": 0.5006,
+    "y": 0.5
+   },
+   "width": 706,
+   "height": 941,
+   "bytes": 98416,
+   "sha256": "d78bc7c3cd483873a0e8d9b9383a214861f24b3140c736b237e510f6f6196fe5",
+   "sourceSha256": "c7d502f6a0a10f086ff88a82dbb5fe6d05e392be4988aaa6624fd0f37a9ebb54",
+   "maxMeanErr": 6,
+   "meanErr": 4.84
+  },
+  {
+   "id": "env.resort-patio@portrait",
+   "of": "env.resort-patio",
+   "path": "assets/generated/web/resort-patio-portrait.webp",
+   "format": "webp",
+   "encoder": "q80 smartSubsample",
+   "crop": {
+    "x": 483,
+    "y": 0,
+    "w": 706,
+    "h": 941
+   },
+   "focus": {
+    "x": 0.5,
+    "y": 0.5
+   },
+   "width": 706,
+   "height": 941,
+   "bytes": 88678,
+   "sha256": "65d6d45908ed1113b9589d6913b72008aa1f31c2b6359c5eb7b251e1c5103973",
+   "sourceSha256": "4bc5873a103301f87ba0dd73240a078acb6d9fd6a00e575bc030090b3a7785e2",
+   "maxMeanErr": 6,
+   "meanErr": 5.06
+  },
+  {
+   "id": "env.moonlit-promenade@portrait",
+   "of": "env.moonlit-promenade",
+   "path": "assets/generated/web/moonlit-promenade-portrait.webp",
+   "format": "webp",
+   "encoder": "q80 smartSubsample",
+   "crop": {
+    "x": 483,
+    "y": 0,
+    "w": 706,
+    "h": 941
+   },
+   "focus": {
+    "x": 0.5,
+    "y": 0.6
+   },
+   "width": 706,
+   "height": 941,
+   "bytes": 51632,
+   "sha256": "9943c3c11e06116720e3ec2ccaf4914165a594cf62eb9299e78e6a4052622efe",
+   "sourceSha256": "fd3231aad8c7a3ee7aa8ace409d5135cdbbcaf5a7eed886f1d6581a458dabc23",
+   "maxMeanErr": 6,
+   "meanErr": 3.68
+  },
+  {
+   "id": "env.jungle-camp@portrait",
+   "of": "env.jungle-camp",
+   "path": "assets/generated/web/jungle-camp-portrait.webp",
+   "format": "webp",
+   "encoder": "q84 smartSubsample",
+   "crop": {
+    "x": 483,
+    "y": 0,
+    "w": 706,
+    "h": 941
+   },
+   "focus": {
+    "x": 0.5,
+    "y": 0.45
+   },
+   "width": 706,
+   "height": 941,
+   "bytes": 186712,
+   "sha256": "9bb5023579dac5287880244d35ad4e64763404c1790ebaf468f6436499bf157c",
+   "sourceSha256": "2ff66fe10f712a689d8a874767777345a8e654bde3be76c6617f39d799d56fe3",
+   "maxMeanErr": 6,
+   "meanErr": 5.42
+  },
+  {
+   "id": "env.executive-terrace@portrait",
+   "of": "env.executive-terrace",
+   "path": "assets/generated/web/executive-terrace-portrait.webp",
+   "format": "webp",
+   "encoder": "q80 smartSubsample",
+   "crop": {
+    "x": 483,
+    "y": 0,
+    "w": 706,
+    "h": 941
+   },
+   "focus": {
+    "x": 0.5,
+    "y": 0.5
+   },
+   "width": 706,
+   "height": 941,
+   "bytes": 75346,
+   "sha256": "1e17898669e848ab4936e4799c0710af37d23f6c3d34c7949364059a05e28f60",
+   "sourceSha256": "ef862bdfed3c129277ac39312f681d91f0daf4ec3357bed6fc49f3435ad6e70d",
+   "maxMeanErr": 6,
+   "meanErr": 4.47
+  }
  ]
 }

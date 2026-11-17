@@ -3,7 +3,8 @@
  * selected mode's rules — visible before dealing), rules, and settings.
  * Dev tools appear only in development builds.
  */
-import { assetUrl } from '../assets';
+import { urlFor } from '../assets';
+import { envKey } from '../assets/env';
 import type { OpponentKind } from '../app/session';
 import type { Difficulty } from '../ai/types';
 import { DEFAULT_RULES_PRESET, type ModeId, type TargetScore } from '../engine';
@@ -60,6 +61,12 @@ export interface MenuHandlers {
 export interface MenuPwa {
   /** Current status line and whether a new version is waiting. */
   view(): { text: string; ready: boolean; updateReady: boolean };
+  /** What of the story / optional audio is saved offline (measured sizes), and the matching button label. */
+  storyLine(): string;
+  audioLine(): string;
+  offlineButton(g: 'story' | 'audio'): string;
+  /** Explicit download (or, for saved audio, removal). */
+  onOffline(g: 'story' | 'audio'): void;
   onUpdate(): void;
   onRepair(): void;
   onErase(): void;
@@ -97,7 +104,7 @@ function shell(inner: string, speech: string, mood: Parameters<typeof hostFigure
 const SAMPLE_LINE = `<section class="table" aria-hidden="true"><div class="line">${dominoSvg(6, 6, { className: 'is-double' })}${dominoSvg(6, 4, { orientation: 'horizontal' })}${dominoSvg(4, 1, { orientation: 'horizontal' })}${dominoSvg(1, 1, { className: 'is-double' })}${dominoSvg(1, 0, { orientation: 'horizontal' })}</div></section>`;
 
 export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: MenuHandlers): void {
-  const env = assetUrl('env.neighborhood-patio');
+  const env = urlFor(envKey('env.neighborhood-patio')); // the 3:4 crop on portrait screens
   if (env) root.style.setProperty('--env-image', `url("${env}")`);
   const go = (screen: MenuScreen) => renderMenu(root, initial, { ...h, screen, notices: [] });
   const screen = h.screen ?? 'home';
@@ -195,9 +202,18 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
       ? `<section class="offline-panel" aria-labelledby="offline-heading">
           <h3 id="offline-heading">Offline &amp; storage</h3>
           ${offlineLine(h.pwa)}
-          <p class="note">Offline play starts working after one complete online visit (this screen says “Ready to play offline”). Music and the studio intro always need a connection; offline, the game is silent.</p>
+          <p class="note">Quick Play works offline after one complete online visit. Story scenes save as you play them (and the next one ahead); to take the whole case offline, download it below.</p>
+          <h4 class="offline-sub">Story</h4>
+          <p class="offline-status" data-region="offline-story" role="status">${esc(h.pwa.storyLine())}</p>
+          <progress data-region="offline-story-progress" hidden aria-label="Story download progress"></progress>
+          <div class="row"><button type="button" class="btn-ghost dark" data-act="offline-story">${esc(h.pwa.offlineButton('story'))}</button></div>
+          <h4 class="offline-sub">Music &amp; ambience (optional)</h4>
+          <p class="offline-status" data-region="offline-audio" role="status">${esc(h.pwa.audioLine())}</p>
+          <progress data-region="offline-audio-progress" hidden aria-label="Audio download progress"></progress>
+          <div class="row"><button type="button" class="btn-ghost dark" data-act="offline-audio">${esc(h.pwa.offlineButton('audio'))}</button></div>
+          <p class="note">The studio intro always needs a connection.</p>
           <div class="row"><button type="button" class="btn-ghost dark" data-act="repair">Repair offline files</button></div>
-          <p class="note">Repair re-downloads only this game’s offline files. Your saved game, settings and statistics are kept.</p>
+          <p class="note">Repair re-downloads only this game’s offline files (and the story or audio you chose to keep). Your saved game, story progress, settings and statistics are kept.</p>
           <div class="row"><button type="button" class="btn-ghost dark" data-act="erase">Erase saved game, settings &amp; statistics…</button></div>
         </section>`
       : '';
@@ -205,6 +221,8 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
     wire();
     bindSettingsPanel(root.querySelector('.settings-panel') as HTMLElement, h.settings);
     root.querySelector('[data-act="repair"]')?.addEventListener('click', () => h.pwa?.onRepair());
+    root.querySelector('[data-act="offline-story"]')?.addEventListener('click', () => h.pwa?.onOffline('story'));
+    root.querySelector('[data-act="offline-audio"]')?.addEventListener('click', () => h.pwa?.onOffline('audio'));
     const erase = root.querySelector<HTMLButtonElement>('[data-act="erase"]');
     erase?.addEventListener('click', () => {
       // Two taps: the first only arms the button (nothing is deleted by a stray tap).

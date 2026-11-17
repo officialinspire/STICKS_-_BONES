@@ -9,7 +9,9 @@ import { loadStats, recordAbandoned, recordCompleted, resetStats, saveStats, typ
 import type { ReadStatus } from './app/storage';
 import type { ModeId, SeatIndex } from './engine/types';
 import { initTileArt, setForceSvg } from './render/tile-art';
-import { deferredAssets, ESSENTIAL_ASSETS, warm } from './assets/warm';
+import { deferredAssets, essentialAssets, warm } from './assets/warm';
+import { envKey, onViewportShape } from './assets/env';
+import { urlFor } from './assets';
 import { MUSIC } from './assets/audio-manifest';
 import { introVideoUrl, musicUrl } from './assets/media-urls';
 import { AudioManager, type Scene, type SfxId } from './audio/manager';
@@ -18,7 +20,8 @@ import { haptic, type HapticCue } from './audio/haptics';
 import { showStart } from './ui/intro-screen';
 import { renderMenu, type MenuChoice, type ResumeOffer } from './ui/menu';
 import { TableScreen } from './ui/table';
-import { consumeUpdatedFlag, describeOffline, eraseLocalData, PwaController } from './app/pwa';
+import { chaptersReady, consumeUpdatedFlag, consumeUpdateResume, describeAudio, describeOffline, describeStory, eraseLocalData, PwaController, setUpdateResume, type ResumeTarget } from './app/pwa';
+import { SCENE_IMAGES } from './story/scene-images';
 import { Analytics, winnerLabel, type AnalyticsEvent, type MatchInfo, type StartKind } from './app/analytics';
 import { ANALYTICS_CONFIG } from './app/analytics-config';
 
@@ -66,6 +69,15 @@ const regesture = () => {
 document.addEventListener('pointerdown', regesture, { capture: true, passive: true });
 document.addEventListener('keydown', regesture, { capture: true });
 document.addEventListener('visibilitychange', () => audio.setHidden(document.hidden));
+// Rotation / split screen: the menu and table backdrops swap between the patio's 3:4 crop and full frame.
+// One app-wide listener (never per screen), so nothing accumulates across visits.
+onViewportShape(() => {
+  const u = urlFor(envKey('env.neighborhood-patio'));
+  if (!u) return;
+  void warm([envKey('env.neighborhood-patio')], { front: true }).then(() => {
+    for (const el of document.querySelectorAll<HTMLElement>('[style*="--env-image"]')) el.style.setProperty('--env-image', `url("${u}")`);
+  });
+});
 window.addEventListener('pagehide', () => audio.setHidden(true));
 window.addEventListener('pageshow', () => audio.setHidden(document.hidden));
 
@@ -129,7 +141,9 @@ function matchInfo(session: GameSession, matchId: string): MatchInfo {
 }
 
 // ---- PWA: offline files, updates, repair (production builds only) -------------------
-const pwa = new PwaController();
+const pwa = new PwaController(store);
+/** Where an update reload asked to return to (read once, before anything renders). */
+const resumeAfterUpdate: ResumeTarget | null = consumeUpdateResume();
 if (consumeUpdatedFlag()) notices.push('Updated to the latest version. Your game was saved first — tap Resume to carry on.');
 const ERASED_FLAG = 'sticks-and-bones.erased';
 try {
@@ -144,6 +158,18 @@ const pwaView = () => {
   const d = describeOffline(pwa.view.offline);
   return { ...d, updateReady: pwa.view.updateReady };
 };
+/** App-relative paths of each story scene's images for this screen shape (what "ready offline" checks). */
+function sceneFiles(): Record<string, string[]> {
+  const base = PwaController.appRoot().href;
+  const rel = (u: string | null) => (u && u.startsWith(base) ? u.slice(base.length) : (u ?? ''));
+  return Object.fromEntries(Object.entries(SCENE_IMAGES).map(([id, m]) => [id, [...m.env.map((e) => rel(urlFor(envKey(e)))), ...m.cast.map((c) => rel(urlFor(c)))]]));
+}
+function readyScenes(): string[] {
+  const st = pwa.status;
+  return st ? chaptersReady([...(st.story.have ?? []), ...(st.core.have ?? [])], sceneFiles()) : [];
+}
+const storyLine = () => describeStory(pwa.status, pwa.view.jobs.story, readyScenes().length, Object.keys(SCENE_IMAGES).length);
+const audioLine = () => describeAudio(pwa.status, pwa.view.jobs.audio);
 /** Keep every status line / update banner on screen current (menu, settings, pause sheet). */
 pwa.subscribe(() => {
   const v = pwaView();
@@ -152,26 +178,103 @@ pwa.subscribe(() => {
     el.classList.toggle('is-ready', v.ready);
   });
   document.querySelectorAll<HTMLElement>('[data-region="update"]').forEach((el) => (el.hidden = !v.updateReady));
+  document.querySelectorAll<HTMLElement>('[data-region="offline-story"]').forEach((el) => (el.textContent = storyLine()));
+  document.querySelectorAll<HTMLElement>('[data-region="offline-audio"]').forEach((el) => (el.textContent = audioLine()));
+  for (const g of ['story', 'audio'] as const) {
+    const j = pwa.view.jobs[g];
+    document.querySelectorAll<HTMLProgressElement>(`progress[data-region="offline-${g}-progress"]`).forEach((el) => {
+      el.hidden = j.kind !== 'running';
+      if (j.kind === 'running') {
+        el.max = j.progress.bytesTotal || 1;
+        el.value = j.progress.bytesDone;
+      }
+    });
+    document.querySelectorAll<HTMLButtonElement>(`[data-act="offline-${g}"]`).forEach((b) => {
+      b.disabled = j.kind === 'running' || !pwa.status;
+      b.textContent = offlineButton(g);
+    });
+  }
 });
+function offlineButton(g: 'story' | 'audio'): string {
+  const st = pwa.status;
+  const j = pwa.view.jobs[g];
+  const mb = (b: number) => `${(b / 1048576).toFixed(1)} MB`;
+  if (!st) return g === 'story' ? 'Download the whole story' : 'Save music & ambience for offline';
+  const left = st[g].totalBytes - st[g].bytes;
+  const full = st[g].cached >= st[g].total;
+  if (j.kind === 'running') return 'Downloading…';
+  if (g === 'audio' && full) return 'Remove offline music & ambience';
+  if (full) return 'Whole story saved';
+  if (j.kind === 'interrupted' || j.kind === 'quota' || (j.kind === 'done' && j.missing)) return `Retry (${mb(left)} left)`;
+  return g === 'story' ? `Download the whole story (${mb(left)})` : `Save music & ambience for offline (${mb(left)})`;
+}
+/** The Story layer's hooks while a story run is open: write its position now, and stop it. */
+let storyHooks: { flush(): boolean; stop(): void } | null = null;
 /**
- * Apply a waiting update only from a stable point: save the match exactly as the
- * engine has it, stop the table (no AI move can land after the save), replace the
- * screen so no hand is visible while the new version loads, then reload. The
- * restored match opens behind the privacy cover when two humans share the device.
+ * Apply a waiting update only from a stable point: write the current state (a Quick Play match exactly
+ * as the engine has it, or the story position including an in-progress hand) and check that the write
+ * succeeded. If it failed, say so and let the player choose (never claim it saved). Then stop the table
+ * (no AI move can land after the save), replace the screen so no hand is visible while the new version
+ * loads, and reload. After the reload the player returns ONCE to the same chapter, line or encounter;
+ * a two-player match reopens behind the privacy cover.
  */
-function applyUpdate(): void {
+function applyUpdate(force = false): void {
+  if (!pwa.view.updateReady) return;
+  let saved = true;
+  let to: ResumeTarget = { to: 'menu' };
+  const a = active;
+  if (a && a.controller.session.opponent !== 'dev-both') {
+    saved = writeSave(store, a.controller.session, a.matchId);
+    to = { to: 'quick' };
+  } else if (storyHooks) {
+    saved = storyHooks.flush();
+    to = { to: 'story' };
+  }
+  setSaveHealth(saved);
+  if (!saved && !force) return void confirmUnsavedUpdate();
   pwa.applyUpdate(() => {
-    const a = active;
-    if (a) writeSave(store, a.controller.session, a.matchId);
+    setUpdateResume(saved ? to : { to: 'menu' });
+    storyHooks?.stop();
+    storyHooks = null;
+    endStoryHand();
     teardown();
     active = null;
     document.documentElement.classList.remove('table-lock');
     root.className = 'is-start';
-    root.innerHTML = '<p class="loading" role="status">Updating — your game is saved…</p>';
+    root.innerHTML = `<p class="loading" role="status">${saved ? 'Updating — your place is saved…' : 'Updating…'}</p>`;
   });
+}
+/** Storage refused the write: the player decides; the update never pretends it saved. */
+function confirmUnsavedUpdate(): void {
+  document.querySelector('dialog.update-unsaved')?.remove();
+  const dlg = document.createElement('dialog');
+  dlg.className = 'sheet update-unsaved';
+  dlg.setAttribute('aria-labelledby', 'upd-h');
+  dlg.innerHTML = `<h2 id="upd-h" class="section-h">Your place couldn’t be saved</h2><p>This browser refused to save right now. If you update anyway, you’ll return to your last saved point instead of exactly here.</p><div class="row"><button type="button" class="btn" data-act="upd-later">Not now — keep playing</button><button type="button" class="btn-ghost dark" data-act="upd-anyway">Update anyway</button></div>`;
+  document.body.append(dlg);
+  const close = () => {
+    dlg.close();
+    dlg.remove();
+  };
+  dlg.querySelector('[data-act="upd-later"]')!.addEventListener('click', close);
+  dlg.querySelector('[data-act="upd-anyway"]')!.addEventListener('click', () => {
+    close();
+    applyUpdate(true);
+  });
+  dlg.addEventListener('cancel', close);
+  dlg.showModal();
+  (dlg.querySelector('[data-act="upd-later"]') as HTMLElement).focus();
 }
 const menuPwa = {
   view: pwaView,
+  storyLine,
+  audioLine,
+  offlineButton,
+  onOffline: (g: 'story' | 'audio') => {
+    const st = pwa.status;
+    if (g === 'audio' && st && st.audio.cached >= st.audio.total && st.audio.total > 0) void pwa.drop('audio');
+    else void pwa.download(g);
+  },
   onUpdate: applyUpdate,
   onRepair: () => void pwa.repair(),
   onErase: () => {
@@ -222,6 +325,8 @@ function endStoryHand(): void {
 }
 /** Story tables never show Quick Play banter: Roberto is the player here, and serious scenes stay serious. */
 const storySettingsApi = { get: () => ({ ...settings, banter: false }), set: (p: Partial<Settings>) => settingsApi.set(p) };
+/** Set by an update reload: the case file reopens the saved scene once, without a tap. */
+let autoContinueOnce = false;
 function openStory(): void {
   teardown();
   active = null;
@@ -242,6 +347,17 @@ function openStory(): void {
     reduceMotion: () => reduceMotion(settings, matchMedia('(prefers-reduced-motion: reduce)').matches),
     onSaveFailed: () => setSaveHealth(false),
     cue: (c) => void audio.cue(c),
+    registerRun: (hooks) => (storyHooks = hooks),
+    offlineNote: (id) => {
+      if (pwa.view.offline.kind === 'unsupported' || !pwa.status) return null;
+      return readyScenes().includes(id) ? 'Saved for offline play.' : 'Needs a connection the first time (it saves for offline as you play).';
+    },
+    update: tableUpdate,
+    takeAutoContinue: () => {
+      const v = autoContinueOnce;
+      autoContinueOnce = false;
+      return v;
+    },
     audioScene: (id) => {
       audio.setStoryProfile(id);
       audio.setScene(id ? 'story' : 'menu');
@@ -260,6 +376,7 @@ function openStory(): void {
         onRestart: () => playStoryAgain(),
         settings: storySettingsApi,
         audio: audioApi,
+        update: tableUpdate,
         story: { onContinue: () => req.onContinue() },
       });
       const playerTeam = session.rules.teams.findIndex((t) => t.includes(0));
@@ -542,10 +659,17 @@ function boot(): void {
     setMuted: (muted) => settingsApi.set({ audio: { ...settings.audio, muted } }),
     preload: () => {
       // Only what the first menu needs; the rest is warmed once the menu is up.
-      void warm(ESSENTIAL_ASSETS);
+      void warm(essentialAssets());
       audio.preload('menu', 'metadata');
     },
-    onMenu: () => showMenu(),
+    // After an update reload: return once to the same place (story scene or encounter, or the saved match).
+    onMenu: () => {
+      if (resumeAfterUpdate?.to === 'story') {
+        autoContinueOnce = true;
+        openStory();
+      } else if (resumeAfterUpdate?.to === 'quick' && readSave(store).value) resume();
+      else showMenu();
+    },
   });
   if (DEV) (window as unknown as { __sbAudio: unknown }).__sbAudio = { audio, backend };
 }

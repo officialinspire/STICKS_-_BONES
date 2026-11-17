@@ -19,6 +19,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
+import { ENV_FOCUS, ENV_IDS, portraitCrop } from '../src/assets/focal.ts';
 import { IMAGE_ASSETS } from '../src/assets/manifest.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -103,7 +104,50 @@ for (const [id, cfg] of Object.entries(DERIVE)) {
   });
   console.log(`${ok ? '✓' : '✗'} ${id}: ${(input.length / 1024).toFixed(0)} KB → ${(webp.length / 1024).toFixed(0)} KB, mean err ${meanErr.toFixed(2)}, edge p99 ${edgeP99.toFixed(1)}, alpha ${alphaDiff === 0 ? 'exact' : `${alphaDiff} px differ`}`);
 }
-writeFileSync(join(root, 'src/assets/derivatives.json'), JSON.stringify({ generator: 'scripts/build-derivatives.ts', sharp: sharp.versions.sharp, libwebp: sharp.versions.webp, limits: LIMITS, derivatives: out }, null, 1) + '\n');
+// Portrait crops of the seven environments (3:4, centred on the focal point from src/assets/focal.ts).
+// A NEW file per environment; the full-frame derivative above stays the landscape version.
+const portrait: Record<string, unknown>[] = [];
+for (const env of ENV_IDS) {
+  const src = IMAGE_ASSETS.find((a) => a.id === env)!;
+  const cfg = DERIVE[env]!;
+  const input = readFileSync(join(root, src.path));
+  const crop = portraitCrop(src.width, src.height, ENV_FOCUS[env].x);
+  const region = sharp(input).extract({ left: crop.x, top: crop.y, width: crop.w, height: crop.h });
+  const ref = await region.clone().ensureAlpha().raw().toBuffer();
+  const webp = await region.clone().webp({ quality: cfg.quality, alphaQuality: 100, effort: 6, smartSubsample: true }).toBuffer();
+  const path = `assets/generated/web/${cfg.file.replace(/\.webp$/, '-portrait.webp')}`;
+  writeFileSync(join(root, path), webp);
+  const dec = await sharp(webp).ensureAlpha().raw().toBuffer();
+  let sum = 0;
+  for (let i = 0; i < ref.length; i += 4) {
+    let e = 0;
+    for (let c = 0; c < 3; c++) e = Math.max(e, Math.abs(ref[i + c]! - dec[i + c]!));
+    sum += e;
+  }
+  const meanErr = sum / (ref.length / 4);
+  const ok = meanErr <= (cfg.maxMeanErr ?? LIMITS.meanErr);
+  if (!ok) failed = true;
+  // The focal point inside the crop, as a CSS background-position.
+  const fx = (ENV_FOCUS[env].x * src.width - crop.x) / crop.w;
+  portrait.push({
+    id: `${env}@portrait`,
+    of: env,
+    path,
+    format: 'webp',
+    encoder: `q${cfg.quality} smartSubsample`,
+    crop,
+    focus: { x: +fx.toFixed(4), y: ENV_FOCUS[env].y },
+    width: crop.w,
+    height: crop.h,
+    bytes: webp.length,
+    sha256: createHash('sha256').update(webp).digest('hex'),
+    sourceSha256: createHash('sha256').update(input).digest('hex'),
+    maxMeanErr: cfg.maxMeanErr ?? LIMITS.meanErr,
+    meanErr: +meanErr.toFixed(2),
+  });
+  console.log(`${ok ? '✓' : '✗'} ${env}@portrait: crop ${crop.w}×${crop.h} at x=${crop.x} → ${(webp.length / 1024).toFixed(0)} KB, mean err ${meanErr.toFixed(2)}`);
+}
+writeFileSync(join(root, 'src/assets/derivatives.json'), JSON.stringify({ generator: 'scripts/build-derivatives.ts', sharp: sharp.versions.sharp, libwebp: sharp.versions.webp, limits: LIMITS, derivatives: out, portrait }, null, 1) + '\n');
 if (failed) {
   console.error('derivative quality gate failed');
   process.exit(1);

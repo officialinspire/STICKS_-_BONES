@@ -6,12 +6,15 @@
  * Layers (back to front): backdrop A/B (cross-faded only after the next image
  * is decoded), light grade, threshold glow, water, boundary line, warmth
  * vignette, Cousin's bust (HostView: same stage box for every expression, so
- * swaps never jump or double-face), dialogue, controls, curtain (the coherent
+ * swaps never jump or double-face) or the speaking cast member's portrait (a
+ * baseline-aligned cell of their cleaned sheet, shown only once decoded),
+ * dialogue, controls, curtain (the coherent
  * colour scenes fade through). Every layer except the controls is
  * pointer-events: none. Presentation never decides a hand.
  */
-import { assetUrl, type RuntimeAssetId } from '../assets';
-import { warm } from '../assets/warm';
+import { urlFor, type RuntimeAssetId } from '../assets';
+import { envKey, envPosition, onViewportShape } from '../assets/env';
+import { warm, warmState } from '../assets/warm';
 import { realScheduler } from '../app/session';
 import { HANDS, insertLines, outcomeFor, segments, type Outcome } from '../story/chapters';
 import { DEFAULT_TIMINGS, REDUCED_TIMINGS, SceneDirector, type DirectorState, type StageView } from '../story/director';
@@ -23,6 +26,7 @@ import { wrapTab } from './focus-trap';
 import { HostView } from './host';
 import { captionText, chapterCardHtml, loadScript, renderStoryHome, save, speakerLabelHtml, speakerOf, type StoryDeps } from './story-ui';
 import { esc } from './svg';
+import { castFrame, sceneAssets, sceneCast, speakerKey } from './story-assets';
 
 interface Beat {
   readonly block: Block;
@@ -42,6 +46,9 @@ class DomStage implements StageView<Beat> {
   #prepared = false;
   /** Backdrop requested by cues replayed before prepare() (resume mid-scene): prepare honours it. */
   #intent: { env: RuntimeAssetId | null; focus: string } | null = null;
+  #unshape: (() => void) | null = null;
+  #speaker: RuntimeAssetId | null = null;
+  #disposed = false;
   constructor(
     root: HTMLElement,
     private readonly sceneId: SceneId,
@@ -53,28 +60,48 @@ class DomStage implements StageView<Beat> {
   q<T extends HTMLElement>(sel: string): T {
     return this.#root.querySelector(sel) as T;
   }
-  async prepare(): Promise<boolean> {
+  async prepare(scene?: Scene): Promise<boolean> {
     const st = STAGING[this.sceneId];
     if (!this.#intent) this.light(st.light);
     const target = this.#intent ?? { env: st.env, focus: st.focus };
     this.#prepared = true;
+    // Rotation / split screen: re-pick portrait crop vs full frame for the current backdrop (decoded first).
+    this.#unshape ??= onViewportShape(() => void this.#reshape());
+    // The speaking cast's portraits decode alongside (they never gate the reveal; a line shows its
+    // portrait only once decoded, otherwise just the name tag).
+    if (scene) void warm(sceneCast(scene), { front: true });
     if (!target.env) {
       this.#setBackdrop(null, target.focus, true);
       return true;
     }
     // Decode BEFORE revealing: the curtain stays closed until the image is ready (or the director times out).
-    const [ok] = await warm([target.env], { front: true });
+    const [ok] = await warm([envKey(target.env)], { front: true });
     this.#setBackdrop(ok ? target.env : null, target.focus, true);
     return ok === true;
+  }
+  async #reshape(): Promise<void> {
+    const env = this.#env;
+    if (!env || this.#disposed) return;
+    const [ok] = await warm([envKey(env)], { front: true });
+    if (ok && env === this.#env && !this.#disposed) this.#setBackdrop(env, '50% 50%', true);
+  }
+  /** Remove listeners (the run controller calls this when the scene closes). */
+  dispose(): void {
+    this.#disposed = true;
+    this.#unshape?.();
+    this.#unshape = null;
   }
   #setBackdrop(env: RuntimeAssetId | null, focus: string, instant: boolean): void {
     const next = this.#front === 'a' ? 'b' : 'a';
     const el = this.q<HTMLElement>(`.st-bg-${next}`);
-    const url = env ? assetUrl(env) : null;
+    const key = env ? envKey(env) : null;
+    const url = key ? urlFor(key) : null;
     // No inline "none": a missing image falls back to the drawn gradient in the stylesheet (never blank).
     if (url) el.style.backgroundImage = `url("${url}")`;
     else el.style.removeProperty('background-image');
-    el.style.backgroundPosition = focus;
+    // The focal point comes from src/assets/focal.ts (adjusted inside a portrait crop).
+    el.style.backgroundPosition = key ? envPosition(key) : focus;
+    el.dataset.variant = key?.endsWith('@portrait') ? 'portrait' : 'full';
     el.dataset.env = env ?? 'none';
     el.classList.toggle('is-instant', instant);
     el.classList.add('is-front');
@@ -91,7 +118,7 @@ class DomStage implements StageView<Beat> {
     }
     if (env === this.#env) return;
     if (env === null) return this.#setBackdrop(null, focus, this.reduce());
-    const [ok] = await warm([env], { front: true });
+    const [ok] = await warm([envKey(env)], { front: true });
     if (ok) this.#setBackdrop(env, focus, this.reduce());
   }
   light(l: Light): void {
@@ -121,12 +148,31 @@ class DomStage implements StageView<Beat> {
     panel.style.setProperty('--reveal-ms', `${revealMs}ms`);
     panel.classList.toggle('is-revealing', revealMs > 0);
     const own = blk.kind === 'line' && speakerOf(blk.speaker!).label === 'Cousin';
+    this.#showCast(blk.kind === 'line' ? speakerKey(blk.speaker!) : null);
     const reaction = blk.kind === 'direction' && b.cues.some((c) => c.kind === 'expr');
     this.#root.toggleAttribute('data-actor-visible', this.#cousinIn && (own || reaction));
     if (own && !this.#cousinIn) {
       this.apply({ kind: 'cousin', to: 'in' });
       this.#root.toggleAttribute('data-actor-visible', true);
     }
+  }
+  /** The speaker's portrait (default frame), only once its sheet is decoded; otherwise the name tag stands alone. */
+  #showCast(id: RuntimeAssetId | null): void {
+    this.#speaker = id;
+    const box = this.q<HTMLElement>('.st-cast-art');
+    const f = id ? castFrame(id) : null;
+    if (!id || !f || !box) return void this.#root.removeAttribute('data-cast-visible');
+    if (warmState(id) !== 'ready') {
+      this.#root.removeAttribute('data-cast-visible');
+      void warm([id], { front: true }).then(([ok]) => ok && this.#speaker === id && !this.#disposed && this.#showCast(id));
+      return;
+    }
+    box.style.backgroundImage = `url("${urlFor(id)}")`;
+    box.style.backgroundSize = `${(f.sheetW / f.w) * 100}% ${(f.sheetH / f.h) * 100}%`;
+    box.style.backgroundPosition = `${(f.x / (f.sheetW - f.w)) * 100}% ${(f.y / (f.sheetH - f.h)) * 100}%`;
+    box.style.aspectRatio = `${f.w} / ${f.h}`;
+    box.dataset.cast = id;
+    this.#root.setAttribute('data-cast-visible', '');
   }
   finishReveal(): void {
     this.q<HTMLElement>('.dialogue-panel')?.classList.remove('is-revealing');
@@ -205,18 +251,23 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
   };
   document.addEventListener('visibilitychange', onVisibility);
   const dispose = () => {
+    d.registerRun?.(null);
     disposed = true;
     director?.cancel();
+    stage?.dispose();
     d.beat();
     document.removeEventListener('visibilitychange', onVisibility);
     root.onclick = null;
     root.onkeydown = null;
   };
+  // The app's update flow asks the open run to write its exact position (the saved hand included) and stop.
+  d.registerRun?.({ flush: () => (o.replay ? true : save(d, p)), stop: () => dispose() });
 
   const sceneOf = (id: SceneId) => script.scenes.find((s) => s.id === id)!;
 
   async function open(sceneId: SceneId): Promise<void> {
     director?.cancel(); // a new scene invalidates every callback of the previous one
+    stage?.dispose();
     if (disposed) return;
     d.beat();
     d.audioScene(sceneId);
@@ -240,6 +291,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
         <section class="story-main" aria-label="Scene">
           <div class="scene-card-slot"></div>
           <div class="st-actor" aria-hidden="true"><div class="st-actor-art"></div></div>
+          <div class="st-cast" aria-hidden="true"><div class="st-cast-art"></div></div>
           <div class="dialogue-slot" aria-live="polite"></div>
         </section>
         <nav class="cine-controls" aria-label="Scene controls">
@@ -263,6 +315,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
     stage.mountActor();
     stage.cousinPresent(st.cousin);
     const s = stage;
+    let prefetched = false;
 
     // Beats for the current part.
     const preBeats = seg.pre.map((b) => ({ block: b, cues: cuesFor(sceneId, b.raw) }));
@@ -307,7 +360,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
 
     director = new SceneDirector<Beat>(
       {
-        prepare: () => s.prepare(),
+        prepare: () => s.prepare(scene),
         curtain: (to, ms) => s.curtain(to, ms),
         establishing: (ms) => s.establishing(ms),
         showBeat: (b, i, ms) => {
@@ -323,6 +376,13 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
         setState: (x) => {
           s.setState(x);
           // Once the scene is up, the primary control gets focus (unless the player is focused elsewhere in the stage).
+          if (x === 'presenting' && !prefetched) {
+            // The scene is up: fetch + decode the NEXT chapter's backdrop and cast in the background
+            // (bounded warm queue, never ahead of anything the current scene asks for).
+            prefetched = true;
+            const nextId = SCENES_IN_ORDER[SCENES_IN_ORDER.indexOf(sceneId) + 1];
+            if (nextId && !o.replay) void warm(sceneAssets(sceneOf(nextId)));
+          }
           if (x === 'presenting') {
             const a = document.activeElement;
             if (!a || a === document.body || !root.contains(a) || a.closest('.st-curtain')) (root.querySelector('[data-act="story-next"]:not([hidden])') as HTMLElement | null)?.focus({ preventScroll: true });

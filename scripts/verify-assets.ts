@@ -21,6 +21,9 @@ import sharp from 'sharp';
 import derivativesJson from '../src/assets/derivatives.json' with { type: 'json' };
 import iconsJson from '../src/assets/icons.json' with { type: 'json' };
 import soundJson from '../src/assets/sound-manifest.json' with { type: 'json' };
+import castJson from '../src/assets/cast.json' with { type: 'json' };
+import { ENV_FOCUS, ENV_IDS, portraitCrop } from '../src/assets/focal.ts';
+import { PORTRAIT_URLS } from '../src/assets/urls.ts';
 
 interface SoundEntry {
   id: string;
@@ -153,7 +156,9 @@ if (measureOnly) {
 }
 
 // Every image under assets/ must be registered (no silently added or renamed art).
-const registered = new Set<string>([...IMAGE_ASSETS.map((a) => a.path), ...DERIVATIVES.map((d) => d.path)]);
+const PORTRAITS = (derivativesJson as unknown as { portrait: { id: string; of: string; path: string; bytes: number; sha256: string; sourceSha256: string; crop: { x: number; y: number; w: number; h: number }; width: number; height: number }[] }).portrait ?? [];
+const CAST = castJson.cast as { id: string; of: string; path: string; bytes: number; sha256: string; sourceSha256: string; width: number; height: number; alphaExact: boolean; frames: { id: string; x: number; y: number; w: number; h: number }[] }[];
+const registered = new Set<string>([...IMAGE_ASSETS.map((a) => a.path), ...DERIVATIVES.map((d) => d.path), ...PORTRAITS.map((d) => d.path), ...CAST.map((d) => d.path)]);
 for (const file of walk(join(repoRoot, 'assets'))) {
   const rel = relative(repoRoot, file).split('\\').join('/');
   if (/\.(png|jpe?g|webp|gif|avif|svg)$/i.test(rel) && !registered.has(rel))
@@ -182,7 +187,7 @@ for (const id of RUNTIME_ASSET_IDS) {
 // and urls.ts must serve the derivative — never the multi-megabyte original — for those ids.
 {
   const urlsSrc = readFileSync(join(repoRoot, 'src/assets/urls.ts'), 'utf8');
-  const served = new Map([...urlsSrc.matchAll(/'([\w.-]+)':\s*new URL\(\s*'\.\.\/\.\.\/([^']+)'/g)].map((m) => [m[1]!, m[2]!]));
+  const served = new Map([...urlsSrc.matchAll(/'([\w.@-]+)':\s*new URL\(\s*'\.\.\/\.\.\/([^']+)'/g)].map((m) => [m[1]!, m[2]!]));
   for (const id of RUNTIME_ASSET_IDS) if (!served.has(id)) errors.push(`[${id}] could not read its URL literal in urls.ts`);
   for (const d of DERIVATIVES) {
     const tag = `[${d.id} → ${d.path}]`;
@@ -204,6 +209,55 @@ for (const id of RUNTIME_ASSET_IDS) {
     if (!d.alphaExact) errors.push(`${tag} alpha is not exact`);
     if (src.status === 'runtime' && served.get(d.id) !== d.path) errors.push(`${tag} urls.ts serves ${served.get(d.id)} instead of the derivative`);
   }
+  // Portrait crops: one per environment, the crop matches the focal table, hash-locked, served by PORTRAIT_URLS.
+  for (const env of ENV_IDS) {
+    const d = PORTRAITS.find((p) => p.of === env);
+    const src = IMAGE_ASSETS.find((a) => a.id === env)!;
+    if (!d) {
+      errors.push(`[${env}] no portrait crop — run npm run assets:derive`);
+      continue;
+    }
+    const tag = `[${d.id} → ${d.path}]`;
+    const want = portraitCrop(src.width, src.height, ENV_FOCUS[env].x);
+    if (JSON.stringify(want) !== JSON.stringify(d.crop)) errors.push(`${tag} crop ${JSON.stringify(d.crop)} ≠ focal table ${JSON.stringify(want)} — rebuild`);
+    const full = join(repoRoot, d.path);
+    if (!existsSync(full)) {
+      errors.push(`${tag} missing`);
+      continue;
+    }
+    const buf = readFileSync(full);
+    if (buf.length !== d.bytes || createHash('sha256').update(buf).digest('hex') !== d.sha256) errors.push(`${tag} bytes/sha256 drift — rebuild with npm run assets:derive`);
+    if (d.sourceSha256 !== src.sha256) errors.push(`${tag} built from a different source`);
+    const meta = await sharp(buf).metadata();
+    if (meta.width !== d.width || meta.height !== d.height) errors.push(`${tag} is ${meta.width}x${meta.height}, recorded ${d.width}x${d.height}`);
+    if (served.get(d.id) !== d.path) errors.push(`${tag} PORTRAIT_URLS serves ${served.get(d.id)}`);
+    if (!(d.id in PORTRAIT_URLS)) errors.push(`${tag} not in PORTRAIT_URLS`);
+  }
+  // Cast portraits: repacked derivatives (scripts/build-cast.ts); urls.ts serves them for the cast ids.
+  for (const d of CAST) {
+    const tag = `[${d.of} → ${d.path}]`;
+    const src = IMAGE_ASSETS.find((a) => a.id === d.of) as { status: string; sha256: string; frames?: readonly unknown[] } | undefined;
+    if (!src) {
+      errors.push(`${tag} derivative of unknown asset`);
+      continue;
+    }
+    const full = join(repoRoot, d.path);
+    if (!existsSync(full)) {
+      errors.push(`${tag} missing — run npm run assets:cast`);
+      continue;
+    }
+    const buf = readFileSync(full);
+    if (buf.length !== d.bytes || createHash('sha256').update(buf).digest('hex') !== d.sha256) errors.push(`${tag} bytes/sha256 drift — rebuild with npm run assets:cast`);
+    if (d.sourceSha256 !== src.sha256) errors.push(`${tag} built from a different source`);
+    const meta = await sharp(buf).metadata();
+    if (meta.width !== d.width || meta.height !== d.height) errors.push(`${tag} is ${meta.width}x${meta.height}, recorded ${d.width}x${d.height}`);
+    if (!d.alphaExact) errors.push(`${tag} alpha is not exact`);
+    if (d.frames.length !== (src.frames?.length ?? 0)) errors.push(`${tag} has ${d.frames.length} frames, source has ${src.frames?.length}`);
+    for (const f of d.frames) if (f.x + f.w > d.width || f.y + f.h > d.height) errors.push(`${tag} frame ${f.id} outside the image`);
+    if (src.status === 'runtime' && served.get(d.of) !== d.path) errors.push(`${tag} urls.ts serves ${served.get(d.of)} instead of the cast derivative`);
+  }
+  for (const a of IMAGE_ASSETS.filter((x) => x.id.startsWith('cast.') && x.status === 'runtime')) if (!CAST.some((c) => c.of === a.id)) errors.push(`[${a.id}] runtime cast atlas without a cast derivative`);
+  notes.push(`portrait crops: ${PORTRAITS.length}, ${(PORTRAITS.reduce((s, d) => s + d.bytes, 0) / 1024).toFixed(0)} KB · cast derivatives: ${CAST.length}, ${(CAST.reduce((s, d) => s + d.bytes, 0) / 1024).toFixed(0)} KB`);
   notes.push(`runtime derivatives: ${DERIVATIVES.length}, ${(DERIVATIVES.reduce((s, d) => s + d.bytes, 0) / 1024).toFixed(0)} KB (sources ${(DERIVATIVES.reduce((s, d) => s + (IMAGE_ASSETS.find((a) => a.id === d.id)?.bytes ?? 0), 0) / 1024).toFixed(0)} KB)`);
 }
 

@@ -34,17 +34,19 @@ const bytes = files.reduce((s, f) => s + statSync(f).size, 0);
 const KB = 1024;
 export const BUDGET = {
   codeKB: 300, // core JS + CSS + HTML, excluding the lazy Story chunks (Stage 13 measured ~265 KB raw)
-  storyKB: 130, // lazy Story chunks, loaded only when Story opens: the approved script (76 KB) + player/director/staging (29 KB)
+  storyKB: 130, // lazy Story chunks, loaded only when Story opens: the approved script (76 KB) + player/director/staging/cast frames (36 KB) = 112 KB measured
   fontsKB: 100, // self-hosted DM Sans + Bricolage Grotesque WOFF2 subsets (measured 82 KB)
-  imagesKB: 3300, // every runtime image (Stage 13 measured ~3,050 KB: +five story backdrops, all loaded per scene on demand, none at startup)
+  imagesKB: 3300, // CORE images: menu, table, Cousin, effects, tiles + the seven full-frame backdrops (measured ~3,050 KB; unchanged)
+  storyImagesKB: 1600, // Story-only additions, on demand per chapter: 7 portrait crops + 4 cleaned cast sheets = 1,474 KB measured
+  chapterImagesKB: 1000, // the most ONE chapter downloads (full-frame backdrop + its cast sheets); measured max 923 KB (Chapter 3)
   singleImageKB: 450, // largest single image (Stage 13: jungle backdrop 428 KB at q84 — q80 failed the derivative quality gate)
-  startupKB: 900, // start screen + first menu, raw bytes: core code + fonts + backdrop + portrait (Stage 12 measured ~868 KB raw)
+  startupKB: 900, // start screen + first menu, raw bytes: core code + fonts + ONE patio variant (the larger: landscape) + portrait (unchanged)
   mediaKB: 8000, // music, streamed on demand only (measured 7,331 KB)
   sfxKB: 720, // short CC0 SFX (WAV, decoded once after the first gesture; measured ~600 KB)
   ambienceKB: 2200, // five CC0 ambience beds (MP3, fetched per scene on demand; measured ~1,900 KB)
   iconsKB: 140, // PWA icons (PNG by spec), generated from approved art (measured 113 KB)
-  swKB: 16, // service worker + build manifest (measured 8 KB)
-  totalKB: 13900, // whole dist (audio stage measured ~13.4 MB: music 7.3 MB + images 3.0 MB + sound bank 2.5 MB)
+  swKB: 22, // service worker + build manifest: 19 KB measured (per-file sizes for truncation checks and four offline groups; was 8 KB)
+  totalKB: 15400, // whole dist: audio stage 13.4 MB + Story images 1.46 MB (on demand) = 15.0 MB measured. Nothing in that increase loads at startup.
 };
 const size = (f) => statSync(f).size;
 const rel = (f) => f.slice(dist.length);
@@ -62,12 +64,31 @@ const fontsKB = sumKB(files.filter(isFont));
 if (files.filter(isStory).length !== 2) errors.push(`expected the two lazy Story chunks (script, story-ui), found ${files.filter(isStory).length}`);
 const isIcon = (f) => rel(f).startsWith('icons/');
 const images = files.filter((f) => isImage(f) && !isIcon(f));
+// Story-only images: the portrait crops and the cast sheets (src/assets/urls.ts PORTRAIT_URLS + cast.*).
+const isStoryImage = (f) => /-portrait-[\w-]{8}\.webp$/.test(f) || /\/cast-[a-z]+-[\w-]+\.webp$/.test(f);
+const coreImages = images.filter((f) => !isStoryImage(f));
+const storyImagesKB = sumKB(images.filter(isStoryImage));
 const iconsKB = sumKB(files.filter(isIcon));
 const swKB = sumKB(files.filter((f) => /(^|\/)(sw\.js|build\.json)$/.test(rel(f))));
-const imagesKB = sumKB(images);
+const imagesKB = sumKB(coreImages);
 const biggest = images.reduce((m, f) => (size(f) > (m ? size(m) : 0) ? f : m), null);
 // Startup set: code + the two essential images (src/assets/warm.ts ESSENTIAL_ASSETS).
-const startupKB = code + fontsKB + sumKB(images.filter((f) => /neighborhood-patio|cousin-portrait-atlas/.test(f)));
+// One patio variant per device: count the larger (full frame, landscape) so the limit holds for both.
+const startupKB = code + fontsKB + sumKB(coreImages.filter((f) => /neighborhood-patio|cousin-portrait-atlas/.test(f)));
+// Per chapter: its backdrops (full frame, the larger variant) + the cast sheets it uses (src/ui/story-assets.ts).
+const CHAPTER_IMAGES = {
+  'chapter-1': ['neighborhood-patio', 'rafa', 'marisol'],
+  'chapter-2': ['back-alley', 'marisol', 'vale'],
+  'chapter-3': ['resort-patio', 'vale', 'marisol', 'rafa'],
+  'chapter-4': ['moonlit-promenade', 'rafa', 'marisol'],
+  'chapter-5': ['jungle-camp', 'luz', 'marisol'],
+  'chapter-6': ['cave-waterfall', 'marisol', 'luz'],
+  'chapter-7': ['executive-terrace', 'vale', 'marisol', 'rafa'],
+  epilogue: ['neighborhood-patio', 'marisol'],
+};
+const imgKB = (stem) => sumKB(images.filter((f) => new RegExp(`/(cast-)?${stem}-[\\w-]{8}\\.webp$`).test(f) && !/-portrait-/.test(f)));
+const chapters = Object.entries(CHAPTER_IMAGES).map(([id, stems]) => [id, stems.reduce((s, x) => s + imgKB(x), 0)]);
+const [worstChapter, chapterImagesKB] = chapters.reduce((m, c) => (c[1] > m[1] ? c : m), ['-', 0]);
 const mediaKB = sumKB(files.filter(isMedia));
 const sfxKB = sumKB(files.filter(isSfx));
 const ambienceKB = sumKB(files.filter(isAmbience));
@@ -81,7 +102,9 @@ const budgetLines = [
   gate('code', code, BUDGET.codeKB),
   gate('story script', storyKB, BUDGET.storyKB),
   gate('fonts', fontsKB, BUDGET.fontsKB),
-  gate('images', imagesKB, BUDGET.imagesKB),
+  gate('images (core)', imagesKB, BUDGET.imagesKB),
+  gate('story images (on demand)', storyImagesKB, BUDGET.storyImagesKB),
+  gate(`largest chapter (${worstChapter})`, chapterImagesKB, BUDGET.chapterImagesKB),
   gate(`largest image (${biggest ? rel(biggest) : '-'})`, biggest ? size(biggest) / KB : 0, BUDGET.singleImageKB),
   gate('startup', startupKB, BUDGET.startupKB),
   gate('music', mediaKB, BUDGET.mediaKB),

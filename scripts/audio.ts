@@ -183,11 +183,14 @@ try {
     const v = await voices(page);
     check(!v.some((x) => x.scene === 'init' || x.scene === 'intro'), `A: a sound was requested during init/intro: ${JSON.stringify(v.filter((x) => x.scene !== 'menu'))}`);
     check(v.length === 0, `A: the start tap / intro produced voices: ${JSON.stringify(v)}`);
-    const decoded = await waitFor(async () => Object.values((await audioState(page)).buffers).filter((x) => x === 'decoded').length >= sounds.sfx.length, 8000);
+    // At the menu only the UI sounds are decoded; table and story samples wait for their scenes.
+    const uiCount = sounds.sfx.filter((x) => x.id.startsWith('ui-')).length;
+    const decoded = await waitFor(async () => Object.entries((await audioState(page)).buffers).filter(([k, x]) => k.startsWith('ui-') && x === 'decoded').length >= uiCount, 8000);
     const st = await audioState(page);
-    check(decoded, `A: not every short sample decoded: ${JSON.stringify(st.buffers)}`);
+    check(decoded, `A: the UI samples did not decode: ${JSON.stringify(st.buffers)}`);
+    check(!Object.keys(st.buffers).some((k) => /^(tile-|motif-|water-|glass-|pass-)/.test(k)), `A: table/story samples fetched at the menu: ${Object.keys(st.buffers).join(',')}`);
     check(st.music <= 1, `A: ${st.music} music elements playing`);
-    notes.push(`A: scenes during start ${[...new Set(seen)].join(' → ')}; ${Object.values(st.buffers).filter((x) => x === 'decoded').length} samples decoded; music playing: ${st.playing}; intro video ${(await page.evaluate("document.querySelector('video') ? 'element present' : 'absent (fallback)'"))}`);
+    notes.push(`A: scenes during start ${[...new Set(seen)].join(' → ')}; ${Object.values(st.buffers).filter((x) => x === 'decoded').length} UI samples decoded at the menu (table/story samples deferred); music playing: ${st.playing}; intro video ${(await page.evaluate("document.querySelector('video') ? 'element present' : 'absent (fallback)'"))}`);
     check(errors.length === 0, `A: page errors ${errors.join(' | ')}`);
 
     // ---- B. UI + tile sounds ---------------------------------------------------------------------------

@@ -38,5 +38,14 @@ export const VARIANTS = {
 
 export { MOTIF } from './motif';
 
-/** Every sample present in the build (for preloading after unlock); the manifest stays out of the bundle. */
+/** Every sample present in the build; the manifest stays out of the bundle. */
 export const ALL_SAMPLES: readonly string[] = Object.keys(sfxFiles).map((k) => k.slice(k.lastIndexOf('/') + 1, -4));
+
+/**
+ * Samples are decoded per need, not all at the first gesture: UI sounds with the menu, table sounds
+ * when a table opens, story accents when Story plays. (Each file is fetched and decoded once.)
+ */
+export function samplesFor(group: 'ui' | 'table' | 'story'): string[] {
+  const re = group === 'ui' ? /^ui-/ : group === 'table' ? /^(tile-|pass-knock-)/ : /^(motif-|water-|glass-)/;
+  return ALL_SAMPLES.filter((id) => re.test(id));
+}

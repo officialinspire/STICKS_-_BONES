@@ -61,7 +61,7 @@ delete process.env.SB_BUILD_TAG;
 const APP = '/STICKS_-_BONES/';
 const PORT = 5194;
 const ORIGIN = `http://localhost:${PORT}`;
-const state = { site: SITE_A, down: false, cut: new Set<string>(), requests: [] as string[] };
+const state = { site: SITE_A, down: false, cut: new Set<string>(), missing: new Set<string>(), requests: [] as string[] };
 const OTHER: Record<string, [string, string]> = {
   '/other-app/': [
     'text/html',
@@ -90,6 +90,11 @@ const server: Server = createServer((req, res: ServerResponse) => {
   }
   let rel = decodeURIComponent(url.pathname.slice(APP.length)) || 'index.html';
   if (rel.endsWith('/')) rel += 'index.html';
+  if ([...state.missing].some((m) => rel.includes(m))) {
+    // An optional file that is simply not on the server (404).
+    res.writeHead(404);
+    return void res.end();
+  }
   const file = normalize(join(state.site, rel));
   if (!file.startsWith(state.site) || !existsSync(file) || statSync(file).isDirectory()) {
     res.writeHead(404);
@@ -237,8 +242,8 @@ try {
   check(mf.icons.every((i: { ok: boolean; size: string; declared: string; src: string }) => i.ok && i.size === i.declared && i.src.startsWith(APP)) && mf.icons.some((i: { purpose: string }) => i.purpose === 'maskable'), `manifest icons invalid: ${JSON.stringify(mf.icons)}`);
   notes.push(`manifest on the subpath: start_url/scope/id → ${mf.start}; ${mf.icons.length} icons valid (${mf.icons.filter((i: { purpose: string }) => i.purpose === 'maskable').length} maskable); display ${mf.display}`);
   await enterMenu(page);
-  const first = await waitStatus(page, /Ready to play offline/);
-  check(/Ready to play offline/.test(first), `first visit: status never became ready — ${first}`);
+  const first = await waitStatus(page, /Quick Play is ready offline/);
+  check(/Quick Play is ready offline/.test(first), `first visit: status never became ready — ${first}`);
   const reg = await page.evaluate(async () => {
     const r = await navigator.serviceWorker.getRegistration();
     return { scope: r?.scope, controlled: !!navigator.serviceWorker.controller, build: document.documentElement.dataset.build };
@@ -251,6 +256,8 @@ try {
   check(ours.length === 2 && ours.some((c) => /:shell:/.test(c.name)) && ours.some((c) => /:assets:v1$/.test(c.name)), `unexpected cache names: ${ours.map((c) => c.name).join(', ')}`);
   check(!urls.some((u) => /\/assets\/.*\.png$/.test(u)), `a PNG source sheet was cached: ${urls.filter((u) => u.endsWith('.png')).join(', ')}`);
   check(!urls.some((u) => /\.(mp3|mp4|webm|ogg)$/.test(u)), 'media was cached');
+  // Install caches only what Quick Play needs: no story backdrops, cast sheets or story accents.
+  check(!urls.some((u) => /\/(back-alley|resort-patio|moonlit|jungle|cave-waterfall|executive|cast-|motif-|water-|glass-)/.test(u)), `install cached Story files: ${urls.filter((u) => /cast-|back-alley|jungle/.test(u)).join(', ')}`);
   check(urls.every((u) => u.startsWith(APP)), 'cached a URL outside the app');
   notes.push(`first visit (online, subpath): worker scope ${new URL(reg.scope!).pathname}, build "${reg.build}", status "${first}"`);
   notes.push(`cache contents: ${ours.map((c) => `${c.name} = ${c.urls.length} files, ${(c.bytes / 1024).toFixed(1)} KB`).join(' · ')} → total ${(cacheBytes / 1024).toFixed(1)} KB (${cacheBytes} B)`);
@@ -284,14 +291,19 @@ try {
   await axe(page, 'settings with the offline panel');
   await page.locator('.offline-panel').scrollIntoViewIfNeeded();
   await page.screenshot({ path: join(out, 'settings-offline-panel.png') });
+  // Both save slots must survive: a Quick Play save and the Story case progress (seeded here if absent).
+  await page.evaluate(() => {
+    if (!localStorage.getItem('sticks-and-bones.story')) localStorage.setItem('sticks-and-bones.story', JSON.stringify({ format: 'sticks-and-bones/story', version: 2, data: { sceneId: 'chapter-2', part: 'pre', index: 4, outcome: null, completed: ['prologue', 'chapter-1'], textScale: 1, startedAt: 1, hand: null } }));
+  });
   const beforeRepair = await page.evaluate(() => Object.fromEntries(Object.keys(localStorage).sort().map((k) => [k, localStorage.getItem(k)])));
+  check('sticks-and-bones.story' in beforeRepair && 'sticks-and-bones.save' in beforeRepair, `repair: both save slots should exist before repair (${Object.keys(beforeRepair).join(', ')})`);
   // Plant a stale entry in our own cache, to see repair actually rebuild.
   await page.evaluate(async () => (await caches.open('inspire:sticks-and-bones:stale-test')).put('stale', new Response('x')));
   await page.click('[data-act="repair"]');
-  const repaired = await waitStatus(page, /Ready to play offline/);
+  const repaired = await waitStatus(page, /Quick Play is ready offline/);
   const afterRepair = await page.evaluate(() => Object.fromEntries(Object.keys(localStorage).sort().map((k) => [k, localStorage.getItem(k)])));
   const names = (await cacheReport(page)).map((c) => c.name);
-  check(/Ready/.test(repaired), `repair: status ${repaired}`);
+  check(/ready offline/.test(repaired), `repair: status ${repaired}`);
   check(!names.includes('inspire:sticks-and-bones:stale-test'), 'repair: our stale cache survived');
   check(JSON.stringify(beforeRepair) === JSON.stringify(afterRepair), 'repair changed localStorage (saves/settings must be kept)');
   await otherAppIntact(page, 'after repair');
@@ -320,8 +332,8 @@ try {
     await page.goto(`${ORIGIN}${APP}`);
     await enterMenu(page);
     const partial = await waitStatus(page, /still to download|interrupted/);
-    const imageCount = (JSON.parse(readFileSync(join(SITE_A, 'build.json'), 'utf8')) as { assets: string[] }).assets.length;
-    check(new RegExp(`2 of ${imageCount} images still to download`).test(partial), `interrupted: status should report 2 of ${imageCount} images missing — ${partial}`);
+    const imageCount = (JSON.parse(readFileSync(join(SITE_A, 'build.json'), 'utf8')) as { groups: { core: unknown[] } }).groups.core.length;
+    check(new RegExp(`2 of ${imageCount} table files still to download`).test(partial), `interrupted: status should report 2 of ${imageCount} table files missing — ${partial}`);
     const cached = (await cacheReport(page)).filter((c) => c.name.endsWith(':assets:v1'))[0];
     check(!!cached && !cached.urls.some((u) => /double-six-atlas|weathered-tabletop/.test(u)), 'interrupted: a truncated file was stored in the cache');
     // Offline with images missing: the game still completes with drawn fallbacks.
@@ -340,8 +352,8 @@ try {
     await enterMenu(page);
     await page.click('[data-go="settings"]');
     await page.click('[data-act="repair"]');
-    const fixed = await waitStatus(page, /Ready to play offline/);
-    check(/Ready/.test(fixed), `interrupted: repair did not complete — ${fixed}`);
+    const fixed = await waitStatus(page, /Quick Play is ready offline/);
+    check(/ready offline/.test(fixed), `interrupted: repair did not complete — ${fixed}`);
     notes.push(`…then online, Repair offline files → "${fixed}"`);
     check((errorsOf.get(page) ?? []).length === 0, `interrupted: page errors ${errorsOf.get(page)!.join(' | ')}`);
     await ctx.close();
@@ -376,7 +388,7 @@ try {
     await page.waitForSelector('#ok');
     await page.goto(`${ORIGIN}${APP}`);
     await enterMenu(page);
-    await waitStatus(page, /Ready to play offline/);
+    await waitStatus(page, /Quick Play is ready offline/);
     await newGame(page, 'local');
     // Player 1 reveals and plays; Player 2 reveals: a hand is on screen when the update arrives.
     for (let i = 0; i < 2; i++) {
@@ -406,9 +418,12 @@ try {
     const atUnload = JSON.parse((await page.evaluate(() => sessionStorage.getItem('qa.atUnload'))) ?? '{}') as { tiles?: number; text?: string };
     check(atUnload.tiles === 0 && /Updating/.test(atUnload.text ?? ''), `update: screen at reload showed ${JSON.stringify(atUnload)}`);
     check(build === 'b', `update: still running build ${build}`);
-    await enterMenu(page);
-    const notice = (await page.textContent('.notice')) ?? '';
-    check(/Updated to the latest version/.test(notice), `update: no "updated" notice (${notice})`);
+    // After the reload the player returns straight to the saved match (once), behind the privacy cover.
+    await page.waitForSelector('.start-button', { timeout: 30_000 });
+    await page.click('.start-button');
+    const skipU = page.locator('[data-act="intro-skip"]');
+    if (await skipU.count()) await skipU.click().catch(() => undefined);
+    await page.waitForSelector('.table-screen', { timeout: 30_000 });
     const saveAfter = await page.evaluate(() => localStorage.getItem('sticks-and-bones.save'));
     const strip = (s: string | null) => {
       const o = JSON.parse(s ?? '{}') as { data?: { savedAt?: number } };
@@ -416,8 +431,6 @@ try {
       return JSON.stringify(o);
     };
     check(!!saveBefore && strip(saveBefore) === strip(saveAfter), 'update: the saved match changed across the update');
-    await page.click('[data-act="resume"]');
-    await page.waitForSelector('.table-screen');
     const covered = await page.evaluate(() => ({ cover: !!document.querySelector('.privacy-cover:not([hidden])'), tiles: document.querySelectorAll('.hand-tile').length }));
     check(covered.cover && covered.tiles === 0, `update: restored two-human match did not open covered (${JSON.stringify(covered)})`);
     const ourCaches = (await cacheReport(page)).map((c) => c.name).filter((n) => n.startsWith('inspire:sticks-and-bones:'));
@@ -428,9 +441,308 @@ try {
     await page.click('[data-act="cover-reveal"]');
     await page.waitForSelector('.hand-tile');
     check((errorsOf.get(page) ?? []).length === 0, `update: page errors ${errorsOf.get(page)!.join(' | ')}`);
-    notes.push(`update A → B mid-match (two humans, a hand revealed): Update Available in the pause sheet; on "Update now" the save was written and the screen cleared before reload; build "${build}" running; saved match identical; Resume opened behind the cover; old shell cache removed (${ourCaches.join(', ')}); other app intact`);
+    notes.push(`update A → B mid-match (two humans, a hand revealed): Update Available in the pause sheet; on "Update now" the save was written and the screen cleared before reload; build "${build}" running; saved match identical; the start tap returned straight to the match, behind the cover; old shell cache removed (${ourCaches.join(', ')}); other app intact`);
     await ctx.close();
   }
+  // ---- 7. Story offline per chapter: visited (+ prefetched next) scenes play offline -----------------
+  type G = 'shell' | 'core' | 'story' | 'audio';
+  const B = JSON.parse(readFileSync(join(SITE_A, 'build.json'), 'utf8')) as { bytes: Record<G, number>; groups: Record<G, [string, number][]> };
+  const seedStory = (page: Page, sceneId: string, index = 0, part = 'pre') =>
+    page.evaluate(([sc, i, pt]: readonly [string, number, string]) => localStorage.setItem('sticks-and-bones.story', JSON.stringify({ format: 'sticks-and-bones/story', version: 2, data: { sceneId: sc, part: pt, index: i, outcome: null, completed: ['prologue'], textScale: 1, startedAt: 1, hand: null } })), [sceneId, index, part] as const);
+  const openCase = async (page: Page) => {
+    await page.click('[data-act="story"]');
+    await page.locator('.story-shell').first().waitFor({ timeout: 30_000 });
+  };
+  const sceneUp = (page: Page) => page.waitForFunction(() => Boolean(document.querySelector('.st-curtain:not(.is-closed)') && document.querySelector('.dialogue-panel')), null, { timeout: 30_000 }).then((h: { dispose(): Promise<void> }) => h.dispose());
+  {
+    const { ctx, page } = await newContext();
+    state.site = SITE_A;
+    await page.goto(`${ORIGIN}${APP}`);
+    await enterMenu(page);
+    await waitStatus(page, /Quick Play is ready offline/);
+    await seedStory(page, 'chapter-1', 3);
+    await openCase(page);
+    const noteBefore = (await page.locator('.case-offline').textContent().catch(() => '')) ?? '';
+    await page.click('[data-act="story-continue"]');
+    await sceneUp(page);
+    await page.waitForTimeout(4000); // the next chapter prefetches once this one is presenting
+    const story = (await cacheReport(page)).find((c) => c.name.endsWith(':story:v1'));
+    const names = story?.urls.map((u) => u.split('/').pop()!) ?? [];
+    check(names.some((n) => n.startsWith('cast-rafa')) && names.some((n) => n.startsWith('cast-marisol')), `story offline: chapter 1 cast not saved on the way (${names.join(', ')})`);
+    check(names.some((n) => n.startsWith('back-alley-portrait')) && names.some((n) => n.startsWith('cast-vale')), `story offline: the next chapter was not prefetched into the cache (${names.join(', ')})`);
+    check(!names.some((n) => /^(resort|moonlit|jungle|executive)/.test(n)), `story offline: chapters beyond the next were cached (${names.join(', ')})`);
+    // Offline: the visited chapter plays with its art; an unvisited one still plays (drawn fallback) and says it needs a connection.
+    await page.click('[data-act="story-file"]');
+    await page.locator('.story-shell').first().waitFor();
+    await goOffline(ctx, true);
+    await page.reload();
+    await enterMenu(page);
+    await openCase(page);
+    const noteReady = (await page.locator('.case-offline').textContent().catch(() => '')) ?? '';
+    check(/Saved for offline play/.test(noteReady), `story offline: case file note for a visited chapter: "${noteReady}"`);
+    await page.click('[data-act="story-continue"]');
+    await sceneUp(page);
+    const art = await page.evaluate(() => ({ env: document.querySelector('.st-bg.is-front')?.getAttribute('data-env'), cast: document.querySelector('.story-stage')?.hasAttribute('data-cast-visible') }));
+    check(art.env === 'env.neighborhood-patio', `story offline: chapter 1 backdrop not shown offline (${JSON.stringify(art)})`);
+    await page.click('[data-act="story-file"]');
+    await page.locator('.story-shell').first().waitFor();
+    await seedStory(page, 'chapter-5', 0);
+    await openCase(page).catch(() => undefined);
+    await page.reload();
+    await enterMenu(page);
+    await openCase(page);
+    const noteMissing = (await page.locator('.case-offline').textContent().catch(() => '')) ?? '';
+    check(/Needs a connection/.test(noteMissing), `story offline: unvisited chapter note "${noteMissing}"`);
+    await page.click('[data-act="story-continue"]');
+    await sceneUp(page);
+    const fb = await page.evaluate(() => document.querySelector('.st-bg.is-front')?.getAttribute('data-env'));
+    check(fb === 'none', `story offline: an unvisited chapter should fall back to the drawn backdrop (data-env=${fb})`);
+    await page.click('[data-act="story-file"]');
+    await page.click('[data-act="story-home"]');
+    await page.click('[data-go="settings"]');
+    const line = (await page.textContent('[data-region="offline-story"]')) ?? '';
+    check(/of 9 story scenes are ready offline/.test(line), `story offline: Settings line "${line}"`);
+    check((errorsOf.get(page) ?? []).length === 0, `story offline: page errors ${errorsOf.get(page)!.join(' | ')}`);
+    notes.push(`story offline per chapter: before "${noteBefore.trim()}" → after playing Chapter 1 online the story cache held ${names.length} files (Ch. 1 cast + prefetched Ch. 2 backdrop/cast); offline, Chapter 1 opened with its backdrop and portraits ("${noteReady.trim()}"); unvisited Chapter 5 opened with the drawn backdrop ("${noteMissing.trim()}"); Settings: "${line}"`);
+    await goOffline(ctx, false);
+    await ctx.close();
+  }
+
+  // ---- 8. Whole-story download: measured size, progress, interruption, retry ----------------------
+  {
+    const { ctx, page } = await newContext();
+    await page.goto(`${ORIGIN}${APP}`);
+    await enterMenu(page);
+    await waitStatus(page, /Quick Play is ready offline/);
+    await page.click('[data-go="settings"]');
+    const label = (await page.textContent('[data-act="offline-story"]')) ?? '';
+    const mbStory = (B.bytes.story / 1048576).toFixed(1);
+    check(label.includes(`${mbStory} MB`), `story download: button should show the measured ${mbStory} MB — "${label}"`);
+    // First attempt: two story files are cut off mid-transfer.
+    state.cut = new Set(['jungle-camp-portrait', 'cast-luz']);
+    let sawProgress = false;
+    await page.click('[data-act="offline-story"]');
+    const t0 = Date.now();
+    let line = '';
+    while (Date.now() - t0 < 90_000) {
+      sawProgress ||= await page.evaluate(() => !(document.querySelector('progress[data-region="offline-story-progress"]') as HTMLProgressElement | null)?.hidden);
+      line = (await page.textContent('[data-region="offline-story"]')) ?? '';
+      if (/interrupted|whole story is ready/.test(line)) break;
+      await page.waitForTimeout(100);
+    }
+    check(/interrupted/.test(line) && /Retry continues/.test(line), `story download: interruption not reported — "${line}"`);
+    const partial = (await cacheReport(page)).find((c) => c.name.endsWith(':story:v1'))!;
+    check(!partial.urls.some((u) => /jungle-camp-portrait|cast-luz/.test(u)), 'story download: a truncated file was stored');
+    const retryLabel = (await page.textContent('[data-act="offline-story"]')) ?? '';
+    check(/Retry/.test(retryLabel), `story download: no Retry button ("${retryLabel}")`);
+    state.cut.clear();
+    await page.click('[data-act="offline-story"]');
+    line = await (async () => {
+      const t = Date.now();
+      let l = '';
+      while (Date.now() - t < 90_000) {
+        l = (await page.textContent('[data-region="offline-story"]')) ?? '';
+        if (/whole story is ready/.test(l)) break;
+        await page.waitForTimeout(150);
+      }
+      return l;
+    })();
+    const full = (await cacheReport(page)).find((c) => c.name.endsWith(':story:v1'))!;
+    check(/The whole story is ready offline/.test(line), `story download: did not finish — "${line}"`);
+    check(full.urls.length === B.groups.story.length && full.bytes === B.bytes.story, `story download: cache has ${full.urls.length}/${B.groups.story.length} files, ${full.bytes}/${B.bytes.story} B`);
+    check(sawProgress, 'story download: the progress bar never showed');
+    const prefs = await page.evaluate(() => localStorage.getItem('sticks-and-bones.offline'));
+    check(/"story":true/.test(prefs ?? ''), `story download: the choice was not remembered for Repair (${prefs})`);
+    await axe(page, 'settings with story + audio offline controls');
+    await page.locator('.offline-panel').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: join(out, 'settings-story-offline.png') });
+    // Repair keeps what the player chose: the whole story comes back.
+    await page.click('[data-act="repair"]');
+    await waitStatus(page, /Quick Play is ready offline/);
+    const afterRepair = (await cacheReport(page)).find((c) => c.name.endsWith(':story:v1'));
+    check(afterRepair?.urls.length === B.groups.story.length, `repair: the chosen whole-story download was not restored (${afterRepair?.urls.length})`);
+    // Offline: every chapter opens with its art.
+    await goOffline(ctx, true);
+    await page.reload();
+    await enterMenu(page);
+    for (const sc of ['chapter-3', 'chapter-6']) {
+      await seedStory(page, sc, 1);
+      await openCase(page);
+      await page.click('[data-act="story-continue"]');
+      await sceneUp(page);
+      const env = await page.evaluate(() => document.querySelector('.st-bg.is-front')?.getAttribute('data-env'));
+      check(!!env && env !== 'none', `whole story offline: ${sc} opened without its backdrop`);
+      await page.click('[data-act="story-file"]');
+      await page.click('[data-act="story-home"]');
+    }
+    await goOffline(ctx, false);
+    check((errorsOf.get(page) ?? []).length === 0, `story download: page errors ${errorsOf.get(page)!.join(' | ')}`);
+    notes.push(`whole-story download: button "${label.trim()}"; with 2 files cut mid-transfer → "${(partial.urls.length)} saved, interrupted, Retry"; no truncated file stored; Retry → "${line}" (${full.urls.length} files, ${(full.bytes / 1048576).toFixed(2)} MB = build total); progress bar shown; choice remembered and restored by Repair; offline, Chapters 3 and 6 opened with their art`);
+    await ctx.close();
+  }
+
+  // ---- 9. Optional offline audio: separate size, missing file, ranges, removal --------------------
+  {
+    const { ctx, page } = await newContext();
+    await page.goto(`${ORIGIN}${APP}`);
+    await enterMenu(page);
+    await waitStatus(page, /Quick Play is ready offline/);
+    await page.click('[data-go="settings"]');
+    const before = (await page.textContent('[data-region="offline-audio"]')) ?? '';
+    const mbAudio = (B.bytes.audio / 1048576).toFixed(1);
+    check(before.includes(`optional ${mbAudio} MB`), `audio: separate size not disclosed — "${before}"`);
+    const noMedia = (await cacheReport(page)).some((c) => c.urls.some((u) => u.endsWith('.mp3')));
+    check(!noMedia, 'audio: music/ambience cached before the player asked');
+    state.missing = new Set(['amb-terrace']);
+    await page.click('[data-act="offline-audio"]');
+    let line = '';
+    const t0 = Date.now();
+    while (Date.now() - t0 < 120_000) {
+      line = (await page.textContent('[data-region="offline-audio"]')) ?? '';
+      if (/unavailable and skipped|saved for offline/.test(line)) break;
+      await page.waitForTimeout(150);
+    }
+    check(/1 audio file was unavailable and skipped/.test(line), `audio: missing optional file not reported — "${line}"`);
+    state.missing.clear();
+    await page.click('[data-act="offline-audio"]'); // Retry fetches only the missing one
+    const t1 = Date.now();
+    while (Date.now() - t1 < 60_000) {
+      line = (await page.textContent('[data-region="offline-audio"]')) ?? '';
+      if (/saved for offline/.test(line)) break;
+      await page.waitForTimeout(150);
+    }
+    check(/Music and ambience are saved for offline play/.test(line), `audio: not saved — "${line}"`);
+    const audioCache = (await cacheReport(page)).find((c) => c.name.endsWith(':audio:v1'));
+    check(audioCache?.urls.length === B.groups.audio.length, `audio: ${audioCache?.urls.length}/${B.groups.audio.length} files cached`);
+    // Offline: <audio> byte ranges are served from the cache.
+    await goOffline(ctx, true);
+    const music = B.groups.audio.find(([u]) => /patio-dominoes/.test(u))![0];
+    const r = await page.evaluate(async (u: string) => {
+      const res = await fetch(u, { headers: { Range: 'bytes=100-1123' } });
+      return { status: res.status, len: (await res.arrayBuffer()).byteLength, range: res.headers.get('content-range') };
+    }, music);
+    check(r.status === 206 && r.len === 1024 && /^bytes 100-1123\//.test(r.range ?? ''), `audio offline: range request ${JSON.stringify(r)}`);
+    await goOffline(ctx, false);
+    await page.click('[data-act="offline-audio"]'); // now "Remove"
+    await page.waitForTimeout(800);
+    const gone = !(await cacheReport(page)).some((c) => c.name.endsWith(':audio:v1'));
+    check(gone, 'audio: remove did not delete the audio cache');
+    await otherAppIntact(page, 'after audio download/remove');
+    notes.push(`optional audio: Settings disclosed "${before.trim()}"; with amb-terrace returning 404 → "1 audio file was unavailable and skipped"; Retry → all ${audioCache?.urls.length} files (${((audioCache?.bytes ?? 0) / 1048576).toFixed(1)} MB); offline a byte-range request for the patio track → ${r.status} ${r.range}; Remove deleted only the audio cache`);
+    await ctx.close();
+  }
+
+  // ---- 10. Not enough storage for the whole story (the browser's estimate) -------------------------
+  {
+    const { ctx, page } = await newContext();
+    await ctx.addInitScript(`navigator.storage.estimate = async () => ({ quota: 4_000_000, usage: 3_000_000 });`);
+    await page.goto(`${ORIGIN}${APP}`);
+    await enterMenu(page);
+    await waitStatus(page, /Quick Play is ready offline/);
+    await page.click('[data-go="settings"]');
+    state.requests = [];
+    await page.click('[data-act="offline-story"]');
+    await page.waitForTimeout(800);
+    const line = (await page.textContent('[data-region="offline-story"]')) ?? '';
+    check(/Not enough storage for the whole story: it needs .* MB, about 1\.0 MB is free/.test(line), `story quota: "${line}"`);
+    check(!state.requests.some((u) => /cast-|jungle/.test(u)), 'story quota: files were downloaded anyway');
+    notes.push(`story download with too little storage (estimate: 1 MB free): "${line}" — nothing downloaded`);
+    await ctx.close();
+  }
+
+  // ---- 11. Update mid-case: dialogue position and an in-progress hand restored once ----------------
+  {
+    const { ctx, page } = await newContext();
+    state.site = SITE_A;
+    await page.goto(`${ORIGIN}${APP}`);
+    await enterMenu(page);
+    await waitStatus(page, /Quick Play is ready offline/);
+    await seedStory(page, 'chapter-1', 6);
+    await openCase(page);
+    await page.click('[data-act="story-continue"]');
+    await sceneUp(page);
+    await page.click('[data-act="story-next"]');
+    await page.click('[data-act="story-next"]');
+    await page.waitForTimeout(600);
+    const pos = await page.evaluate(() => document.querySelector('.cine-pos')?.textContent);
+    const progBefore = await page.evaluate(() => localStorage.getItem('sticks-and-bones.story'));
+    await page.click('[data-act="story-file"]');
+    state.site = SITE_B;
+    await page.evaluate(async () => (await navigator.serviceWorker.getRegistration())!.update());
+    await page.waitForSelector('.story-shell [data-region="update"]:not([hidden])', { timeout: 60_000 });
+    await Promise.all([page.waitForNavigation({ timeout: 30_000 }), page.click('.story-shell [data-act="update-now"]')]);
+    await page.waitForSelector('.start-button');
+    await page.click('.start-button');
+    const skip = page.locator('[data-act="intro-skip"]');
+    if (await skip.count()) await skip.click().catch(() => undefined);
+    await sceneUp(page);
+    const after = await page.evaluate(() => ({ pos: document.querySelector('.cine-pos')?.textContent, scene: document.querySelector('.story-stage')?.getAttribute('data-scene'), build: document.documentElement.dataset.build }));
+    check(after.scene === 'chapter-1' && after.pos === pos && after.build === 'b', `update mid-dialogue: returned to ${JSON.stringify(after)}, expected chapter-1 at ${pos}`);
+    // Once: a plain reload goes to the menu as usual.
+    await page.reload();
+    await enterMenu(page);
+    check(await page.locator('[data-go="setup"]').count() === 1, 'update mid-dialogue: a second reload returned to the story again');
+    notes.push(`update A → B from the case file mid-dialogue: progress saved (${(progBefore ?? '').length} B record); after reload the start tap returned straight to Chapter 1 at line ${after.pos} on build "${after.build}"; a second reload went to the menu (once only)`);
+
+    // In-progress hand (encounter): update from the story table's pause sheet.
+    state.site = SITE_A;
+    const { ctx: c2, page: p2 } = await newContext();
+    await p2.goto(`${ORIGIN}${APP}`);
+    await enterMenu(p2);
+    await waitStatus(p2, /Quick Play is ready offline/);
+    const pre = (JSON.parse(readFileSync(join(root, 'src/story/script.json'), 'utf8')) as { scenes: { id: string; blocks: { raw: string }[] }[] });
+    void pre;
+    await seedStory(p2, 'chapter-1', 0, 'hand');
+    await openCase(p2);
+    await p2.click('[data-act="story-continue"]');
+    await p2.locator('.table-screen').first().waitFor({ timeout: 30_000 });
+    await p2.waitForTimeout(800);
+    const legal = p2.locator('.hand-tile.is-legal');
+    if (await legal.count()) {
+      await legal.first().click();
+      await p2.locator('.end-slot.is-legal').first().click();
+    }
+    await p2.waitForTimeout(2500);
+    const handBefore = await p2.evaluate(() => (JSON.parse(localStorage.getItem('sticks-and-bones.story') ?? '{}') as { data?: { hand?: { state?: { hand?: unknown } } } }).data?.hand?.state?.hand ?? null);
+    state.site = SITE_B;
+    await p2.evaluate(async () => (await navigator.serviceWorker.getRegistration())!.update());
+    await p2.click('[data-act="pause"]');
+    await p2.waitForSelector('dialog.pause[open] [data-region="update"]:not([hidden])', { timeout: 60_000 });
+    // First: storage refuses the write → the player is told and nothing reloads.
+    await p2.evaluate(() => {
+      (window as unknown as { __realSet: typeof Storage.prototype.setItem }).__realSet = Storage.prototype.setItem;
+      Storage.prototype.setItem = function () {
+        throw new DOMException('blocked', 'QuotaExceededError');
+      };
+    });
+    await p2.click('dialog.pause [data-act="update-now"]');
+    await p2.waitForSelector('dialog.update-unsaved[open]', { timeout: 5000 });
+    const msg = (await p2.textContent('dialog.update-unsaved')) ?? '';
+    await p2.click('[data-act="upd-later"]');
+    await p2.waitForTimeout(500);
+    check(/couldn’t be saved/.test(msg) && (await p2.evaluate(() => document.documentElement.dataset.build)) === 'a', `update with a refused save: "${msg}"`);
+    await p2.evaluate(() => {
+      Storage.prototype.setItem = (window as unknown as { __realSet: typeof Storage.prototype.setItem }).__realSet;
+    });
+    // Then: storage works → the hand is saved and comes back identical, once.
+    if (!(await p2.locator('dialog.pause[open]').count())) await p2.click('[data-act="pause"]');
+    await p2.evaluate(`addEventListener('beforeunload', () => sessionStorage.setItem('qa.atUnload', JSON.stringify({ tiles: document.querySelectorAll('.hand-tile').length })));`);
+    await Promise.all([p2.waitForNavigation({ timeout: 30_000 }), p2.click('dialog.pause [data-act="update-now"]')]);
+    const unload = JSON.parse((await p2.evaluate(() => sessionStorage.getItem('qa.atUnload'))) ?? '{}') as { tiles?: number };
+    await p2.waitForSelector('.start-button');
+    await p2.click('.start-button');
+    const skip2 = p2.locator('[data-act="intro-skip"]');
+    if (await skip2.count()) await skip2.click().catch(() => undefined);
+    await p2.locator('.table-screen').first().waitFor({ timeout: 30_000 });
+    const handAfter = await p2.evaluate(() => (JSON.parse(localStorage.getItem('sticks-and-bones.story') ?? '{}') as { data?: { hand?: { state?: { hand?: unknown } } } }).data?.hand?.state?.hand ?? null);
+    check(!!handBefore && JSON.stringify(handBefore) === JSON.stringify(handAfter), 'update mid-hand: the encounter changed across the update');
+    check(unload.tiles === 0, `update mid-hand: tiles visible while reloading (${JSON.stringify(unload)})`);
+    check((errorsOf.get(p2) ?? []).length === 0 && (errorsOf.get(page) ?? []).length === 0, `update mid-case: page errors ${[...(errorsOf.get(p2) ?? []), ...(errorsOf.get(page) ?? [])].join(' | ')}`);
+    notes.push(`update mid-hand (story table, Chapter 1): with storage refusing the write → "Your place couldn’t be saved" + Not now (still build a, nothing lost); then Update now → screen cleared (0 tiles at unload) → start tap returned straight to the same hand (engine hand state identical)`);
+    await c2.close();
+    await ctx.close();
+  }
+
 } catch (e) {
   failures.push(`exception: ${(e as Error).stack ?? e}`);
 } finally {

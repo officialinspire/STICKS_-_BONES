@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { _resetWarm, DEFERRED_ASSETS, ESSENTIAL_ASSETS, warm, warmState } from './warm';
+import { _resetWarm, DEFERRED_ASSETS, essentialAssets, warm, warmState } from './warm';
 
 /** Fake Image: decode() resolves/rejects when the test says so. */
 const pending: { src: string; ok: (v?: unknown) => void; fail: (e: unknown) => void }[] = [];
@@ -38,7 +38,7 @@ afterEach(() => delete (globalThis as { Image?: unknown }).Image);
 
 describe('asset warm-up', () => {
   it('never runs more than the concurrency limit at once, and finishes everything', async () => {
-    const all = warm([...ESSENTIAL_ASSETS, ...DEFERRED_ASSETS]);
+    const all = warm([...essentialAssets(), ...DEFERRED_ASSETS]);
     expect(pending).toHaveLength(2);
     while (pending.length) {
       pending.shift()!.ok();
@@ -49,7 +49,7 @@ describe('asset warm-up', () => {
   });
 
   it('essentials start first; front-queued ids jump ahead of background work', async () => {
-    void warm(ESSENTIAL_ASSETS);
+    void warm(essentialAssets());
     void warm(DEFERRED_ASSETS);
     expect(pending.map((p) => p.src)).toHaveLength(2);
     expect(warmState('env.neighborhood-patio')).toBe('loading');

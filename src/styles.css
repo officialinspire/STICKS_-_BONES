@@ -1831,6 +1831,23 @@ summary:focus-visible,
   margin: 0 0 4px;
   font: 800 1.1rem var(--display);
 }
+.offline-sub {
+  margin: 14px 0 0;
+  font: 800 0.95rem var(--display);
+}
+.offline-panel progress {
+  display: block;
+  width: 100%;
+  height: 10px;
+  margin-top: 6px;
+  accent-color: var(--teal);
+}
+.offline-panel progress[hidden] {
+  display: none;
+}
+.case-offline {
+  margin: 4px 0 0;
+}
 [data-act='erase'].is-armed {
   border-color: #a5321f;
   color: #a5321f;
@@ -2374,6 +2391,14 @@ h1, h2, h3, .title, .chapter-title, .section-h, .score-val, .dest-title, .points
 .st-actor { position: relative; justify-self: start; width: clamp(96px, 20vh, 170px); aspect-ratio: 1 / 1.05; margin: 0 0 -26px 6px; pointer-events: none; opacity: 0; transform: translateY(8px); transition: opacity 260ms ease, transform 260ms ease; }
 [data-cousin][data-actor-visible] .st-actor { opacity: 1; transform: none; }
 .st-actor-art { width: 100%; height: 100%; }
+/* The speaking cast member's portrait shares the actor's grid cell (only one figure at a time). Decorative:
+   the name tag in the dialogue panel is the accessible label. */
+.story-main > .scene-card-slot { grid-row: 1; grid-column: 1; }
+.story-main > .st-actor, .story-main > .st-cast { grid-row: 2; grid-column: 1; }
+.story-main > .dialogue-slot { grid-row: 3; grid-column: 1; }
+.st-cast { position: relative; justify-self: start; width: clamp(96px, 20vh, 170px); margin: 0 0 -26px 6px; pointer-events: none; opacity: 0; transform: translateY(8px); transition: opacity 260ms ease, transform 260ms ease; }
+[data-cast-visible] .st-cast { opacity: 1; transform: none; }
+.st-cast-art { width: 100%; aspect-ratio: 0.9; background-repeat: no-repeat; filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.55)); }
 .st-actor .host-svg { filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.55)); }
 .st-curtain { z-index: 30; background: var(--sb-ink); opacity: 0; transition-property: opacity; transition-timing-function: ease; }
 .st-curtain.is-closed { opacity: 1; }
@@ -2390,12 +2415,12 @@ h1, h2, h3, .title, .chapter-title, .section-h, .score-val, .dest-title, .points
 @media (prefers-reduced-motion: reduce) {
   .st-backdrop[data-move] { animation: none; }
   .st-threshold.is-pulse { animation: none; }
-  .st-water, .st-actor, .st-bg, .st-light, .st-threshold { transition: none; }
+  .st-water, .st-actor, .st-cast, .st-bg, .st-light, .st-threshold { transition: none; }
   .dialogue-panel.is-revealing .dialogue-text, .dialogue-panel.is-revealing .caption-text { animation: none; }
 }
 .reduce-motion .st-backdrop[data-move], .reduce-motion .st-threshold.is-pulse { animation: none; }
 @media (orientation: landscape) and (max-height: 560px) {
-  .st-actor { width: clamp(72px, 22vh, 104px); margin-bottom: -18px; }
+  .st-actor, .st-cast { width: clamp(72px, 22vh, 104px); margin-bottom: -18px; }
   .st-threshold { top: 30%; }
 }
 /* Scene bar stays legible over bright skies (gold 8.6:1 and ivory 14:1 on the ink scrim). */

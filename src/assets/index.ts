@@ -1,10 +1,10 @@
 import { IMAGE_ASSETS, type ImageAssetId } from './manifest';
 import type { ImageAsset, SpriteFrame } from './types';
-import { RUNTIME_ASSET_URLS, type RuntimeAssetId } from './urls';
+import { PORTRAIT_URLS, RUNTIME_ASSET_URLS, type RuntimeAssetId, type WarmKey } from './urls';
 
 export { IMAGE_ASSETS, MISSING_ASSETS, ASSET_MANIFEST_VERSION } from './manifest';
 export type { ImageAssetId } from './manifest';
-export type { RuntimeAssetId } from './urls';
+export type { RuntimeAssetId, WarmKey, PortraitKey } from './urls';
 export * from './types';
 
 export function getAsset(id: ImageAssetId): ImageAsset {
@@ -22,4 +22,9 @@ export function getFrame(id: ImageAssetId, frameId: string): SpriteFrame {
 /** URL for a bundled runtime asset, or null if not bundled (caller must fall back). */
 export function assetUrl(id: RuntimeAssetId): string | null {
   return RUNTIME_ASSET_URLS[id] ?? null;
+}
+
+/** URL for anything the warmer can load: a runtime asset or an environment's portrait crop. */
+export function urlFor(key: WarmKey): string | null {
+  return key in PORTRAIT_URLS ? PORTRAIT_URLS[key as keyof typeof PORTRAIT_URLS] : (RUNTIME_ASSET_URLS[key as RuntimeAssetId] ?? null);
 }

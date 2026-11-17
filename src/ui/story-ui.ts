@@ -17,6 +17,8 @@ import type { HandSetup } from '../story/chapters';
 import { STAGING } from '../story/staging';
 import type { StoryCue } from '../audio/manager';
 import { renderStoryRun } from './story-player';
+import { sceneAssets } from './story-assets';
+import { envKey } from '../assets/env';
 import { wordmarkHtml } from './brand';
 import { esc } from './svg';
 
@@ -131,6 +133,14 @@ export interface StoryDeps {
   audioScene(id: SceneId | null): void;
   /** A new beat (or card) replaced the last one: cancel its unfinished cue sounds. */
   beat(): void;
+  /** While a run is open: write its position now (true only if the write succeeded), and stop it (update). */
+  registerRun?(hooks: { flush(): boolean; stop(): void } | null): void;
+  /** One line on whether a scene is saved for offline play (null where offline isn't available). */
+  offlineNote?(id: SceneId): string | null;
+  /** A waiting app update (the case file shows "Update now"; the run's position is saved first). */
+  readonly update?: { ready(): boolean; apply(): void };
+  /** True once, right after an update reload that interrupted a story: reopen the saved scene without a tap. */
+  takeAutoContinue?(): boolean;
   /** Dev/test: fast AI timings. */
   readonly fast?: boolean;
 }
@@ -147,10 +157,14 @@ export function save(d: StoryDeps, p: StoryProgress): boolean {
 export async function renderStoryHome(d: StoryDeps, notice?: string): Promise<void> {
   d.audioScene(null);
   const { root } = d;
-  // Warm the backdrop of the scene the player will see next (bounded queue, never at startup).
-  const nextEnv = STAGING[(readStory(d.store).value?.sceneId ?? 'prologue') as SceneId].env;
-  if (nextEnv) void warm([nextEnv]);
+  // Warm the scene the player will see next (its backdrop for this viewport, then its cast) on the bounded
+  // queue. Only when the case file opens — never at startup.
+  const nextId = (readStory(d.store).value?.sceneId ?? 'prologue') as SceneId;
+  const nextEnv = STAGING[nextId].env;
+  if (nextEnv) void warm([envKey(nextEnv)]);
   const script = await loadScript();
+  const nextScene = script.scenes.find((x) => x.id === nextId);
+  if (nextScene) void warm(sceneAssets(nextScene));
   const read = readStory(d.store);
   const p = read.value;
   const chapters = script.scenes.filter((s) => s.number !== null);
@@ -162,6 +176,7 @@ export async function renderStoryHome(d: StoryDeps, notice?: string): Promise<vo
     <div class="story-shell">
       <header class="story-head">
         <button type="button" class="btn-ghost back" data-act="story-home">← Menu</button>
+        ${d.update ? `<div class="update-banner" data-region="update" ${d.update.ready() ? '' : 'hidden'}><p><strong>Update available.</strong> Your place in the case is saved first, and you come straight back to it.</p><button type="button" class="btn" data-act="update-now">Update now</button></div>` : ''}
         ${wordmarkHtml({ story: true, level: 'h1', className: 'is-story' })}
         <p class="story-promise">A dominoes mystery in Puerto Rico.</p>
       </header>
@@ -171,6 +186,7 @@ export async function renderStoryHome(d: StoryDeps, notice?: string): Promise<vo
           p
             ? `<button type="button" class="btn primary" data-act="story-continue">Continue Case</button>
                <p class="case-where">${where ? esc(`${where.number === null ? where.heading.split(' — ')[0] : `Chapter ${where.number}`} — ${where.title}`) : ''}</p>
+               ${p && d.offlineNote?.(p.sceneId) ? `<p class="case-offline note">${esc(d.offlineNote(p.sceneId)!)}</p>` : ''}
                <button type="button" class="btn-ghost" data-act="story-new">New Case…</button>`
             : `<button type="button" class="btn primary" data-act="story-new">New Case</button>
                <p class="case-where">Seven chapters, seven hands. Every win, loss or blocked tie moves the case forward.</p>`
@@ -191,6 +207,9 @@ export async function renderStoryHome(d: StoryDeps, notice?: string): Promise<vo
   const on = (act: string, fn: () => void) => root.querySelector(`[data-act="${act}"]`)?.addEventListener('click', fn);
   on('story-home', () => d.onBack());
   on('story-continue', () => void renderStoryRun(d, { replay: null }));
+  on('update-now', () => d.update?.apply());
+  // After an update reload in the middle of the case: straight back to the saved scene, line or hand (once).
+  if (p && d.takeAutoContinue?.()) void renderStoryRun(d, { replay: null });
   root.querySelectorAll<HTMLElement>('[data-act="story-replay"]').forEach((b) => b.addEventListener('click', () => void renderStoryRun(d, { replay: b.dataset.scene as SceneId })));
   const newBtn = root.querySelector<HTMLButtonElement>('[data-act="story-new"]');
   newBtn?.addEventListener('click', () => {

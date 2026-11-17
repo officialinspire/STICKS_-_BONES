@@ -28,6 +28,30 @@ export const RUNTIME_ASSET_URLS = {
   'env.moonlit-promenade': new URL('../../assets/generated/web/moonlit-promenade.webp', import.meta.url).href,
   'env.jungle-camp': new URL('../../assets/generated/web/jungle-camp.webp', import.meta.url).href,
   'env.executive-terrace': new URL('../../assets/generated/web/executive-terrace.webp', import.meta.url).href,
+  // Story cast portraits: REPACKED derivatives (src/assets/cast.json — cleaned edges, uniform baseline-aligned
+  // cells), so their frame rects come from cast.json, not the source manifest. Loaded per scene, never at startup.
+  'cast.vale.atlas': new URL('../../assets/generated/web/cast-vale.webp', import.meta.url).href,
+  'cast.luz.atlas': new URL('../../assets/generated/web/cast-luz.webp', import.meta.url).href,
+  'cast.marisol.atlas': new URL('../../assets/generated/web/cast-marisol.webp', import.meta.url).href,
+  'cast.rafa.atlas': new URL('../../assets/generated/web/cast-rafa.webp', import.meta.url).href,
 } as const satisfies Partial<Record<ImageAssetId, string>>;
 
 export type RuntimeAssetId = keyof typeof RUNTIME_ASSET_URLS;
+
+/**
+ * Portrait (3:4) crops of the environments, centred on src/assets/focal.ts (derivatives.json → `portrait`).
+ * Used instead of the full frame when the viewport is no wider than 3:4: same visible area, fewer bytes.
+ */
+export const PORTRAIT_URLS = {
+  'env.neighborhood-patio@portrait': new URL('../../assets/generated/web/neighborhood-patio-portrait.webp', import.meta.url).href,
+  'env.cave-waterfall@portrait': new URL('../../assets/generated/web/cave-waterfall-portrait.webp', import.meta.url).href,
+  'env.back-alley@portrait': new URL('../../assets/generated/web/back-alley-portrait.webp', import.meta.url).href,
+  'env.resort-patio@portrait': new URL('../../assets/generated/web/resort-patio-portrait.webp', import.meta.url).href,
+  'env.moonlit-promenade@portrait': new URL('../../assets/generated/web/moonlit-promenade-portrait.webp', import.meta.url).href,
+  'env.jungle-camp@portrait': new URL('../../assets/generated/web/jungle-camp-portrait.webp', import.meta.url).href,
+  'env.executive-terrace@portrait': new URL('../../assets/generated/web/executive-terrace-portrait.webp', import.meta.url).href,
+} as const;
+
+export type PortraitKey = keyof typeof PORTRAIT_URLS;
+/** Anything the image warmer can fetch and decode. */
+export type WarmKey = RuntimeAssetId | PortraitKey;
