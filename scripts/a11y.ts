@@ -145,6 +145,8 @@ try {
     await axe(page, 'start screen');
     await page.click('.start-button');
     await page.waitForSelector('[data-go="setup"]');
+    // Contrast is judged on the settled menu, not mid-reveal (elements fade in from transparent).
+    await page.locator('.scene:not(.is-reveal)').waitFor();
     await axe(page, 'menu');
     for (const s of ['setup', 'setup-local', 'rules', 'stats', 'settings', 'achievements']) {
       await page.click(`[data-go="${s}"]`);
