@@ -8,7 +8,7 @@ the deployed site. Tick each item and write down anything odd.
 ## First run
 - [ ] The start screen appears. Tapping starts the game with **no sound** until the menu.
 - [ ] Menu music starts after the tap and respects the mute and volume settings.
-- [ ] The menu shows "✓ Ready to play offline (…MB…)" within a minute (on the deployed site).
+- [ ] The menu shows "✓ Quick Play is ready offline (…MB…)" within a minute (on the deployed site).
 - [ ] How to play: opening, drawing/passing, blocked scoring, turn direction and
   the bonuses that are *not* played are all covered and readable.
 
@@ -34,7 +34,7 @@ the deployed site. Tick each item and write down anything odd.
 - [ ] Statistics count wins and losses. Abandoned games are listed separately.
 
 ## Offline (on the deployed site)
-- [ ] After "Ready to play offline", turn on airplane mode, reopen the site, and
+- [ ] After "Quick Play is ready offline", turn on airplane mode, reopen the site, and
   finish a hand. Music is silent; there are no errors.
 - [ ] Settings → **Repair offline files** returns to "Ready". The saved game and settings survive.
 - [ ] Install to the home screen / desktop. The icon looks right in a circle mask

@@ -4,7 +4,7 @@
  *
  *  - The start screen loads from /STICKS_-_BONES/ with a clean console.
  *  - The manifest resolves inside the subpath; the service worker reaches
- *    "Ready to play offline".
+ *    "Quick Play is ready offline".
  *  - A game vs the computer is dealt and played through one complete hand.
  *  - Offline (server down + browser offline), the app restarts from cache.
  */
@@ -66,7 +66,7 @@ try {
   });
   check(manifest.start === APP && manifest.scope === APP, `manifest outside the subpath: ${JSON.stringify(manifest)}`);
   await enterMenu();
-  await page.waitForFunction(() => /Ready to play offline/.test(document.querySelector('[data-region="offline-status"]')?.textContent ?? ''), null, { timeout: 90_000 }).catch(() => failures.push('offline status never became ready'));
+  await page.waitForFunction(() => /Quick Play is ready offline/.test(document.querySelector('[data-region="offline-status"]')?.textContent ?? ''), null, { timeout: 90_000 }).catch(() => failures.push('offline status never became ready'));
   await page.click('[data-go="setup"]');
   await page.click('.btn-start');
   await page.waitForSelector('.table-screen');

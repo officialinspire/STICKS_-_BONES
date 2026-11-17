@@ -103,7 +103,7 @@ build uses relative paths, so no base-path setting is needed.
    - the workflow shows a green **deploy** job with the page URL;
    - open the URL: the start screen loads and `<html data-build>` equals the
      first 12 characters of the deployed commit;
-   - after the menu appears, "✓ Ready to play offline" shows within a minute.
+   - after the menu appears, "✓ Quick Play is ready offline" shows within a minute.
 5. Run the manual checklist in `docs/PLAYTEST.md` on a phone and a desktop.
 
 **Rolling back:** re-run the deploy workflow on an earlier `main` commit. Players
