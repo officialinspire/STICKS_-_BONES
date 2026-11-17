@@ -1330,6 +1330,65 @@ audio manager. No new manager.
 - **One device, no accounts:** achievements are per browser profile, and erasing data removes them.
 - Only Chromium; no real devices.
 
+## One-speaker dialogue stage (2026-11-17)
+
+### Completed
+- **One visible character: the current speaker** (`src/ui/story-player.ts` DomStage `#present`).
+  - **Roberto:** his own lines and his reaction beats (expression cues).
+  - **A cast member** (Vale, Luz, Marisol, Rafa): their lines, once their sheet has decoded.
+  - **Nobody:** narration (Roberto's "narration" lines included), captions, and speakers without a
+    portrait (Worker, …). Those show the backdrop and the name tag only.
+  - Listeners, dimming, duplicate portraits and "listener primed on resume" are removed.
+- **Larger, from measured visible bounds:** the crops exclude transparent padding (Roberto's
+  275×363 dialogue crop; the cast frames' head-top-to-baseline crops).
+  - With one figure the width is no longer shared. The layout target rose to 58–66 dvh, so the
+    art's own **1.6× resolution cap** is now what limits size on most screens (no blur).
+
+  | Viewport (emulated, DPR 2) | Roberto before → after | Cast before → after |
+  | --- | --- | --- |
+  | 390×844 | 268 → 290 px | 220 → 318–325 px |
+  | 844×390 | 206 (about 160 visible) → 228 px, fully visible | 180 → 228 px, fully visible |
+  | 768×1024 | 290 → 290 px (cap) | 325 → 318–325 px (cap) |
+  | 1366×768 | 290 → 290 px (cap) | 325 → 318–325 px (cap) |
+
+  At DPR 1 the caps double, so desktops draw up to about 580 px.
+- **Responsive framing:**
+  - **Portrait phones, tablets, desktops:** the speaker is centred and stands on the dialogue panel
+    with only the lowest 22 % behind it.
+  - **Short landscape:** the speaker stands **beside** the panel at full scene height (left), with the
+    panel on the right. The same layout applies to every beat.
+  - Faces and hats stay clear of the panel and the scene bar, and nothing reaches the controls
+    (story e2e § G).
+- **Stable position:** the figure stands on the panel's **reserved** height (a CSS min-height measured
+  to fit typical lines: phones 96–124 px, wider 61–97 px), not on each line's height.
+  - So the same speaker never moves between lines (§ K: identical box).
+  - A long line overlaps more torso; the figure rises only if the panel would reach the face.
+- **Speaker change:** the current figure fades out (160 ms), then the next fades in (240 ms). Never two
+  at once. Reduced motion (the OS setting or the in-game one) swaps instantly.
+
+### Defects found and fixed while building
+- Roberto moved 1–12 px between his own lines whenever a taller panel had appeared since. The running
+  maximum is now a fixed reserved panel height.
+- In short landscape, standing on the panel hid about 22 % of a 200 px figure. The speaker now stands
+  beside it, fully visible.
+
+### Commands run and results (Chromium)
+
+| Command | Result |
+| --- | --- |
+| `npm run story:e2e` | pass. § G now checks one figure: at most one on stage, none for captions and narration, Roberto only while he speaks, face clear of the panel and the scene bar, nothing into the controls, ≤ 1.6× upscale (10 moments × portrait/landscape). New § K: Rafa → Roberto is never two figures; fade out, then in, after 184 ms; reduced motion swaps instantly; Roberto's box identical on his next line |
+| `npm run check` | running at commit time; result recorded in the next commit |
+| `npm run e2e` | OSP_E2E |
+| `npm run qa` / `npm run a11y` | running at commit time; result recorded in the next commit |
+| `npm run perf:story` | running at commit time; result recorded in the next commit |
+
+### Known limitations
+- **Phones are limited by the art's resolution:** at DPR 3 most phones get about 194 px (Roberto) and
+  216 px (cast). Larger crisp figures need higher-resolution character art.
+- **Desktop and tablet at DPR 2:** the figures are at their cap (290 / 325 px) in a large scene.
+- **Expressions:** cast expression labels are still missing, so the cast stay on frame `e1`.
+- Only Chromium; no real devices.
+
 ## Next stage
 
 The detailed list is in `docs/STORY_BUILD_STATUS.md`:

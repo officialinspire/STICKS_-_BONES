@@ -274,8 +274,9 @@ try {
         const r = (s) => { const e = document.querySelector(s); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height, b: b.bottom }; };
         const actor = r('.st-actor'), cast = r('.st-cast'), panel = r('.dialogue-panel'), controls = r('.cine-controls'), bar = r('.story-bar');
         const stage = document.querySelector('.story-stage');
-        const actorVisible = stage.hasAttribute('data-actor-visible') && stage.hasAttribute('data-cousin');
-        const castVisible = stage.hasAttribute('data-cast-visible');
+        const shown = [...document.querySelectorAll('.st-actor.is-on, .st-cast.is-on')];
+        const actorVisible = !!document.querySelector('.st-actor.is-on');
+        const castVisible = !!document.querySelector('.st-cast.is-on');
         const art = document.querySelector('.st-actor svg');
         const vb = art ? art.viewBox.baseVal : null;
         const up = art && vb ? (art.getBoundingClientRect().height / vb.height) * devicePixelRatio : 0;
@@ -285,18 +286,25 @@ try {
         const castSrcH = cb && cb.dataset.cast ? ({ 'cast.vale.atlas': 836, 'cast.luz.atlas': 828, 'cast.marisol.atlas': 868, 'cast.rafa.atlas': 826 })[cb.dataset.cast] : 0;
         const castUp = cast && bs && castSrcH ? ((cast.h * devicePixelRatio) / (castSrcH / (bs[1] / 100))) : 0;
         // FACES: Cousin's head (hat to chin) is the top 38 % of his crop, the cast heads ~43 % of theirs.
-        const actorFaceCover = actorVisible && actor && panel ? Math.max(0, actor.y + actor.h * 0.4 - panel.y) : 0;
-        const castFaceCover = castVisible && cast && panel ? Math.max(0, cast.y + cast.h * 0.47 - panel.y) : 0;
-        const underBar = Math.max(actorVisible && actor && bar ? bar.b - actor.y : 0, castVisible && cast && bar ? bar.b - cast.y : 0);
-        return { actorVisible, castVisible, actorFaceCover, castFaceCover, underBar, overflowX: document.documentElement.scrollWidth - innerWidth, overflowY: document.documentElement.scrollHeight - innerHeight, actor, panel, controls, cousin: stage.hasAttribute('data-cousin'), up: +up.toFixed(2), castUp: +castUp.toFixed(2), env: document.querySelector('.st-bg.is-front')?.dataset.env || null };
-      })()`) as { actorVisible: boolean; castVisible: boolean; actorFaceCover: number; castFaceCover: number; underBar: number; overflowX: number; overflowY: number; actor: { y: number; b: number; x: number; w: number } | null; panel: { y: number; b: number } | null; controls: { y: number } | null; cousin: boolean; up: number; castUp: number; env: string | null };
+        const fig = actorVisible ? actor : castVisible ? cast : null;
+        const faceFrac = actorVisible ? 0.4 : 0.47;
+        const faceCover = fig && panel ? Math.max(0, Math.min(fig.y + fig.h * faceFrac, panel.b) - Math.max(fig.y, panel.y)) * (panel.x < fig.x + fig.w && panel.x + panel.w > fig.x ? 1 : 0) : 0;
+        const underBar = fig && bar ? Math.max(0, bar.b - fig.y) : 0;
+        const intoControls = fig && controls ? Math.max(0, fig.b - controls.y) : 0;
+        const tag = document.querySelector('.dialogue-panel .speaker-name')?.textContent || null;
+        return { count: shown.length, actorVisible, castVisible, speaking: stage.dataset.speaking, tag, faceCover, underBar, intoControls, figH: fig ? Math.round(fig.h) : 0, overflowX: document.documentElement.scrollWidth - innerWidth, overflowY: document.documentElement.scrollHeight - innerHeight, panel, controls, cousin: actorVisible, up: +up.toFixed(2), castUp: +castUp.toFixed(2), env: document.querySelector('.st-bg.is-front')?.dataset.env || null };
+      })()`) as { count: number; actorVisible: boolean; castVisible: boolean; speaking: string; tag: string | null; faceCover: number; underBar: number; intoControls: number; figH: number; overflowX: number; overflowY: number; panel: { y: number; b: number } | null; controls: { y: number } | null; cousin: boolean; up: number; castUp: number; env: string | null };
       check(m.overflowX <= 0 && m.overflowY <= 0, `G ${vp.name} ${name}: page overflow ${m.overflowX}/${m.overflowY}`);
       check(!!m.panel && !!m.controls && m.panel.b <= m.controls.y + 1, `G ${vp.name} ${name}: dialogue overlaps the controls`);
+      check(m.count <= 1, `G ${vp.name} ${name}: ${m.count} figures on stage (only the speaker may be)`);
+      // Captions and narration: the backdrop only. A line: its own speaker (or nobody without a portrait).
+      if (m.speaking === 'none' || m.speaking === 'other') check(m.count === 0, `G ${vp.name} ${name}: a figure is on stage during ${m.speaking === 'none' ? 'a caption' : `narration / ${m.tag}`}`);
+      if (m.actorVisible) check(m.speaking === 'cousin', `G ${vp.name} ${name}: Roberto on stage while ${m.speaking} speaks`);
       if (m.cousin) check(m.up <= 1.6, `G ${vp.name} ${name}: Roberto upscaled ×${m.up} (blurry)`);
       if (m.castVisible) check(m.castUp <= 1.6, `G ${vp.name} ${name}: cast portrait upscaled ×${m.castUp} (blurry)`);
-      check(m.actorFaceCover <= 1, `G ${vp.name} ${name}: the dialogue panel covers Roberto's face by ${m.actorFaceCover}px`);
-      check(m.castFaceCover <= 1, `G ${vp.name} ${name}: the dialogue panel covers the cast member's face by ${m.castFaceCover}px`);
-      check(m.underBar <= 1, `G ${vp.name} ${name}: a figure's head is under the scene bar by ${m.underBar}px`);
+      check(m.faceCover <= 1, `G ${vp.name} ${name}: the dialogue panel covers the speaker's face by ${m.faceCover.toFixed(0)}px`);
+      check(m.underBar <= 1, `G ${vp.name} ${name}: the speaker's head is under the scene bar by ${m.underBar}px`);
+      check(m.intoControls <= 0, `G ${vp.name} ${name}: the speaker reaches into the controls by ${m.intoControls}px`);
       if (id === 'chapter-6' && name === 'cave-accepted-hand') check(m.env !== 'env.cave-waterfall', `G: chapter 6 rest-area beat still shows the ancient platform (${m.env})`);
       await page.screenshot({ path: join(out, `${vp.name}-${name}.png`) });
       await page.click('[data-act="story-file"]');
@@ -304,10 +312,58 @@ try {
       await page.waitForSelector('[data-act="story"]');
     }
     check(errors.length === 0, `G ${vp.name}: errors ${errors.slice(0, 3).join(' | ')}`);
-    notes.push(`G: ${MOMENTS.length} staged moments captured in ${vp.name} — no overflow, dialogue clear of controls, every visible face clear of the panel and the scene bar, Roberto and cast ≤ 1.6× upscale`);
+    notes.push(`G: ${MOMENTS.length} staged moments captured in ${vp.name} — at most one figure (the speaker; none for captions/narration), no overflow, dialogue and figure clear of the controls, the face clear of the panel and the scene bar, ≤ 1.6× upscale`);
     await page.context().close();
   }
   void STAGING;
+  // ---- K. One speaker: the speaker change fades out then in; the same speaker never moves; reduced motion swaps ----
+  for (const reduce of [false, true]) {
+    const { page, errors } = await newPage({ reduce });
+    await toMenu(page);
+    await seed(page, { sceneId: 'chapter-1', part: 'pre', index: 1, completed: ['prologue'] }); // 1 RAFA, 2 COUSIN, 3 RAFA, 4 COUSIN
+    await openStory(page);
+    await waitState(page, 'presenting');
+    await page.waitForFunction(() => !!document.querySelector('.st-cast.is-on'), null, { timeout: 10_000 }).then((h: { dispose(): unknown }) => h.dispose(), () => failures.push(`K: Rafa never came on stage (reduce ${reduce})`));
+    // Let the line settle (a tap during its reveal only completes the reveal).
+    await waitState(page, 'presenting');
+    await page.waitForTimeout(1200);
+    // Next: sample which figure is on stage every 20 ms for 700 ms.
+    const timeline = (await page.evaluate(`new Promise((res) => {
+      const out = [];
+      const t0 = performance.now();
+      document.querySelector('[data-act="story-next"]').click();
+      const tick = () => {
+        const a = document.querySelector('.st-actor'), c = document.querySelector('.st-cast');
+        out.push({ t: Math.round(performance.now() - t0), actor: a.classList.contains('is-on'), cast: c.classList.contains('is-on'), aOp: +getComputedStyle(a).opacity, cOp: +getComputedStyle(c).opacity });
+        if (performance.now() - t0 < 700) setTimeout(tick, 20); else res(out);
+      };
+      tick();
+    })`)) as { t: number; actor: boolean; cast: boolean; aOp: number; cOp: number }[];
+    const both = timeline.filter((x) => x.actor && x.cast).length;
+    const firstOn = timeline.find((x) => x.actor)?.t ?? -1;
+    const castOff = timeline.find((x) => !x.cast)?.t ?? -1;
+    check(both === 0, `K: two figures on stage at once during a speaker change (reduce ${reduce})`);
+    check(firstOn >= 0 && timeline.at(-1)!.actor && !timeline.at(-1)!.cast, `K: Roberto never replaced Rafa (reduce ${reduce}) ${JSON.stringify(timeline.slice(-1))}`);
+    if (reduce) check(firstOn - castOff <= 60, `K: reduced motion should swap at once (gap ${firstOn - castOff} ms)`);
+    else check(firstOn - castOff >= 120 && timeline.some((x) => !x.actor && !x.cast && x.cOp > 0 && x.cOp < 1), `K: the speaker change should fade out first, then in (gap ${firstOn - castOff} ms)`);
+    const rect = () => page.evaluate(() => { const b = document.querySelector('.st-actor')!.getBoundingClientRect(); return `${Math.round(b.x)},${Math.round(b.y)},${Math.round(b.width)}x${Math.round(b.height)}`; });
+    await page.waitForTimeout(500);
+    const first = await rect();
+    const next = async () => {
+      await waitState(page, 'presenting');
+      await page.waitForTimeout(900);
+      await page.click('[data-act="story-next"]');
+      await page.waitForTimeout(700);
+    };
+    await next(); // Rafa
+    await next(); // Cousin again
+    const again = await rect();
+    check(first === again, `K: Roberto moved between his lines (${first} → ${again})`);
+    check(errors.length === 0, `K: errors ${errors.join(' | ')}`);
+    notes.push(`K (reduce ${reduce}): Rafa → Roberto: never two figures; ${reduce ? `instant swap (${firstOn - castOff} ms)` : `fade out, then in after ${firstOn - castOff} ms`}; Roberto's box identical on his next line (${again})`);
+    await page.context().close();
+  }
+
   // ---- H. Story analytics events (dev recorder; the transport is disabled) ------------------------------
   {
     const { page, errors } = await newPage();

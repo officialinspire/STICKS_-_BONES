@@ -51,6 +51,11 @@ function tableFaces(names: Readonly<Partial<Record<number, string>>>): Partial<R
 }
 
 // ---- the DOM stage ------------------------------------------------------------------
+/** Who is on stage: Roberto, a cast sheet, or nobody. */
+type Figure = 'cousin' | RuntimeAssetId | null;
+/** Speaker change: the current figure fades out over this long, then the next fades in. */
+const FADE_OUT_MS = 160;
+
 class DomStage implements StageView<Beat> {
   #root: HTMLElement;
   #host: HostView | null = null;
@@ -61,9 +66,13 @@ class DomStage implements StageView<Beat> {
   /** Backdrop requested by cues replayed before prepare() (resume mid-scene): prepare honours it. */
   #intent: { env: RuntimeAssetId | null; focus: string } | null = null;
   #unshape: (() => void) | null = null;
-  #speaker: RuntimeAssetId | null = null;
-  /** The cast member on stage (stays as the listener across Cousin's lines and captions). */
-  #castOn: RuntimeAssetId | null = null;
+  /** Who should be on stage: the current speaker only ('cousin', a cast sheet id, or nobody). */
+  #want: Figure = null;
+  /** Who is on stage now (faded in). */
+  #shown: Figure = null;
+  /** The cast sheet loaded in the cast box. */
+  #castLoaded: RuntimeAssetId | null = null;
+  #swap = 0;
   #disposed = false;
   #onResize = () => this.#layoutFigures();
   constructor(
@@ -105,16 +114,24 @@ class DomStage implements StageView<Beat> {
   /** Remove listeners (the run controller calls this when the scene closes). */
   dispose(): void {
     this.#disposed = true;
+    window.clearTimeout(this.#swap);
     this.#unshape?.();
     this.#unshape = null;
     window.removeEventListener('resize', this.#onResize);
   }
   /**
-   * Figure sizing: CSS picks the layout height (generous during dialogue); this sets each figure's
-   * RESOLUTION CAP — the height at which its visible source pixels would be upscaled 1.6× on this
-   * screen (devicePixelRatio) — so art is never blurred, and a LIFT that stands the figure on the dialogue
-   * panel's top edge with only its lowest 22 % tucked behind (faces, hats and upper bodies stay clear).
-   * Position only: never a scale change.
+   * Framing for the one figure on stage, from measured visible bounds (the crops in castFrame /
+   * dialogueSourceSize exclude transparent padding):
+   * - **Resolution cap:** the height at which the visible source pixels would be upscaled 1.6× on this
+   *   screen (devicePixelRatio), so art is never blurred.
+   * - **Room:** the figure stands on the dialogue panel with only its lowest 22 % tucked behind it, and
+   *   never rises above the scene area (so faces, hats and the scene bar stay clear, and nothing reaches
+   *   the controls below).
+   * - **Stable:** the figure stands on the panel's RESERVED height (its CSS min-height, sized to fit
+   *   typical lines), not on each line's own height, so the same speaker never moves between lines. A
+   *   longer line just overlaps more of the torso; the figure rises only if the panel would otherwise
+   *   reach the face (top 45 %).
+   * Size and position only, never a stretch: the box always takes the art's own aspect.
    */
   #layoutFigures(): void {
     if (this.#disposed) return;
@@ -122,16 +139,21 @@ class DomStage implements StageView<Beat> {
     const actor = dialogueSourceSize();
     this.#root.style.setProperty('--actor-ar', String(actor.w / actor.h));
     this.#root.style.setProperty('--actor-cap-h', `${Math.round((actor.h * 1.6) / dpr)}px`);
-    const cast = this.#castOn ? castFrame(this.#castOn) : null;
+    const cast = this.#castLoaded ? castFrame(this.#castLoaded) : null;
     if (cast) this.q<HTMLElement>('.st-cast')?.style.setProperty('--cast-cap-h', `${Math.round((cast.h * 1.6) / dpr)}px`);
-    const panel = this.q<HTMLElement>('.dialogue-slot');
+    const slot = this.q<HTMLElement>('.dialogue-slot');
+    const panel = slot?.querySelector<HTMLElement>('.dialogue-panel');
     const main = this.q<HTMLElement>('.story-main');
-    const panelH = panel?.offsetHeight ?? 0;
+    const actual = slot?.offsetHeight ?? 0;
+    const reserve = Math.round(Math.max(panel ? parseFloat(getComputedStyle(panel).minHeight) || 0 : 0, 1)) || actual;
+    const mainH = main?.clientHeight ?? 0;
+    const above = Math.max(0, mainH - reserve);
+    this.#root.style.setProperty('--fig-room', `${Math.round(above / 0.78)}px`);
     for (const el of this.#root.querySelectorAll<HTMLElement>('.st-actor, .st-cast')) {
       const h = el.offsetHeight;
-      const room = Math.max(0, (main?.clientHeight ?? 0) - h);
-      // Stand on the panel's top edge with only the lowest 22 % tucked behind it (faces and upper bodies clear).
-      el.style.setProperty('--fig-lift', `${Math.round(Math.min(room, Math.max(0, panelH - 0.22 * h)))}px`);
+      const room = Math.max(0, mainH - h);
+      const lift = Math.max(reserve - 0.22 * h, actual - 0.55 * h, 0);
+      el.style.setProperty('--fig-lift', `${Math.round(Math.min(room, lift))}px`);
     }
   }
   #setBackdrop(env: RuntimeAssetId | null, focus: string, instant: boolean): void {
@@ -190,44 +212,63 @@ class DomStage implements StageView<Beat> {
     const panel = slot.firstElementChild as HTMLElement;
     panel.style.setProperty('--reveal-ms', `${revealMs}ms`);
     panel.classList.toggle('is-revealing', revealMs > 0);
-    const own = blk.kind === 'line' && speakerOf(blk.speaker!).label === 'Cousin';
-    const castId = blk.kind === 'line' ? speakerKey(blk.speaker!) : null;
-    // A cast speaker comes (or stays) on the right; the last one remains as the listener otherwise.
-    if (castId) this.#showCast(castId);
+    // ONE figure on stage: the current speaker. Roberto for his own lines and his reaction beats; a cast
+    // member for theirs (once their sheet has decoded). Nobody for narration, captions, or speakers
+    // without a portrait, which keep just their name tag over the backdrop.
+    const sp = blk.kind === 'line' ? speakerOf(blk.speaker!) : null;
+    const narration = !!sp?.qualifier && /narrat/i.test(sp.qualifier);
+    const own = !!sp && sp.label === 'Cousin' && !narration;
+    const castId = blk.kind === 'line' && !narration ? speakerKey(blk.speaker!) : null;
     const reaction = blk.kind === 'direction' && b.cues.some((c) => c.kind === 'expr');
     if (own && !this.#cousinIn) this.apply({ kind: 'cousin', to: 'in' });
-    // Two-character framing: Cousin on the left whenever he's on stage, the cast member on the right. The
-    // one speaking is bright; the listener is dimmed (never rescaled). Captions dim nobody.
-    this.#root.toggleAttribute('data-actor-visible', this.#cousinIn);
     this.#root.dataset.speaking = own || reaction ? 'cousin' : castId ? 'cast' : blk.kind === 'line' ? 'other' : 'none';
-    if (blk.kind === 'line') panel.dataset.side = castId ? 'right' : 'left';
     this.#layoutFigures();
+    this.#present(own || reaction ? 'cousin' : castId);
   }
-  /** Resume mid-scene: put the most recent cast speaker before this point on stage as the listener. */
-  primeListener(id: RuntimeAssetId | null): void {
-    if (id) this.#showCast(id);
-  }
-  /** The speaker's portrait (default frame), only once its sheet is decoded; otherwise the name tag stands alone. */
-  #showCast(id: RuntimeAssetId | null): void {
-    this.#speaker = id;
-    const box = this.q<HTMLElement>('.st-cast-art');
-    const fig = this.q<HTMLElement>('.st-cast');
-    const f = id ? castFrame(id) : null;
-    if (!id || !f || !box || !fig) return;
-    if (warmState(id) !== 'ready') {
-      // Keep whoever is on stage until the new sheet has decoded (no blank swap, no late pop-in).
-      void warm([id], { front: true }).then(([ok]) => ok && this.#speaker === id && !this.#disposed && this.#showCast(id));
+  /**
+   * Change who is on stage. The same speaker stays exactly where they are. A different one: the current
+   * figure fades out (FADE_OUT_MS), then the new one fades in. Reduced motion: an instant swap.
+   * A cast portrait appears only once its sheet is decoded (never a blank or late pop-in).
+   */
+  #present(who: Figure): void {
+    this.#want = who;
+    if (who === this.#shown) return;
+    if (who && who !== 'cousin' && warmState(who) !== 'ready') {
+      this.#show(null);
+      void warm([who], { front: true }).then(([ok]) => ok && this.#want === who && !this.#disposed && this.#present(who));
       return;
     }
-    if (this.#castOn !== id) {
-      box.style.cssText = regionStyle(urlFor(id)!, f);
-      // The figure box takes the visible region's exact aspect: scaled from visible bounds, never stretched.
-      fig.style.setProperty('--ar', String(f.w / f.h));
-      fig.style.setProperty('--cast-cap-h', `${Math.round((f.h * 1.6) / Math.max(1, window.devicePixelRatio || 1))}px`);
-      box.dataset.cast = id;
-      this.#castOn = id;
-    }
-    this.#root.setAttribute('data-cast-visible', '');
+    window.clearTimeout(this.#swap);
+    const wasShown = this.#shown !== null;
+    this.#show(null);
+    if (who === null) return;
+    const enter = () => {
+      if (this.#disposed || this.#want !== who) return;
+      if (who !== 'cousin') this.#loadCast(who);
+      this.#layoutFigures();
+      this.#show(who);
+    };
+    if (!wasShown || this.reduce()) enter();
+    else this.#swap = window.setTimeout(enter, FADE_OUT_MS);
+  }
+  #show(who: Figure): void {
+    this.#shown = who;
+    this.q<HTMLElement>('.st-actor')?.classList.toggle('is-on', who === 'cousin');
+    this.q<HTMLElement>('.st-cast')?.classList.toggle('is-on', who !== null && who !== 'cousin');
+    this.#root.toggleAttribute('data-actor-visible', who === 'cousin');
+    this.#root.toggleAttribute('data-cast-visible', who !== null && who !== 'cousin');
+  }
+  /** Put a cast member's default frame in the cast box (visible-bounds crop, its own aspect). */
+  #loadCast(id: RuntimeAssetId): void {
+    const box = this.q<HTMLElement>('.st-cast-art');
+    const fig = this.q<HTMLElement>('.st-cast');
+    const f = castFrame(id);
+    if (!f || !box || !fig || this.#castLoaded === id) return;
+    box.style.cssText = regionStyle(urlFor(id)!, f);
+    fig.style.setProperty('--ar', String(f.w / f.h));
+    fig.style.setProperty('--cast-cap-h', `${Math.round((f.h * 1.6) / Math.max(1, window.devicePixelRatio || 1))}px`);
+    box.dataset.cast = id;
+    this.#castLoaded = id;
   }
   finishReveal(): void {
     this.q<HTMLElement>('.dialogue-panel')?.classList.remove('is-revealing');
@@ -539,10 +580,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
       const at = Math.min(p.sceneId === sceneId ? p.index : 0, Math.max(0, beats.length - 1));
       quietOnce = p.sceneId === sceneId && (at > 0 || part === 'post');
       replayCues(at);
-      // Two-character framing on resume: whoever was last talking with Cousin stays on stage as the listener.
-      const before = (part === 'pre' ? preBeats : [...preBeats, ...beats]).slice(0, part === 'pre' ? at : preBeats.length + at);
-      const lastCast = [...before].reverse().find((b) => b.block.kind === 'line' && speakerKey(b.block.speaker!));
-      s.primeListener(lastCast ? speakerKey(lastCast.block.speaker!) : null);
+      // One speaker on stage: the beat you land on brings its own speaker (no listener is restored).
       void dir.load(beats, at);
     }
 
