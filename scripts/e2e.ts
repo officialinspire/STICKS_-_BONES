@@ -771,8 +771,8 @@ try {
     };
     const probe = (page: Page) =>
       page.evaluate(() => {
-        const w = window as unknown as { __rej: string[]; __maxMedia: number; __menus: number; __sbAudio: { audio: { scene: string; playing: string | null; unlocked: boolean; levels: { muted: boolean }; activeSfx(): number }; backend: { playingCount(): number } } };
-        return { rej: w.__rej, maxMedia: w.__maxMedia, menus: w.__menus, scene: w.__sbAudio.audio.scene, playing: w.__sbAudio.audio.playing, count: w.__sbAudio.backend.playingCount(), muted: w.__sbAudio.audio.levels.muted, sfx: w.__sbAudio.audio.activeSfx(), unlocked: w.__sbAudio.audio.unlocked };
+        const w = window as unknown as { __rej: string[]; __maxMedia: number; __menus: number; __sbAudio: { audio: { scene: string; playing: string | null; unlocked: boolean; levels: { muted: boolean }; activeSfx(): number; activeSfxIds(): string[] }; backend: { playingCount(): number } } };
+        return { rej: w.__rej, maxMedia: w.__maxMedia, menus: w.__menus, scene: w.__sbAudio.audio.scene, playing: w.__sbAudio.audio.playing, count: w.__sbAudio.backend.playingCount(), muted: w.__sbAudio.audio.levels.muted, sfx: w.__sbAudio.audio.activeSfx(), sfxIds: w.__sbAudio.audio.activeSfxIds(), unlocked: w.__sbAudio.audio.unlocked };
       });
     const intro = async (route: 'ok' | '404' | 'hang' | 'none' | 'reject', vp = { width: 390, height: 844 }, mobile = false) => {
       const ctx = await browser.newContext({ viewport: vp, ...(mobile ? { isMobile: true, hasTouch: true } : {}) });
@@ -914,7 +914,8 @@ try {
       await page.click('[data-act="confirm-yes"]');
       await page.waitForTimeout(300);
       r = await probe(page);
-      check(r.sfx === 0 && r.count <= 1 && r.maxMedia <= 1 && r.rej.length === 0, `reset during sounds: ${JSON.stringify(r)}`);
+      // Everything from before the reset is cut; the only sound allowed is the NEW match's deal shuffle.
+      check(r.sfxIds.every((id: string) => id === 'shuffle') && r.count <= 1 && r.maxMedia <= 1 && r.rej.length === 0, `reset during sounds: ${JSON.stringify(r)}`);
       notes.push(`audio in play: gameplay → results → rematch → paused → restart; max concurrent music ${r.maxMedia}, SFX cut on reset`);
       await page.context().close();
     }

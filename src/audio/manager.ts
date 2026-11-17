@@ -217,6 +217,10 @@ export class AudioManager {
   activeSfx(): number {
     return this.#active.length;
   }
+  /** Which sounds are active (tests: a reset leaves only what the new state itself started). */
+  activeSfxIds(): SfxId[] {
+    return this.#active.map((a) => a.id);
+  }
   pendingCueVoices(): number {
     return this.#cueVoices.length;
   }

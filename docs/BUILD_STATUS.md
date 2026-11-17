@@ -974,7 +974,9 @@ Details: `docs/CINEMATICS.md`. Story checklist: `docs/STORY_BUILD_STATUS.md`.
 | `npm run check` | pass: 313 tests in 34 files, lint, assets:verify (30 SFX + 5 beds, CC0, hashes), all budgets (code 279/300 KB, sfx 554/720, ambience 2035/2200, total 13558/13900) |
 | `npm run audio` (new) | pass: A–J (see `docs/AUDIO.md` § Verification) |
 | `npm run story:e2e` | pass |
-| `npm run e2e` / `qa` / `a11y` / `pwa` / `smoke` | running at the time of this commit; results follow in the next commit |
+| `npm run e2e` | pass (see the bugs list: the first run was invalidated by an HMR reload, the second caught a stale assertion) |
+| `npm run qa` / `npm run a11y` | 0 failures, 0 comfort warnings / 0 failures |
+| `npm run pwa` / `npm run smoke` | pass, offline cache 4,175,553 B (shell 473.5 KB + assets 3,604.2 KB, now including the 30 SFX) / pass |
 
 ### Bugs found and fixed while testing
 
@@ -984,6 +986,10 @@ Details: `docs/CINEMATICS.md`. Story checklist: `docs/STORY_BUILD_STATUS.md`.
 - Resuming exactly on a knock beat replayed the knock.
 - A fresh match's first deal had no shuffle (it happens before the table subscribes).
 - Small WAVs were being inlined into the JS bundle as data URLs; audio is no longer inlined.
+- e2e's "reset during sounds" demanded zero active SFX after a restart; the new match's deal now
+  shuffles, so it checks instead that only that shuffle survives (`activeSfxIds()`).
+- A first e2e run failed with "no dev hook" because a source file was edited mid-run (the dev
+  server reloaded the page). A standalone repro and the isolated rerun pass.
 
 ### Known issues
 

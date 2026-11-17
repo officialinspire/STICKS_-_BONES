@@ -79,19 +79,19 @@ v0.2, committed to `main` by the owner as 242ee60). The general project log stay
 | | Version alignment (package vs release notes) | ☐ |
 | | Representative human playtest timing (target 90–110 min, under 120) | ☐ |
 
-## Verification (this stage, Chromium only)
+## Verification (audio stage, Chromium only)
 
-Commit **`a6c8ad8`** on `claude/inspiring-bardeen-4yfmu5`. The exact output is in the
-Stage 12 entry of `docs/BUILD_STATUS.md`.
+Commits `87c5285` and the follow-up on `claude/inspiring-bardeen-4yfmu5`. Full detail in the audio
+stage entry of `docs/BUILD_STATUS.md` and `docs/AUDIO.md` § Verification.
 
 | Check | Result |
 | --- | --- |
-| `npm run check` | pass, 278 tests in 30 files, all budgets |
-| `npm run qa` | 0 failures, 0 comfort warnings (6 viewports × 11 screens, text 150%/200%, CLS 0.0199) |
-| `npm run a11y` | 0 failures (axe clean, including the story screens) |
-| `npm run e2e` / `npm run matches` | pass / all 8 arrangements completed full matches |
-| `npm run pwa` / `npm run smoke` | pass, cache 2,188,958 B / pass |
-| GitHub Actions CI | **success**: run 4 on `a6c8ad8` (https://github.com/officialinspire/STICKS_-_BONES/actions/runs/43981221753) |
+| `npm run check` | pass: 313 tests in 34 files, assets:verify (30 SFX + 5 beds, CC0, hashes), all budgets |
+| `npm run audio` (new) | pass: silent intro, decoding, UI/tile samples, exact motif on the audio clock, 0 ghost starts, no replay on resume, mute/background, blocked files, ≤ 1 music / ≤ 2 beds, bed loops measured with the browser decoder |
+| `npm run story:e2e` / `npm run e2e` | pass / pass |
+| `npm run qa` / `npm run a11y` | 0 failures, 0 comfort warnings / 0 failures |
+| `npm run pwa` / `npm run smoke` | pass, cache 4,175,553 B / pass |
+| Listening (headphones, speakers, seams by ear) | **not done**: no audio output in this environment |
 
 ## Missing inputs
 
