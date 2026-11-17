@@ -1,6 +1,22 @@
 # STICKS & BONES — Release notes
 
-## 1.0.0 release candidate (2026-11-16)
+## 1.0.0-rc.2 (2026-11-17), not deployed
+
+New in this candidate:
+
+- **NO REST FOR COUSIN**, the story. Play Roberto "Cousin" from the dream at the waterfall to the last
+  knock at the gate. There's one hand in each of seven chapters, and every result (win, loss or blocked
+  tie) moves the case on. You meet Marisol, Tío Rafa, Luz and Tomás Vale; the case file keeps your place,
+  your notebook and replays.
+- **Sound:** table and menu sounds, scene ambience (patio, surf, jungle, cave, terrace) and the knocks.
+  Some sounds are stand-ins until the final recordings arrive.
+- **Offline:** take the whole story offline (3.2 MB). Music and ambience offline are optional (9.1 MB).
+- **Updates mid-case** bring you back to the same line or hand.
+- Small phones held sideways now show the whole board.
+
+Known limits: tested in Chromium only. The story's playing time hasn't been timed with real players yet.
+
+## 1.0.0-rc.1 (2026-11-16), the Quick Play release candidate
 
 Traditional Puerto Rican dominoes in the browser, hosted by Roberto "Cousin".
 It installs as an app and plays offline after one complete online visit.

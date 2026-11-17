@@ -22,9 +22,10 @@ import type { Block, Scene } from '../story/parse';
 import { newProgress, readStory, TEXT_SCALES, type Part, type SceneId, type StoryProgress } from '../story/progress';
 import { cuesFor, STAGING, type Cue, type Light } from '../story/staging';
 import { STATE_CUES } from '../audio/manager';
+import { phaseEnd, phaseStart } from '../story/timing';
 import { wrapTab } from './focus-trap';
 import { HostView } from './host';
-import { captionText, chapterCardHtml, loadScript, renderStoryHome, save, speakerLabelHtml, speakerOf, type StoryDeps } from './story-ui';
+import { captionPanelHtml, captionText, chapterCardHtml, loadScript, renderStoryHome, save, speakerLabelHtml, speakerOf, type StoryDeps } from './story-ui';
 import { esc } from './svg';
 import { castFrame, sceneAssets, sceneCast, speakerKey } from './story-assets';
 
@@ -143,7 +144,7 @@ class DomStage implements StageView<Beat> {
     slot.innerHTML =
       blk.kind === 'line'
         ? `<article class="dialogue-panel" data-kind="line" data-index="${index}">${speakerLabelHtml(blk.speaker!)}<p class="dialogue-text">${esc(blk.text!)}</p></article>`
-        : `<article class="dialogue-panel is-caption" data-kind="direction" data-index="${index}"><p class="caption-text">${esc(captionText(blk.raw))}</p></article>`;
+        : captionPanelHtml(blk.raw, ` data-index="${index}"`);
     const panel = slot.firstElementChild as HTMLElement;
     panel.style.setProperty('--reveal-ms', `${revealMs}ms`);
     panel.classList.toggle('is-revealing', revealMs > 0);
@@ -340,6 +341,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
     };
 
     const showHandCard = () => {
+      phaseEnd(sceneId, 'pre');
       d.beat();
       const setup = HANDS[sceneId]!;
       const slot = root.querySelector<HTMLElement>('.scene-card-slot')!;
@@ -350,6 +352,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
     };
 
     const showEndCard = () => {
+      phaseEnd(sceneId, beats === preBeats ? 'pre' : 'post');
       d.beat();
       const idx = SCENES_IN_ORDER.indexOf(sceneId);
       const next = o.replay ? null : SCENES_IN_ORDER[idx + 1] ?? null;
@@ -413,6 +416,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
     const dir = director;
 
     const startHand = (restore: StoryProgress['hand']) => {
+      phaseStart(sceneId, 'hand');
       const host = root.querySelector<HTMLElement>('.story-table-host')!;
       root.querySelector<HTMLElement>('.story-stage')!.hidden = true;
       host.hidden = false;
@@ -430,6 +434,8 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
         onResolved: (winnerTeam, playerTeam) => {
           if (outcome !== null) return; // once
           outcome = outcomeFor(winnerTeam, playerTeam);
+          phaseEnd(sceneId, 'hand');
+          phaseStart(sceneId, 'post');
           d.track?.chapterComplete(sceneId, outcome, !!o.replay, caseKey);
           // One write: outcome + completion + position. A reload can't replay the completion.
           persist({ ...p, sceneId, part: 'post', index: 0, outcome, hand: null, completed: [...new Set([...p.completed, sceneId])] });
@@ -455,6 +461,9 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
     };
 
     // Enter at the saved position.
+    // Pacing hooks (performance measures only): the dialogue phase this open starts in.
+    if (part === 'pre') phaseStart(sceneId, 'pre');
+    else if (part === 'post' || part === 'insert') phaseStart(sceneId, 'post');
     // Continue Case into an in-progress position (not a fresh scene start, not a replay): a resume.
     const inProgress = !o.replay && p.sceneId === sceneId && (part === 'hand' || part === 'post' || part === 'insert' || p.index > 0);
     if (inProgress && !resumeTracked) d.track?.resume(sceneId, part === 'hand' ? 'hand' : 'dialogue', o.via ?? 'continue', `${caseKey}:${sceneId}:${part}:${p.index}`);
@@ -513,7 +522,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
         const upto = Math.min(dir.index + 1, beats.length);
         const seen = beats === preBeats ? preBeats.slice(0, upto) : [...preBeats, ...beats.slice(0, upto)];
         dlg.innerHTML = `<h2 id="transcript-h">Transcript</h2><p class="note">${esc(scene.heading)} — everything shown so far.</p><ol class="transcript-list">${seen
-          .map(({ block: b }) => `<li>${b.kind === 'line' ? `<strong>${esc(speakerOf(b.speaker!).label)}${speakerOf(b.speaker!).qualifier ? ` (${esc(speakerOf(b.speaker!).qualifier!)})` : ''}:</strong> ${esc(b.text!)}` : `<em>${esc(captionText(b.raw))}</em>`}</li>`)
+          .map(({ block: b }) => `<li>${b.kind === 'line' ? `<strong>${esc(speakerOf(b.speaker!).label)}${speakerOf(b.speaker!).qualifier ? ` (${esc(speakerOf(b.speaker!).qualifier!)})` : ''}:</strong> ${esc(b.text!)}` : (captionText(b.raw) ? `<em>${esc(captionText(b.raw))}</em>` : '<em>(Silence.)</em>')}</li>`)
           .join('')}</ol><div class="sheet-actions"><button type="button" class="btn" data-act="transcript-close">Close</button></div>`;
         dlg.showModal();
         (dlg.querySelector('[data-act="transcript-close"]') as HTMLElement).focus();

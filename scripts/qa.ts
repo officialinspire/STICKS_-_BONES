@@ -32,10 +32,12 @@ mkdirSync(outDir, { recursive: true });
 export const VIEWPORTS = [
   { name: 'phone-360x800', width: 360, height: 800 },
   { name: 'phone-390x844', width: 390, height: 844 },
+  { name: 'phone-land-667x375', width: 667, height: 375 },
   { name: 'phone-land-844x390', width: 844, height: 390 },
   { name: 'tablet-768x1024', width: 768, height: 1024 },
   { name: 'tablet-land-1024x768', width: 1024, height: 768 },
   { name: 'laptop-1366x768', width: 1366, height: 768 },
+  { name: 'desktop-1920x1080', width: 1920, height: 1080 },
 ] as const;
 
 /** Hard limits (fail) — comfortable targets are reported separately as warnings. */
@@ -281,7 +283,7 @@ function judge(where: string, m: Measure, opts: { pageMayScroll?: boolean }) {
   if (m.uncomfortable.length) warnings.push(`${where}: under ${LIMITS.targetComfortable}px: ${m.uncomfortable.join(' | ')}`);
 }
 
-const SCREENS = ['startup', 'menu', 'setup', 'story-home', 'story-scene', 'longest-chain', 'largest-hand', 'partnership', 'handoff', 'pause', 'results'] as const;
+const SCREENS = ['startup', 'menu', 'setup', 'story-home', 'story-scene', 'story-cast', 'story-transcript', 'longest-chain', 'largest-hand', 'partnership', 'handoff', 'pause', 'results'] as const;
 type Screen = (typeof SCREENS)[number];
 
 async function capture(vp: (typeof VIEWPORTS)[number], screen: Screen, page: Page, opts: { pageMayScroll?: boolean } = {}) {
@@ -325,6 +327,22 @@ try {
     await page.waitForSelector('.story-stage');
     for (let k = 0; k < 2; k++) await page.click('[data-act="story-next"]');
     await capture(vp, 'story-scene', page);
+    await page.click('[data-act="story-file"]');
+    await page.waitForSelector('.story-shell');
+    // A cast line (Vale, Chapter 3) with his portrait decoded, then the transcript.
+    await page.evaluate(() => localStorage.setItem('sticks-and-bones.story', JSON.stringify({ format: 'sticks-and-bones/story', version: 2, data: { sceneId: 'chapter-3', part: 'pre', index: 4, outcome: null, completed: ['prologue', 'chapter-1', 'chapter-2'], textScale: 1, startedAt: 1, hand: null } })));
+    await page.click('[data-act="story-home"]');
+    await page.waitForSelector('[data-act="story"]');
+    await page.click('[data-act="story"]');
+    await page.waitForSelector('[data-act="story-continue"]');
+    await page.click('[data-act="story-continue"]');
+    await page.waitForFunction(() => document.querySelector('.story-stage')?.hasAttribute('data-cast-visible') && document.querySelector('.st-curtain:not(.is-closed)'), null, { timeout: 20_000 }).then((h: { dispose(): Promise<void> }) => h.dispose()).catch(() => failures.push(`${vp.name} story-cast: Vale's portrait never appeared`));
+    await page.waitForTimeout(400);
+    await capture(vp, 'story-cast', page);
+    await page.click('[data-act="story-transcript"]');
+    await page.waitForSelector('dialog.transcript[open]');
+    await capture(vp, 'story-transcript', page, { pageMayScroll: true });
+    await page.keyboard.press('Escape');
     await page.click('[data-act="story-file"]');
     await page.waitForSelector('.story-shell');
     await page.click('[data-act="story-home"]');

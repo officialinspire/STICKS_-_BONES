@@ -340,6 +340,65 @@ try {
     notes.push(`H: Story analytics — encounter start only on the first move (${enc.length}); refresh mid-hand → story_resume(hand) and no second start; chapter complete once (${final.filter((e) => e.name === 'story_chapter_complete').map((e) => e.outcome).join(',')}); no match_*/round_* from story hands; fields limited to enums`);
     await page.context().close();
   }
+  // ---- I. Reload at the risky moments: AI thinking, results showing, chapter end card ------------------
+  {
+    const { page, errors } = await newPage();
+    await toMenu(page);
+    // AI thinking in a story hand: seed a hand that has started, reload while the opponent is to move.
+    await seed(page, { sceneId: 'chapter-1', part: 'hand', index: 0 });
+    await openStory(page);
+    await page.locator('.table-screen').first().waitFor({ timeout: 20_000 });
+    await page.waitForTimeout(300);
+    // Make a move so the opponent thinks next, then reload inside that window.
+    const legal = page.locator('.hand-tile.is-legal');
+    if (await legal.count()) {
+      await legal.first().click();
+      await page.locator('.end-slot.is-legal').first().click();
+    } else await page.locator('[data-act="draw"]:not([disabled]), [data-act="pass"]:not([disabled])').first().click();
+    const savedAt = await prog(page);
+    await page.reload();
+    await page.click('.start-button');
+    await page.waitForSelector('[data-act="story"]');
+    await openStory(page);
+    await page.locator('.table-screen').first().waitFor({ timeout: 20_000 });
+    const resumed = await prog(page);
+    check(JSON.stringify((savedAt?.hand as { state?: { hand?: unknown } } | null)?.state?.hand ?? null) === JSON.stringify((resumed?.hand as { state?: { hand?: unknown } } | null)?.state?.hand ?? null), 'I: reload during the AI turn changed the hand');
+    // Results showing: finish the hand, reload with the sheet open → the outcome is kept, completion is not repeated.
+    await playHandAtTable(page);
+    const atResults = await prog(page);
+    check(atResults?.part === 'post' && !!atResults.outcome && atResults.completed.includes('chapter-1'), `I: results not recorded at once (${JSON.stringify(atResults)})`);
+    await page.reload();
+    await page.click('.start-button');
+    await page.waitForSelector('[data-act="story"]');
+    await openStory(page);
+    await waitState(page, 'presenting');
+    const afterResultsReload = await prog(page);
+    check(afterResultsReload?.outcome === atResults?.outcome && afterResultsReload?.completed.filter((c) => c === 'chapter-1').length === 1, 'I: reload on the results sheet changed the outcome or repeated the completion');
+    // The first line is that outcome's insert (never a re-deal).
+    check(!(await page.locator('.table-screen').count()), 'I: reload after results dealt the hand again');
+    // Chapter end card: reload → the end card again, completion once.
+    const n = segments(scene('chapter-1'));
+    const total = (n.inserts[atResults!.outcome as 'win' | 'loss' | 'tie'] ? insertLines(n.inserts[atResults!.outcome as 'win' | 'loss' | 'tie']!).length : 0) + n.post.length;
+    await seed(page, { sceneId: 'chapter-1', part: 'post', index: total - 1, outcome: atResults!.outcome, completed: ['prologue', 'chapter-1'] });
+    await page.reload();
+    await page.click('.start-button');
+    await page.waitForSelector('[data-act="story"]');
+    await openStory(page);
+    await waitState(page, 'presenting');
+    await page.click('[data-act="story-next"]');
+    await page.click('[data-act="story-next"]').catch(() => undefined);
+    await page.locator('.end-card').first().waitFor({ timeout: 10_000 });
+    await page.reload();
+    await page.click('.start-button');
+    await page.waitForSelector('[data-act="story"]');
+    await openStory(page);
+    await page.locator('.end-card').first().waitFor({ timeout: 10_000 });
+    const end = await prog(page);
+    check(end?.part === 'end' && end.completed.filter((c) => c === 'chapter-1').length === 1, `I: end-card reload ${JSON.stringify(end)}`);
+    check(errors.length === 0, `I: page errors ${errors.join(' | ')}`);
+    notes.push(`I: reloads — during the opponent's turn the saved hand came back identical; with results showing the outcome (${atResults?.outcome}) and the single completion were kept and nothing re-dealt; on the chapter end card the end card came back with completion recorded once`);
+    await page.context().close();
+  }
 } catch (e) {
   failures.push(`exception: ${(e as Error).stack ?? e}`);
 } finally {

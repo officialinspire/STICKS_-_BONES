@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { HANDS, insertLines, outcomeFor, segments } from './chapters';
+import { HANDS, insertLines, outcomeFor, segments, type Outcome } from './chapters';
 import type { Scene } from './parse';
 import script from './script.json';
 
@@ -41,6 +41,53 @@ describe('chapter hands match the approved script', () => {
   });
 
   it('every result advances: win, loss and blocked tie all have an outcome', () => {
+    expect(outcomeFor(0, 0)).toBe('win');
+    expect(outcomeFor(1, 0)).toBe('loss');
+    expect(outcomeFor(null, 0)).toBe('tie');
+  });
+});
+
+describe('every win / loss / tie route, deterministically', () => {
+  const scenesAll = scenes;
+  const chapters = scenesAll.filter((s) => s.number !== null);
+  const routeOf = (s: Scene, o: Outcome) => {
+    const seg = segments(s);
+    return [...seg.pre, ...(seg.inserts[o] ? insertLines(seg.inserts[o]!) : []), ...seg.post].map((b) => b.raw);
+  };
+  it('each chapter has all three routes; they differ ONLY in the insert, so every clue and beat is shared', () => {
+    for (const s of chapters) {
+      const seg = segments(s);
+      const common = [...seg.pre, ...seg.post].map((b) => b.raw);
+      for (const o of ['win', 'loss', 'tie'] as const) {
+        expect(seg.inserts[o], `${s.id} ${o}`).toBeTruthy();
+        const r = routeOf(s, o);
+        const ins = insertLines(seg.inserts[o]!).map((b) => b.raw);
+        expect(r).toEqual([...seg.pre.map((b) => b.raw), ...ins, ...seg.post.map((b) => b.raw)]);
+        expect(r.filter((x) => !ins.includes(x))).toEqual(common);
+      }
+    }
+  });
+  it('no clue depends on winning: inserts carry no notebook entry, evidence card or case record', () => {
+    for (const s of chapters) for (const o of ['win', 'loss', 'tie'] as const) {
+      const ins = segments(s).inserts[o]!.raw;
+      expect(ins, `${s.id} ${o}`).not.toMatch(/Notebook:|evidence card|Readable evidence/);
+    }
+  });
+  it('notebook entries close chapters 1–6, in chapter order, after the shared continuation, on every route', () => {
+    const nb = chapters.map((s) => [s.id, segments(s).notebook?.raw ?? null] as const);
+    expect(nb.slice(0, 6).every(([, n]) => n && /^Notebook:/.test(n))).toBe(true);
+    for (const s of chapters.slice(0, 6)) {
+      const idx = s.blocks.findIndex((b) => b.kind === 'notebook');
+      const lastPost = Math.max(...segments(s).post.map((b) => s.blocks.indexOf(b)));
+      expect(idx).toBeGreaterThan(lastPost);
+    }
+  });
+  it('the epilogue has no hand and ends the case', () => {
+    const ep = scenesAll.find((s) => s.id === 'epilogue')!;
+    expect(segments(ep).deal).toBeNull();
+    expect(segments(ep).pre.at(-1)!.raw).toMatch(/Case complete/);
+  });
+  it('outcomeFor maps every possible result to a route (no result blocks the story)', () => {
     expect(outcomeFor(0, 0)).toBe('win');
     expect(outcomeFor(1, 0)).toBe('loss');
     expect(outcomeFor(null, 0)).toBe('tie');

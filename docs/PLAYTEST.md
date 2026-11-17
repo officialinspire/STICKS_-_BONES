@@ -55,3 +55,33 @@ the deployed site. Tick each item and write down anything odd.
   monogram or gradient should appear only if a file failed.
 - [ ] Sound effects and ambience are labelled **(placeholder)** in Settings. They
   are synthesized stand-ins, not final audio.
+
+## Story pacing: how to time a real new-player run
+
+The 90–110 minute target can only be confirmed by people playing. Bots don't count: `npm run story:route`
+plays the whole case through the UI in about 3 minutes with instant reading.
+
+**The build's own estimate is far below the target.** That estimate is a reading-time model, not a
+measurement. The shown text is about 4,300 words in 434 lines and captions, plus seven single hands. At
+160–200 words a minute, plus 1.2–1.5 s to tap on and 6–10 s per table action, a run comes to roughly
+**36–48 minutes**. The playtests have to settle this. If real players also finish well under 90 minutes,
+it's an owner decision (for example, using the script's optional table lines in hands, or longer
+matches). The approved story is not padded or changed by the build.
+
+**Timing hooks:** every scene writes standard browser performance measures, which aren't stored or sent:
+`story:<scene>:pre` (dialogue before the hand), `story:<scene>:hand` and `story:<scene>:post`. After a
+session, open the browser console on the game tab and run:
+
+```js
+performance.getEntriesByType('measure').filter((m) => m.name.startsWith('story:')).map((m) => `${m.name} ${(m.duration / 60000).toFixed(1)} min`).join('\n')
+```
+
+The measures reset on reload. If a tester reloads, note the time shown before the reload. Time in a hidden
+tab is included, so note any breaks.
+
+**Session sheet (per tester):** prior dominoes experience (none / casual / regular); device; start and end
+time; the measures above; where they paused, skipped (the Skip control) or got lost; whether every chapter
+made sense regardless of the hand's result.
+
+**Pass:** at least 3 first-time players; the median full run between 90 and 110 minutes, and every run under
+120 minutes. Until then, human timing is **unverified**.

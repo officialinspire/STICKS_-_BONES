@@ -1,17 +1,16 @@
 # STICKS & BONES
 
-Traditional dominoes in Puerto Rico, hosted by Roberto, aka **Cousin**. Planned
-modes are two-player **Draw**, two-player **Block** and four-player **Partnership**,
-played solo against AI or by two humans sharing one device. It runs entirely in
-the browser, with no backend, accounts or online play.
+Traditional Puerto Rican dominoes in the browser, hosted by Roberto, aka **Cousin**: two-player **Draw**,
+two-player **Block** and four-player **Partnership**, solo against a fair computer or two people sharing one
+device, plus the story **NO REST FOR COUSIN** (prologue, seven chapters with one hand each, epilogue). It runs
+entirely in the browser, installs as an app and plays offline. There is no backend, account or online play.
 
-> **Status:** Stage 5. Draw, Block and Partnership can be played solo against the
-> computer (Easy, Normal or Hard; see [docs/AI.md](docs/AI.md)) or by two people
-> sharing one device, with a privacy cover between turns (see
-> [docs/SHARED_DEVICE.md](docs/SHARED_DEVICE.md)). Games autosave locally and can
-> be resumed (versioned saves; see [docs/SAVES.md](docs/SAVES.md)). Cousin hosts with expressions, a slam animation and optional table
-> talk; see [docs/PRESENTATION.md](docs/PRESENTATION.md). See
-> [docs/BUILD_STATUS.md](docs/BUILD_STATUS.md).
+> **Status: 1.0.0-rc.2 (release candidate, not deployed).** Quick Play, two players and the whole Story are
+> playable end to end; automated checks pass in Chromium. Still open before a 1.0.0 release: real-device and
+> Firefox/Safari testing, human playtests (the build's own pacing estimate is well under the 90–110-minute
+> Story target), the owner's listening pass on the stand-in sound, and the missing media listed in
+> [docs/RELEASE_HANDOFF.md](docs/RELEASE_HANDOFF.md). Progress log: [docs/BUILD_STATUS.md](docs/BUILD_STATUS.md) ·
+> Story: [docs/STORY_BUILD_STATUS.md](docs/STORY_BUILD_STATUS.md) · Changes: [CHANGELOG.md](CHANGELOG.md).
 
 ## Setup
 
@@ -40,11 +39,17 @@ npm run dev
 | `npm run atlas:build` | Regenerate the double-six tile atlas + JSON from the verified material sheet |
 | `npm run ai:tournament` | Mirrored seeded AI duels per mode plus decision timing |
 | `npm run e2e` | Browser acceptance checks (needs the machine's Playwright + Chromium; not part of `check`) |
-| `npm run qa` | Rendered-screen QA: 6 viewports × 9 screens, layout/target/pip/endpoint metrics, atlas bleed ([docs/QA.md](docs/QA.md)) |
+| `npm run qa` | Rendered-screen QA: 8 viewports × 13 screens (including story cast lines and the transcript), layout/target/pip/endpoint metrics, atlas bleed ([docs/QA.md](docs/QA.md)) |
 | `npm run a11y` | axe, keyboard, focus traps, screen-reader privacy, reduced motion, safe areas, orientation |
 | `npm run perf` | Profile the production build (run `npm run build` first) — see [docs/PERFORMANCE.md](docs/PERFORMANCE.md) |
-| `npm run assets:derive` | Rebuild the WebP runtime derivatives from the preserved originals |
+| `npm run assets:derive` | Rebuild the WebP runtime derivatives (and the environments' 3:4 portrait crops) from the preserved originals |
+| `npm run assets:cast` | Rebuild the cleaned, baseline-aligned story cast sheets (`src/assets/cast.json`) |
+| `python3 scripts/build-audio.py <sources dir>` | Rebuild the CC0 sound bank and `docs/SOUND_SOURCES.md` from the downloaded originals |
 | `npm run story:build` | Rebuild `src/story/script.json` from the approved `docs/STORY_SCRIPT.md` (verbatim) |
+| `npm run story:e2e` | Story cinematics in a browser: input, skip, reload mid-scene/mid-hand, missing art, reduced motion, compositions, Story analytics |
+| `npm run story:route` | Play the whole case through the UI (bot), every win/loss/tie route, pacing hooks and a clearly labelled pacing model |
+| `npm run audio` | Scene soundtrack in a real browser: exact knock motif, no ghost sounds, mute, backgrounding, missing files, bed loops |
+| `npm run perf:story` | Startup bytes, chapter entry, decode cost, tap latency and an 8-visit leak check on the production build |
 | `python3 scripts/build-fonts.py <dir>` / `python3 scripts/build-wordmark.py <dir>` | Rebuild the font subsets / wordmark vectors (needs `pip install fonttools brotli`; see docs/DESIGN.md) |
 | `npm run icons:build` | Rebuild the PWA icons (maskable safe area measured) |
 | `npm run matches` | Play complete matches in all 8 supported arrangements (clean console, analytics recorder) |
@@ -64,7 +69,9 @@ In `npm run dev`, the menu has a **Developer tools** panel: a fixed seed, a
 The build uses a **relative base (`./`)** by default, so `dist/` works unchanged
 from any subpath (e.g. `https://<owner>.github.io/STICKS_-_BONES/`). To emit
 absolute URLs instead, build with `BASE_PATH=/STICKS_-_BONES/ npm run build`.
-No deployment workflow is set up yet.
+`.github/workflows/deploy-pages.yml` deploys `main` to GitHub Pages once the owner enables Pages
+(source: GitHub Actions); the steps are in [docs/RELEASE_HANDOFF.md](docs/RELEASE_HANDOFF.md). Nothing has been
+deployed from this branch.
 
 ## Layout
 
@@ -81,8 +88,12 @@ src/render/        Shared pip geometry, atlas/SVG tile renderer
 src/app/           GameSession (commands, AI scheduling), TableController + privacy state machine, saves
 src/ai/            Fair AI: sanitized observation, Easy/Normal/Hard policies, worker runner
 src/ui/            Menu, table screen, dialogs
-src/dev/           Dev-only fixtures and tile contact sheet (not in production)
-assets/generated/  Generated derivatives (tile atlas + JSON)
+src/dev/           Dev-only fixtures, tile contact sheet and audio audition (not in production)
+src/story/         Story pipeline: verbatim script, chapters/routes, progress, director, staging, captions, timing
+src/audio/         The one audio manager, sound bank, scene profiles
+src/pwa/           Service worker (app-scoped caches: shell, core, story, optional audio)
+assets/audio/      Approved music; CC0 SFX and ambience beds (docs/SOUND_SOURCES.md)
+assets/generated/  Generated derivatives (tile atlas, WebP images, portrait crops, cast sheets)
 ```
 
 ## Rules

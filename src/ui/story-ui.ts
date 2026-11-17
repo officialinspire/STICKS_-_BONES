@@ -17,6 +17,7 @@ import type { HandSetup } from '../story/chapters';
 import { STAGING } from '../story/staging';
 import type { StoryCue } from '../audio/manager';
 import { renderStoryRun } from './story-player';
+import { playerCaption } from '../story/captions';
 import type { Outcome } from '../story/chapters';
 import { sceneAssets } from './story-assets';
 import { envKey } from '../assets/env';
@@ -44,13 +45,21 @@ export function speakerLabelHtml(tag: string): string {
 }
 
 /** Stage directions are shown as descriptive captions (the script's square brackets are its own markup). */
-export const captionText = (raw: string) => (raw.startsWith('[') && raw.endsWith(']') ? raw.slice(1, -1) : raw);
+/** Player-facing caption (implementation notes omitted; see src/story/captions.ts). Empty string = a silent beat. */
+/** A caption panel; a writer's-note bracket becomes a silent beat (visually empty, "Silence." for screen readers). */
+export function captionPanelHtml(raw: string, attrs: string): string {
+  const t = playerCaption(raw);
+  return t === null
+    ? `<article class="dialogue-panel is-caption is-silent" data-kind="direction"${attrs}><p class="caption-text"><span class="sr-only">Silence.</span></p></article>`
+    : `<article class="dialogue-panel is-caption" data-kind="direction"${attrs}><p class="caption-text">${esc(t)}</p></article>`;
+}
+export const captionText = (raw: string) => playerCaption(raw) ?? '';
 
 export function dialoguePanelHtml(b: Block): string {
   if (b.kind === 'line') {
     return `<article class="dialogue-panel" data-kind="line">${speakerLabelHtml(b.speaker!)}<p class="dialogue-text">${esc(b.text!)}</p></article>`;
   }
-  return `<article class="dialogue-panel is-caption" data-kind="direction"><p class="caption-text">${esc(captionText(b.raw))}</p></article>`;
+  return captionPanelHtml(b.raw, '');
 }
 
 export type ChapterStatus = 'completed' | 'next' | 'locked' | 'reading';

@@ -49,6 +49,12 @@ export interface TableAudio {
 }
 
 const UNIT_MIN = 26;
+/**
+ * On short screens (≤ 400 CSS px tall: phones in landscape such as 667×375) the whole chain can only fit
+ * at a slightly smaller tile: 22 px keeps pips ≈ 4.2 px (QA floor 3 px). Elsewhere the 26-px floor stays.
+ */
+const UNIT_MIN_SHORT = 22;
+const unitFloor = () => (typeof innerHeight === 'number' && innerHeight <= 400 ? UNIT_MIN_SHORT : UNIT_MIN);
 const UNIT_MAX = 60;
 const BRANCH: Record<EndId, string> = { head: 'upper-left', tail: 'lower-right' };
 
@@ -114,7 +120,7 @@ export class TableScreen {
       <div class="table-screen" data-region="table">
         <h1 class="sr-only">STICKS &amp; BONES — the table</h1>
         <header class="hud">
-          <button type="button" class="btn-ghost" data-act="pause" aria-label="Pause — rules, settings, restart, leave">❚❚ Pause</button>
+          <button type="button" class="btn-ghost" data-act="pause" aria-label="Pause — rules, settings, restart, leave">❚❚<span class="pause-text"> Pause</span></button>
           <div class="scoreboard" data-region="scores"></div>
         </header>
         <aside class="side">
@@ -347,10 +353,11 @@ export class TableScreen {
     const availH = (wrap?.clientHeight ?? 0) - 24;
     if (!wrap || availH <= 0) return base;
     const line = this.#c.view().line;
-    for (let u = base; u > UNIT_MIN; u--) {
+    const floor = unitFloor();
+    for (let u = base; u > floor; u--) {
       if (layoutChain(line, Math.floor(Math.max(0, wrap.clientWidth - 24) / u)).heightUnits * u <= availH) return u;
     }
-    return UNIT_MIN;
+    return floor;
   }
 
   #renderBoard(): void {
@@ -439,7 +446,7 @@ export class TableScreen {
       <div class="view-tools">
         <button type="button" class="btn-ghost small" data-act="sort">${esc(SORT_LABELS[this.#sort])}</button>
         ${ends}
-        <button type="button" class="btn-ghost small" data-act="zoom-out" aria-label="Zoom board out" ${this.#unit <= UNIT_MIN ? 'disabled' : ''}>−</button>
+        <button type="button" class="btn-ghost small" data-act="zoom-out" aria-label="Zoom board out" ${this.#unit <= unitFloor() ? 'disabled' : ''}>−</button>
         <button type="button" class="btn-ghost small" data-act="zoom-in" aria-label="Zoom board in" ${this.#unit >= UNIT_MAX ? 'disabled' : ''}>+</button>
       </div>`;
   }
@@ -835,7 +842,7 @@ export class TableScreen {
       case 'zoom-in':
       case 'zoom-out':
         this.#userZoom = true;
-        this.#unit = Math.max(UNIT_MIN, Math.min(UNIT_MAX, this.#unit + (target.dataset.act === 'zoom-in' ? 4 : -4)));
+        this.#unit = Math.max(unitFloor(), Math.min(UNIT_MAX, this.#unit + (target.dataset.act === 'zoom-in' ? 4 : -4)));
         this.render();
         break;
       case 'focus-end': {
