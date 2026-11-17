@@ -66,6 +66,10 @@ export interface MenuHandlers {
   onStory(): void;
   /** Offline/PWA status and actions (absent where unsupported, e.g. the dev server). */
   readonly pwa?: MenuPwa;
+  /** Fill the Achievements page (loaded on demand). */
+  renderAchievements?(el: HTMLElement): void;
+  /** A destination was opened (How to Play, Statistics): exploration achievements. */
+  onExplore?(screen: MenuScreen): void;
 }
 
 export interface MenuPwa {
@@ -129,6 +133,7 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
   if (env) root.style.setProperty('--env-image', `url("${env}")`);
   const screen = h.screen ?? 'home';
   const from = h.from;
+  if (screen === 'rules' || screen === 'stats') h.onExplore?.(screen);
   const go = (to: MenuScreen) => {
     if (to !== 'home' && screen === 'home' && !pushed) {
       history.pushState({ sbMenu: to }, '');
@@ -190,7 +195,7 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
           <button type="button" class="btn-ghost dark" data-go="rules">How to Play</button>
           <button type="button" class="btn-ghost dark" data-go="settings">Settings</button>
           <button type="button" class="btn-ghost dark" data-go="stats">Statistics</button>
-          <button type="button" class="btn-ghost dark" data-go="achievements">Achievements <span class="soon-tag">Soon</span></button>
+          <button type="button" class="btn-ghost dark" data-go="achievements">Achievements</button>
         </div>
         ${offlineLine(h.pwa)}
       </nav>`,
@@ -255,18 +260,16 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
     return;
   }
   if (screen === 'achievements') {
-    // Reserved destination: clearly labelled, no invented data, nothing tracked yet.
     root.innerHTML = shell(
-      `<section class="panel" aria-labelledby="ach-heading">${back}<h2 id="ach-heading">Achievements</h2>
-        <p class="soon-banner">Coming in a later update</p>
-        <p>This is where milestones from Story and Quick Play will live. None are tracked yet, so there is nothing to unlock or lose today.</p>
-        <p class="note">Your saved games, Story progress and statistics are not affected by this page.</p>
+      `<section class="panel ach-panel" aria-labelledby="ach-heading">${back}<h2 id="ach-heading">Achievements</h2>
+        <div data-region="achievements"><p class="note" role="status">Loading achievements…</p></div>
       </section>`,
-      'Trophies? Let me finish this case first.',
+      'A hundred ways to earn your seat at this table.',
       'smirk',
       true,
     );
     wire();
+    h.renderAchievements?.(root.querySelector('[data-region="achievements"]') as HTMLElement);
     return;
   }
   if (screen === 'settings') {

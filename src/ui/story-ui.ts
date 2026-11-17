@@ -158,6 +158,8 @@ export interface StoryDeps {
     caseComplete(caseKey: string): void;
     resume(scene: SceneId, part: 'dialogue' | 'hand', via: 'continue' | 'update', positionKey: string): void;
     assist(scene: SceneId, key: string): void;
+    /** Opened a story tool (transcript): exploration achievements. */
+    explore?(what: 'transcript'): void;
   };
   /** True once, right after an update reload that interrupted a story: reopen the saved scene without a tap. */
   takeAutoContinue?(): boolean;

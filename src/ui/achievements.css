@@ -1,0 +1,95 @@
+/* Achievements (lazy chunk). Token colours only, in approved pairings (docs/DESIGN.md). */
+.ach-summary { margin: 0 0 4px; font: 600 1rem / 1.3 var(--body); }
+.ach-summary strong { font: 800 1.4rem var(--display); font-variant-numeric: tabular-nums; color: var(--sb-deep-sea); }
+.ach-total { width: 100%; height: 10px; accent-color: var(--sb-teal); }
+.ach-filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; }
+.ach-chip {
+  min-height: 44px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 2px solid var(--sb-ink);
+  background: transparent;
+  color: var(--sb-ink);
+  font: 700 0.85rem var(--body);
+  cursor: pointer;
+}
+.ach-chip[aria-pressed='true'] { background: var(--sb-deep-sea); color: var(--sb-ivory); border-color: var(--sb-deep-sea); }
+.ach-count { margin: 8px 0 0; font-size: 0.8rem; color: var(--ink-soft); }
+.ach-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); }
+.ach-card {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 10px;
+  border-radius: 12px;
+  border: 2px dashed var(--ink-soft);
+  background: var(--sb-ivory);
+}
+.ach-card.is-on { border-style: solid; border-color: var(--sb-ink); box-shadow: 3px 3px 0 var(--sb-deep-sea); }
+.ach-body p { margin: 0; }
+.ach-cat { font: 800 0.68rem / 1.2 var(--body); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-soft); }
+.ach-title { margin: 2px 0; font: 800 1.02rem / 1.2 var(--display); color: var(--sb-deep-sea); }
+.ach-desc { font-size: 0.9rem; }
+.ach-how { margin-top: 4px !important; font-size: 0.8rem; color: var(--ink-soft); }
+.ach-state { margin-top: 6px !important; font: 700 0.8rem var(--body); }
+.ach-prog { display: flex; align-items: center; gap: 8px; margin-top: 6px; font: 700 0.8rem var(--body); font-variant-numeric: tabular-nums; }
+.ach-prog progress { flex: 1 1 auto; height: 8px; accent-color: var(--sb-teal); }
+.ach-empty { padding: 12px; color: var(--ink-soft); }
+
+/* Badges: a disc in the category colour with an ivory or ink glyph; locked = outline only. */
+.ach-badge { width: 56px; height: 56px; display: block; }
+.ach-disc { fill: transparent; stroke: var(--ink-soft); stroke-width: 2; stroke-dasharray: 4 3; }
+.ach-ring { fill: none; stroke: transparent; stroke-width: 1.5; }
+.ach-glyph { color: var(--ink-soft); fill: currentColor; }
+.ach-tier { fill: var(--ink-soft); }
+.ach-badge.is-on .ach-disc { stroke: var(--sb-ink); stroke-dasharray: none; }
+.ach-badge.is-on .ach-ring { stroke: currentColor; }
+.ach-badge.is-on.cat-learning { color: var(--sb-ivory); }
+.ach-badge.is-on.cat-learning .ach-disc { fill: var(--sb-teal); }
+.ach-badge.is-on.cat-draw .ach-disc, .ach-badge.is-on.cat-partnership .ach-disc { fill: var(--sb-deep-sea); }
+.ach-badge.is-on.cat-draw { color: var(--sb-ivory); }
+.ach-badge.is-on.cat-partnership, .ach-badge.is-on.cat-block, .ach-badge.is-on.cat-story { color: var(--sb-gold); }
+.ach-badge.is-on.cat-block .ach-disc, .ach-badge.is-on.cat-story .ach-disc { fill: var(--sb-ink); }
+.ach-badge.is-on.cat-story .ach-ring { stroke: var(--sb-guava); }
+.ach-badge.is-on.cat-tactical { color: var(--sb-ivory); }
+.ach-badge.is-on.cat-tactical .ach-disc { fill: var(--sb-guava); }
+.ach-badge.is-on.cat-milestone { color: var(--sb-ink); }
+.ach-badge.is-on.cat-milestone .ach-disc { fill: var(--sb-gold); }
+.ach-badge.is-on.cat-exploration { color: var(--sb-deep-sea); }
+.ach-badge.is-on.cat-exploration .ach-disc { fill: var(--sb-ivory); }
+.ach-badge.is-on .ach-glyph, .ach-badge.is-on .ach-tier { color: inherit; fill: currentColor; }
+
+/* Quiet notices: never interactive, under sheets and the privacy cover, gone after a few seconds. */
+.ach-toast {
+  position: fixed;
+  left: 50%;
+  top: calc(max(8px, env(safe-area-inset-top)) + 56px);
+  transform: translateX(-50%);
+  z-index: 19; /* above the table HUD (shown only when the player can't act), below the privacy cover (20) and sheets */
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(92vw, 360px);
+  padding: 8px 14px 8px 8px;
+  border-radius: 14px;
+  background: var(--scrim-ink);
+  color: var(--sb-ivory);
+  border: 2px solid var(--sb-gold);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  animation: ach-in 3600ms ease both;
+}
+.ach-toast p { margin: 0; }
+.ach-toast .ach-badge { width: 40px; height: 40px; flex: none; }
+.ach-toast-k { font: 800 0.68rem / 1.2 var(--body); letter-spacing: 0.1em; text-transform: uppercase; color: var(--sb-gold); }
+.ach-toast-t { font: 800 0.98rem / 1.2 var(--display); }
+.ach-toast.no-motion { animation: none; }
+@keyframes ach-in {
+  0% { opacity: 0; transform: translate(-50%, -8px); }
+  10%, 88% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ach-toast { animation: none; }
+}

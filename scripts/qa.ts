@@ -314,7 +314,7 @@ try {
     await capture(vp, 'menu', page);
     for (const sub of ['stats', 'settings', 'achievements']) {
       await page.click(`[data-go="${sub}"]`);
-      await capture(vp, `menu-${sub}` as Screen, page, { pageMayScroll: sub !== 'achievements' });
+      await capture(vp, `menu-${sub}` as Screen, page, { pageMayScroll: true });
       await page.click('[data-act="home"]');
       await page.waitForSelector('[data-go="setup"]');
     }

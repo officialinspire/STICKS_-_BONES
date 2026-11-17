@@ -1,6 +1,6 @@
 # Agent / contributor notes
 
-Read this file, `docs/BUILD_STATUS.md`, `docs/RULES.md`, `docs/ENGINE.md`, `docs/AI.md`, `docs/SHARED_DEVICE.md`, `docs/PRESENTATION.md`, `docs/AUDIO.md`, `docs/SAVES.md`, `docs/ASSETS.md`, `docs/QA.md`, `docs/PERFORMANCE.md`, `docs/PWA.md`, `docs/ANALYTICS.md`, `docs/RELEASE_HANDOFF.md`, `docs/STORY_SCRIPT.md`, `docs/STORY_BUILD_STATUS.md` and `docs/DESIGN.md`
+Read this file, `docs/BUILD_STATUS.md`, `docs/RULES.md`, `docs/ENGINE.md`, `docs/AI.md`, `docs/SHARED_DEVICE.md`, `docs/PRESENTATION.md`, `docs/AUDIO.md`, `docs/SAVES.md`, `docs/ASSETS.md`, `docs/QA.md`, `docs/PERFORMANCE.md`, `docs/PWA.md`, `docs/ANALYTICS.md`, `docs/RELEASE_HANDOFF.md`, `docs/STORY_SCRIPT.md`, `docs/STORY_BUILD_STATUS.md`, `docs/ACHIEVEMENTS.md` and `docs/DESIGN.md`
 before you change anything.
 
 ## Ground rules
@@ -66,6 +66,12 @@ before you change anything.
   the app only through `npm run story:build` (verbatim blocks, round-trip tested). Story state lives
   outside the pure engine; story hands use the frozen presets unchanged (no scripted tiles, no unfair
   AI); unfinished Story routes are labelled as such.
+- **Achievements are tracked outside the engine** (`docs/ACHIEVEMENTS.md`).
+  - They use only applied events from `TableController.subscribe`, the Story `track` hooks and explicit
+    notes; never hidden hands, the session's raw events or the RNG.
+  - Replays and developer tables count nothing; two-player games count only finished shared matches.
+  - Every count is keyed so it can't apply twice. New achievements go in the catalog with a test
+    fixture, and `docs/ACHIEVEMENTS.md` must list them.
 - **Design tokens:** colours come from `src/ui/tokens.ts` / `docs/DESIGN.md` and only in their approved,
   contrast-tested pairings. Fonts are the self-hosted OFL subsets in `src/assets/fonts/`.
 

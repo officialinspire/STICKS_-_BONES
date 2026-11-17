@@ -40,6 +40,8 @@ export interface TableCallbacks {
   readonly update?: { ready(): boolean; apply(): void };
   /** Story hand (NO REST FOR COUSIN): one hand only; the results sheet continues the case instead of dealing again. */
   readonly story?: { onContinue(): void; faces?: Readonly<Partial<Record<number, string>>> };
+  /** The player used a table tool (sort, zoom): exploration achievements. Presentation only. */
+  explore?(what: 'sort' | 'zoom'): void;
 }
 
 export interface TableAudio {
@@ -879,12 +881,14 @@ export class TableScreen {
         this.#c.pass();
         break;
       case 'sort':
+        this.#cb.explore?.('sort');
         this.#sort = SORT_MODES[(SORT_MODES.indexOf(this.#sort) + 1) % SORT_MODES.length]!;
         this.render();
         break;
       case 'zoom-in':
       case 'zoom-out':
         this.#userZoom = true;
+        this.#cb.explore?.('zoom');
         this.#unit = Math.max(unitFloor(), Math.min(UNIT_MAX, this.#unit + (target.dataset.act === 'zoom-in' ? 4 : -4)));
         this.render();
         break;

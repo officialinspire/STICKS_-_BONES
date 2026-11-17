@@ -581,6 +581,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
         if (!o.replay) save(d, p);
         root.style.setProperty('--story-scale', String(p.textScale));
       } else if (act === 'story-transcript') {
+        d.track?.explore?.('transcript');
         const dlg = root.querySelector<HTMLDialogElement>('dialog.transcript')!;
         const upto = Math.min(dir.index + 1, beats.length);
         const seen = beats === preBeats ? preBeats.slice(0, upto) : [...preBeats, ...beats.slice(0, upto)];

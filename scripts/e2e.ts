@@ -1366,6 +1366,84 @@ try {
     await page.context().close();
   }
 
+  // 8d. Achievements: live unlocks from a real hand, persistence, no double count on reload, privacy
+  //     (no notice under a handoff cover), spoilers concealed, filters, save-failure feedback.
+  {
+    const page = await newPage({ width: 390, height: 844 });
+    await page.addInitScript('window.__name = (f) => f;');
+    const rec = () => page.evaluate(() => JSON.parse(localStorage.getItem('sticks-and-bones.achievements') ?? 'null')?.data ?? null);
+    await startMatch(page, { mode: 'block2', opponent: 'ai', seed: 'ach-e2e', aiSeed: 'a', fast: true });
+    for (let i = 0; i < 80 && !(await resultsOpen(page)); i++) {
+      const legal = page.locator('.hand-tile.is-legal');
+      if (await legal.count()) {
+        await legal.first().click();
+        await page.locator('.end-slot.is-legal').first().click().catch(() => {});
+      } else if (await page.locator('[data-act="pass"]:not([disabled])').count()) await page.click('[data-act="pass"]');
+      await page.waitForTimeout(120);
+    }
+    check(await resultsOpen(page), 'achievements: the hand did not finish');
+    const r1 = await rec();
+    check(!!r1 && r1.counts.tiles >= 1 && r1.counts.hands === 1 && !!r1.unlocked['learn-first-tile'] && !!r1.unlocked['learn-hand'], `achievements after one hand: ${JSON.stringify(r1?.counts)}`);
+    check(!JSON.stringify(r1).match(/t[0-6][0-6]/), 'achievements record must hold no tile ids');
+    // Reload with the hand over: the restored table must not count the hand again.
+    await page.reload();
+    await enterMenu(page);
+    await page.click('[data-act="resume"]');
+    await page.waitForSelector('.table-screen');
+    await page.waitForTimeout(800);
+    const r2 = await rec();
+    check(r2.counts.hands === 1 && r2.counts.tiles === r1.counts.tiles, `reload counted again: ${JSON.stringify({ before: r1.counts, after: r2.counts })}`);
+    // The page: unlocked card, spoilers concealed, filters, no sideways scroll.
+    if (await resultsOpen(page)) await page.click('[data-act="next-hand"]');
+    await page.click('[data-act="pause"]');
+    await page.click('dialog.pause [data-act="menu"]');
+    await page.click('[data-act="confirm-yes"]').catch(() => {});
+    await page.waitForSelector('[data-go="achievements"]');
+    await page.click('[data-go="achievements"]');
+    await page.locator('.ach-card').first().waitFor();
+    const page1 = await page.evaluate(() => ({
+      cards: document.querySelectorAll('.ach-card').length,
+      first: document.querySelector('.ach-card[data-id="learn-first-tile"]')?.getAttribute('data-state'),
+      hidden: [...document.querySelectorAll('.ach-card[data-id^="story-ch"]')].filter((c) => /Hidden story achievement/.test(c.textContent ?? '')).length,
+      leak: /The Price of Everything|Case Closed/.test(document.querySelector('.ach-list')?.textContent ?? ''),
+      wide: document.documentElement.scrollWidth - innerWidth,
+      badges: [...document.querySelectorAll('.ach-badge')].every((b) => b.getAttribute('role') === 'img' && /badge, (un)?locked/.test(b.getAttribute('aria-label') ?? '')),
+    }));
+    check(page1.cards === 100 && page1.first === 'unlocked' && page1.hidden === 6 && !page1.leak && page1.wide <= 0 && page1.badges, `achievements page: ${JSON.stringify(page1)}`);
+    await page.click('.ach-chip[data-status="unlocked"]');
+    const shown = await page.evaluate(() => [...document.querySelectorAll('.ach-card')].map((c) => (c as HTMLElement).dataset.state));
+    check(shown.length >= 2 && shown.every((s: string | undefined) => s === 'unlocked'), `filter Unlocked: ${shown.join(',')}`);
+    await page.click('.ach-chip[data-cat="story"]');
+    await page.click('.ach-chip[data-status="all"]');
+    check((await page.locator('.ach-card').count()) === 14, 'filter Story: 14 cards');
+    // Save failure: a refused write shows the persistent "Not saved" banner (never claims it saved).
+    await page.evaluate(() => {
+      const orig = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (k: string, v: string) {
+        if (k === 'sticks-and-bones.achievements') throw new DOMException('full', 'QuotaExceededError');
+        return orig.call(this, k, v);
+      };
+      (window as unknown as { __sbAchievements: { note(k: string): void } }).__sbAchievements.note('explore.zoom');
+    });
+    await page.waitForTimeout(300);
+    check(await page.locator('.save-alert:not([hidden])').count() === 1, 'achievements: a refused save must show the Not saved banner');
+    notes.push(`achievements: one real Block hand → tiles ${r1.counts.tiles}, ${Object.keys(r1.unlocked).length} unlocked; reload counted nothing again; page 100 cards, 6 story spoilers concealed, filters work; refused save → Not saved banner`);
+    await page.context().close();
+
+    // Privacy: no notice while a two-player hand is covered for the handoff.
+    const p2 = await newPage({ width: 390, height: 844 });
+    await startMatch(p2, { mode: 'block2', opponent: 'local', seed: 'ach-priv' });
+    await p2.waitForSelector('.privacy-cover:not([hidden])');
+    await p2.evaluate(() => (window as unknown as { __sbAchievements: { note(k: string): void } }).__sbAchievements.note('explore.sort'));
+    await p2.waitForTimeout(2500);
+    check((await p2.locator('.ach-toast').count()) === 0, 'achievements: a notice appeared over the handoff cover');
+    await p2.click('[data-act="cover-menu"]');
+    await p2.waitForSelector('[data-go="setup"]');
+    await p2.locator('.ach-toast').waitFor({ timeout: 4000 }).then(() => undefined, () => check(false, 'achievements: the deferred notice never appeared after leaving the cover'));
+    notes.push('achievements privacy: notice held while the handoff cover was up, shown after leaving it');
+    await p2.context().close();
+  }
+
   // 9. Rapid actions: a seeded burst of fast taps across menu, setup, table, pause, confirm, cover and
   //    results (≈ 40 ms apart, no waiting for transitions), then invariants once things settle.
   {

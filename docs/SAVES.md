@@ -9,6 +9,7 @@ Every record in `localStorage` is an envelope: `{ format, version, data }`.
 | `sticks-and-bones.save` | `sticks-and-bones/match` | 2 | the Stage 5 un-enveloped save (`sticks-and-bones-save@1`) |
 | `sticks-and-bones.settings` | `sticks-and-bones/settings` | 2 | the Stage 6/7 un-enveloped settings object |
 | `sticks-and-bones.stats` | `sticks-and-bones/stats` | 1 | — |
+| `sticks-and-bones.achievements` | `sticks-and-bones/achievements` | 1 | v0 (`{ unlocked: [ids] }`, never shipped: accepted so the path is tested). Counters, unlocks, dedupe keys, the Story case log. No tile ids or hands (`docs/ACHIEVEMENTS.md`) |
 
 **Reading never throws.**
 

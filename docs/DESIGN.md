@@ -106,14 +106,17 @@ Ivory text on guava would be only 3.68:1.
 
 | | Portrait phone | Short landscape (≤ 560 px tall) | Tablet | Desktop (≥ 1000 px) |
 | --- | --- | --- | --- | --- |
-| Home | Wordmark, then Story (gold primary: New Case / Continue Case · chapter / Case Closed) / Quick Play (deep sea) / Two Players (ink), then How to Play · Settings · Statistics · Achievements (Soon) in a 2×2 grid, then Cousin's greeting | Compact wordmark and Cousin on the left, destinations on the right, nothing below the fold | Stacked with a medium wordmark | Wordmark across the top, Cousin left, menu panel right (max 1080 px, no stretched panels) |
+| Home | Wordmark, then Story (gold primary: New Case / Continue Case · chapter / Case Closed) / Quick Play (deep sea) / Two Players (ink), then How to Play · Settings · Statistics · Achievements in one grid, then Cousin's greeting | Compact wordmark and Cousin on the left, destinations on the right, nothing below the fold | Stacked with a medium wordmark | Wordmark across the top, Cousin left, menu panel right (max 1080 px, no stretched panels) |
 | Story case file | Stacked: actions, chapters, notebook | Two columns: head + actions, chapters + notebook | Stacked | Actions + chapters left, notebook right |
 | Story scene | Scene bar, dialogue panel bottom-anchored, controls at thumb reach | Same, with tighter type | Same, max 980 px | Same |
 
 - **Quick Play** opens setup with the computer opponent selected, **Two Players** with one shared device. Both can still switch. The heading follows the choice.
 - **Sub-pages** (setup, How to Play, Settings, Statistics, Achievements) use the compact one-line mark. They return home with "← Menu", Escape or the browser's Back, with focus restored to the opener. On desktop the panel widens and Cousin stays in view beside it.
 - **Confirmations:** every destructive action (discard a saved game, reset statistics, erase data, start the Story over) uses one ivory confirmation sheet (`src/ui/confirm.ts`). Focus starts on the safe choice, Escape cancels, and the destructive button has the guava outline and ⚠ mark.
-- **Achievements** is a reserved destination, labelled "Soon". Its page says nothing is tracked yet and has no other controls.
+- **Achievements** (`docs/ACHIEVEMENTS.md`):
+  - The page shows the unlocked count, category and status filters, and a card per achievement with an SVG badge, how to earn it and a progress bar.
+  - Story spoilers are concealed until earned.
+  - Unlock notices are quiet toasts on ink with a gold border. They never appear over a handoff cover, a sheet, a Story scene, or while the player can act at the table.
 - **Story** has New Case / Continue Case, a confirmed "start over" that resets Story progress only, chapter selection (all seven chapters with real titles, locations and hands from the script; replay is labelled "next stage"), and a compact notebook with an evidence panel.
 
 ## Components (`src/ui/story-ui.ts`, styled in `src/styles.css`)

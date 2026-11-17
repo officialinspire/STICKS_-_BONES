@@ -20,6 +20,7 @@ import { haptic, type HapticCue } from './audio/haptics';
 import { showStart } from './ui/intro-screen';
 import { renderMenu, type MenuChoice, type ResumeOffer, type StoryOffer } from './ui/menu';
 import { readStory } from './story/progress';
+import { achievements, achievementsReady, configureAchievements } from './ui/achievements-bridge';
 import { TableScreen } from './ui/table';
 import { chaptersReady, consumeUpdatedFlag, consumeUpdateResume, describeAudio, describeOffline, describeStory, eraseLocalData, PwaController, setUpdateResume, type ResumeTarget } from './app/pwa';
 import { SCENE_IMAGES } from './story/scene-images';
@@ -115,6 +116,7 @@ const settingsApi = {
     settings = { ...settings, ...p };
     saveSettings(store, settings);
     audio.setLevels(settings.audio);
+    achievements.note('explore.settings');
   },
 };
 
@@ -354,10 +356,18 @@ function openStory(): void {
     registerRun: (hooks) => (storyHooks = hooks),
     // Story analytics: separate events from Quick Play; disabled adapter until the owner's contract.
     track: {
-      chapterComplete: (scene, outcome, replay, key) => analytics.storyChapterComplete(scene, outcome, replay, key),
+      chapterComplete: (scene, outcome, replay, key) => {
+        analytics.storyChapterComplete(scene, outcome, replay, key);
+        achievements.storyChapter(scene, outcome, replay, key);
+      },
       caseComplete: (key) => analytics.storyCaseComplete(key),
       resume: (scene, part, via, key) => analytics.storyResume(scene, part, via, key),
-      assist: (scene, key) => analytics.storyAssist(scene, 'skip_scene', key),
+      assist: (scene, key) => {
+        analytics.storyAssist(scene, 'skip_scene', key);
+        // key = `<caseKey>:<scene>:<pre|post>`; only first-play cases ("case:<start>") are tracked.
+        if (key.startsWith('case:')) achievements.storyAssist(key.split(':').slice(0, 2).join(':'));
+      },
+      explore: (what) => achievements.note(`explore.${what}`),
     },
     offlineNote: (id) => {
       if (pwa.view.offline.kind === 'unsupported' || !pwa.status) return null;
@@ -389,8 +399,12 @@ function openStory(): void {
         audio: audioApi,
         update: tableUpdate,
         story: { onContinue: () => req.onContinue(), faces: req.faces },
+        explore: (w) => achievements.note(`explore.${w}`),
       });
       const playerTeam = session.rules.teams.findIndex((t) => t.includes(0));
+      // Achievements: a first-time chapter hand counts once per case and scene; a replay never does.
+      const caseStart = readStory(store).value?.startedAt ?? 0;
+      achievements.watch(controller, { kind: req.replay ? 'none' : 'story', gameKey: `story:${caseStart}:${req.sceneId}`, restored: Boolean(req.restore) });
       root.classList.add('is-table');
       document.documentElement.classList.add('table-lock');
       audio.setScene('gameplay');
@@ -500,6 +514,8 @@ function showMenu(): void {
     }),
   );
   teardown();
+  // Achievements load after the menu is up (their own chunk), and award once what existing records prove.
+  void achievementsReady().catch(() => undefined);
   const saved = readSave(store);
   const sv = noticeFor('saved game', saved.status);
   if (sv) notices.push(sv);
@@ -515,6 +531,8 @@ function showMenu(): void {
     onStart: (c) => void start(c),
     onResume: () => resume(),
     onStory: () => openStory(),
+    renderAchievements: (el) => achievements.renderPage(el),
+    onExplore: (s) => achievements.note(`explore.${s}`),
     pwa: import.meta.env.PROD ? menuPwa : undefined,
     onDiscard: () => {
       const g = readSave(store).value;
@@ -536,8 +554,12 @@ function mount(controller: TableController, matchId: string, counted: boolean, o
     settings: settingsApi,
     audio: audioApi,
     update: tableUpdate,
+    explore: (w) => achievements.note(`explore.${w}`),
   });
   active = { table, controller, matchId, counted };
+  // Achievements follow applied events from this controller: solo vs the computer in full; two people
+  // on one device only as finished shared matches; developer fixtures never.
+  achievements.watch(controller, { kind: !counted ? 'none' : session.opponent === 'ai' ? 'quick-solo' : session.opponent === 'local' ? 'local' : 'none', gameKey: matchId, restored: how.restored });
   audio.setScene('gameplay');
   audio.preload('gameplay');
   table.mount();
@@ -707,6 +729,14 @@ function boot(): void {
   if (DEV) (window as unknown as { __sbAudio: unknown }).__sbAudio = { audio, backend };
 }
 
+if (DEV) (window as unknown as { __sbAchievements: unknown }).__sbAchievements = achievements; // tests: trigger notes
+configureAchievements({
+  store,
+  stats: () => stats,
+  storyCompleted: () => readStory(store).value?.completed ?? [],
+  onSaveFailed: () => setSaveHealth(false),
+  reduceMotion: () => reduceMotion(settings, matchMedia('(prefers-reduced-motion: reduce)').matches),
+});
 boot();
 analytics.launch(matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone ? 'standalone' : 'browser', __SB_BUILD_TAG__);
 // Register after the first screen is up, so the worker's downloads never compete with it.

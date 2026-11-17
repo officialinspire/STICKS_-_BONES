@@ -34,6 +34,7 @@ const bytes = files.reduce((s, f) => s + statSync(f).size, 0);
 const KB = 1024;
 export const BUDGET = {
   codeKB: 320, // core JS + CSS + HTML, excluding the lazy Story chunks. Measured 310.3 KB after the startup stage (init progress/retries, text credit, reveal: +5 KB); 305 KB after menu polish; the inline wordmark SVGs are ~29 KB of it
+  achievementsKB: 45, // lazy achievements chunk (catalog, tracker, page, badges + its stylesheet), loaded after the menu is up: measured 35 KB
   storyKB: 130, // lazy Story chunks, loaded only when Story opens: the approved script (76 KB) + player/director/staging/cast frames (36 KB) = 112 KB measured
   fontsKB: 100, // self-hosted DM Sans + Bricolage Grotesque WOFF2 subsets (measured 82 KB)
   imagesKB: 3300, // CORE images: menu, table, Cousin, effects, tiles + the seven full-frame backdrops (measured ~3,050 KB; unchanged)
@@ -51,7 +52,8 @@ export const BUDGET = {
 const size = (f) => statSync(f).size;
 const rel = (f) => f.slice(dist.length);
 const isStory = (f) => /assets\/(script|story-ui)-[\w-]+\.js$/.test(rel(f)); // lazy Story chunks: the script text and the player
-const isCode = (f) => /\.(js|css|html)$/.test(f) && !isStory(f);
+const isAchievements = (f) => /assets\/achievements-[\w-]+\.(js|css)$/.test(rel(f)); // lazy: after the menu is up
+const isCode = (f) => /\.(js|css|html)$/.test(f) && !isStory(f) && !isAchievements(f);
 const isFont = (f) => /\.woff2$/.test(f);
 const isImage = (f) => /\.(webp|png|avif|jpe?g|svg|gif)$/.test(f);
 const isAmbience = (f) => /\/amb-[a-z]+-[\w-]+\.mp3$/.test(f);
@@ -60,6 +62,8 @@ const isMedia = (f) => /\.(mp3|ogg|m4a|mp4|webm)$/.test(f) && !isAmbience(f);
 const sumKB = (fs) => fs.reduce((s, f) => s + size(f), 0) / KB;
 const code = sumKB(files.filter(isCode));
 const storyKB = sumKB(files.filter(isStory));
+const achievementsKB = sumKB(files.filter(isAchievements));
+if (files.filter(isAchievements).length !== 2) errors.push(`expected the lazy achievements chunk + stylesheet, found ${files.filter(isAchievements).length}`);
 const fontsKB = sumKB(files.filter(isFont));
 if (files.filter(isStory).length !== 2) errors.push(`expected the two lazy Story chunks (script, story-ui), found ${files.filter(isStory).length}`);
 const isIcon = (f) => rel(f).startsWith('icons/');
@@ -101,6 +105,7 @@ const gate = (name, value, limit) => {
 const budgetLines = [
   gate('code', code, BUDGET.codeKB),
   gate('story script', storyKB, BUDGET.storyKB),
+  gate('achievements (lazy)', achievementsKB, BUDGET.achievementsKB),
   gate('fonts', fontsKB, BUDGET.fontsKB),
   gate('images (core)', imagesKB, BUDGET.imagesKB),
   gate('story images (on demand)', storyImagesKB, BUDGET.storyImagesKB),

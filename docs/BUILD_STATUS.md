@@ -1231,6 +1231,105 @@ audio manager. No new manager.
 - Only Chromium; no real devices. Warm/cold timings come from the dev server, not a phone on a real
   network.
 
+## Achievements stage: 100 achievements (2026-11-17)
+
+### Completed
+- **Catalog** (`src/app/achievements/catalog.ts`): exactly **100**, in 8 categories.
+
+  | Learning | Draw | Block | Partnership | Tactical | Milestones | Story | Exploration |
+  | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+  | 10 | 14 | 12 | 14 | 16 | 12 | 14 | 8 |
+
+  - Each entry: stable id, title, description, category, condition (counter + target, or `all`),
+    how to earn, badge (glyph + tier) and spoiler flag.
+  - All are earned through existing mechanics. No streaks and no new rules. The largest target is
+    2,000 points.
+  - Every one is documented in `docs/ACHIEVEMENTS.md`, and a test keeps that file in sync with the
+    catalog.
+- **Tracking outside the engine:** from applied, redacted events through `TableController.subscribe`
+  (the core bridge subscribes synchronously and buffers until the lazy chunk loads), the Story `track`
+  hooks, and explicit screen/control notes.
+  - It uses public information only. The record holds no tile ids, which e2e checks.
+  - **What counts:**
+    - Solo vs the computer: everything.
+    - Story first plays: hand and Story facts.
+    - Two players: finished shared matches only.
+    - Replays and developer tables: nothing.
+    - Skip scene: the case can't earn Every Word.
+- **No double counting:** every count is keyed by game, hand, chapter, case or note.
+  - A hand resumed after a reload counts its result but no whole-hand tactics.
+  - Comebacks and whole-case awards need full observation.
+- **Persistence:** a versioned record (`sticks-and-bones.achievements` v1, with migration from a v0
+  ids-only shape and quarantine on corruption). A refused save shows the persistent **Not saved**
+  banner while the counters stay in memory.
+- **Retroactive awards:** once, from Quick Play statistics and Story progress (max, never added),
+  marked "from earlier records", with one summary notice. No hand-level claims.
+- **UI:** the Achievements page replaces the reserved placeholder.
+  - Summary, category and status filters (44 px chips), and cards with accessible SVG badges,
+    how-to-earn text and progress bars.
+  - Story spoilers are concealed until earned.
+  - **Notices are quiet `role="status"` toasts, non-interactive.**
+    - **Held while:** a handoff cover, a sheet, a Story scene, the start screen or a hidden page is up,
+      and at the table while the player can act.
+    - **Yielding:** a notice already showing withdraws if a sheet or cover appears and comes back
+      later, so it's never stranded.
+    - Reduced motion is honoured.
+- **Code:** the achievements chunk loads after the menu is up and has its own budget (35 / 45 KB).
+  The core grew about 1.5 KB (312 / 320 KB).
+
+### Defects found while building (fixed)
+- Notices first drew under the table HUD (unreadable on a phone) and could be stranded under the
+  results sheet. They now wait for a moment the player can't act, draw above the HUD there, and yield
+  to sheets and covers.
+- A fresh match deals before anyone subscribes, so the first hand would have counted as unobserved.
+  The tracker now primes it from the public hand sizes captured at subscription time.
+
+### Tests
+- **Unit (achievements, 119):**
+  - Catalog integrity: 100 unique ids, titles and conditions, and docs sync.
+  - **A deterministic fixture for every one of the 100**, run through the real observers and progress
+    functions.
+  - Scope rules: resumed hands, old or assisted cases, comebacks, local play, and redacted events
+    only.
+  - Dedupe: hand, chapter and note keys.
+  - Persistence: round trip, v0 migration, corrupt record quarantined, refused write reported.
+  - Retroactive awards: exactly the provable set, idempotent.
+- **Integration (5, real `GameSession` + `TableController`):**
+  - A full solo Block match.
+  - A reload mid-match with a restored session: totals equal the match's real hand count.
+  - Two-player local: only local facts.
+  - Replay / developer table: nothing.
+  - Story replays ignored; a refused save is reported and kept in memory.
+- **e2e § 8d:**
+  - A real Block hand in the browser unlocks live; reloading at the results sheet counts nothing
+    again.
+  - The page: 100 cards, 6 chapter spoilers concealed, no title leaks, filters, badges labelled, no
+    sideways scroll at 390.
+  - A refused save shows the Not saved banner.
+  - A notice is held under the two-player handoff cover and shown after leaving it.
+- **qa:** the Achievements page on all 8 viewports.
+
+### Commands run and results (Chromium)
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | pass: 462 tests (+119), lint, assets, budgets (code 312/320 KB, achievements lazy 35/45 KB, startup 938/960 KB) |
+| `npm run e2e` | running at commit time; result recorded in the next commit |
+| `npm run qa` / `npm run a11y` | running at commit time; result recorded in the next commit |
+| `npm run pwa` | running at commit time; result recorded in the next commit |
+| `npm run audio` / `npm run story:e2e` | running at commit time; result recorded in the next commit |
+| `npm run matches` / `npm run smoke` | running at commit time; result recorded in the next commit |
+
+### Known limitations
+- **Not played to completion in the browser:**
+  - **Story:** the Story achievements are proven by fixtures and the integration path
+    (`track.chapterComplete`), not by a 90-minute playthrough in this stage.
+  - **Rare tactical situations** (capicúa, closing a number, a tranque won with more tiles, …): proven
+    by fixtures on real event shapes, not by a seeded live match.
+- **Hand-level history isn't in the existing records,** so nothing hand-level is retroactive.
+- **One device, no accounts:** achievements are per browser profile, and erasing data removes them.
+- Only Chromium; no real devices.
+
 ## Next stage
 
 The detailed list is in `docs/STORY_BUILD_STATUS.md`:
