@@ -1377,7 +1377,7 @@ body {
 }
 .settings-panel .slider input[type='range'] {
   width: 100%;
-  min-height: 32px;
+  min-height: 44px;
   accent-color: var(--teal);
 }
 .settings-panel small {
@@ -2560,10 +2560,12 @@ h1, h2, h3, .title, .chapter-title, .section-h, .score-val, .dest-title, .points
 .dest.dest-two { background: var(--sb-ink); color: var(--sb-ivory); }
 .home-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 128px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 7.5em), 1fr)); /* em: fewer columns as text grows */
   gap: 8px;
 }
-.home-row .btn-ghost { min-height: 44px; white-space: nowrap; padding-inline: 10px; }
+.home-row .btn-ghost { min-height: 44px; padding-inline: 10px; position: relative; }
+/* The Soon tag sits on the button's corner, so the label alone sets the width and can wrap at large text. */
+.home-row .soon-tag { position: absolute; top: -8px; right: -4px; box-shadow: 2px 2px 0 var(--sb-guava); }
 .soon-tag, .soon-banner {
   display: inline-block;
   font: 800 0.68rem / 1 var(--body);

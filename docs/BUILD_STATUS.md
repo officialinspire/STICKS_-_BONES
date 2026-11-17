@@ -1143,12 +1143,12 @@ CSS for the removed statistics table was deleted. Startup is 816 / 900 KB.
 | Command | Result |
 | --- | --- |
 | `npm run check` | pass: 340 tests, lint, assets, budgets (code 305/310 KB) |
-| `npm run e2e` | running at commit time; result recorded in the next commit |
-| `npm run qa` | running at commit time; result recorded in the next commit |
-| `npm run a11y` | running at commit time; result recorded in the next commit |
-| `npm run pwa` | running at commit time; result recorded in the next commit |
-| `npm run story:e2e` | running at commit time; result recorded in the next commit |
-| `npm run matches` / `npm run smoke` | running at commit time; result recorded in the next commit |
+| `npm run e2e` | pass (incl. new § 5b gameplay and § 8c menu checks) |
+| `npm run qa` | 0 failures, 1 documented comfort warning (end slots 62×40 on the longest chain at 667×375). The first run found 2 real defects, both fixed: the home menu scrolled sideways at 200 % browser text (now an em-based grid that drops columns as text grows) and the Settings volume sliders were 32 px tall (a more specific rule overrode the 44 px one) |
+| `npm run a11y` | 0 failures (now also scans Two Players and Achievements) |
+| `npm run pwa` | pass (erase via Cancel and confirm) |
+| `npm run story:e2e` | pass (start over through the confirmation sheet) |
+| `npm run matches` / `npm run smoke` | pass / pass |
 
 New coverage:
 - e2e § 8c: Back, Escape and ← Menu on 6 sub-pages; focus on the heading, then back on the opener; no
