@@ -1314,11 +1314,11 @@ audio manager. No new manager.
 | Command | Result |
 | --- | --- |
 | `npm run check` | pass: 462 tests (+119), lint, assets, budgets (code 312/320 KB, achievements lazy 35/45 KB, startup 938/960 KB) |
-| `npm run e2e` | running at commit time; result recorded in the next commit |
-| `npm run qa` / `npm run a11y` | running at commit time; result recorded in the next commit |
-| `npm run pwa` | running at commit time; result recorded in the next commit |
-| `npm run audio` / `npm run story:e2e` | running at commit time; result recorded in the next commit |
-| `npm run matches` / `npm run smoke` | running at commit time; result recorded in the next commit |
+| `npm run e2e` | pass after one fix: the menu-stage check still expected the Achievements placeholder; it now checks the real page (100 cards). § 8d: a real Block hand → 6 tiles, 3 unlocked; reload counted nothing again; 6 chapter spoilers concealed; filters; refused save → Not saved; notice held under the handoff cover |
+| `npm run qa` / `npm run a11y` | 0 failures, 1 documented comfort warning (Achievements page on all 8 viewports) / 0 failures |
+| `npm run pwa` | pass (the achievements chunk is in the shell group, so the page works offline) |
+| `npm run audio` / `npm run story:e2e` | pass / pass |
+| `npm run matches` / `npm run smoke` | pass / pass |
 
 ### Known limitations
 - **Not played to completion in the browser:**

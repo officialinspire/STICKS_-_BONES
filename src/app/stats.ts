@@ -1,5 +1,5 @@
 /**
- * Modest local statistics (this device only; no accounts, no achievements).
+ * Modest local statistics (this device only; no accounts). Achievements are separate (src/app/achievements).
  * Completed matches are recorded once per match id; matches that are thrown
  * away before finishing count as ABANDONED — never as losses.
  */
