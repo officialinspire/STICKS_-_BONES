@@ -36,13 +36,13 @@ export const BUDGET = {
   codeKB: 300, // core JS + CSS + HTML, excluding the lazy story-script chunk (Stage 12 measured 266 KB raw: +29 KB inlined wordmark vectors, story UI)
   storyKB: 100, // the approved script as a lazy chunk, loaded only when Story opens (measured 76 KB raw / 18 KB gzip)
   fontsKB: 100, // self-hosted DM Sans + Bricolage Grotesque WOFF2 subsets (measured 82 KB)
-  imagesKB: 2000, // every runtime image (Stage 12 measured 1,703 KB: +292 KB cave backdrop for the Prologue; the other story backdrops will need a deliberate raise)
-  singleImageKB: 400, // largest single image (measured 301 KB)
+  imagesKB: 3300, // every runtime image (Stage 13 measured ~3,050 KB: +five story backdrops, all loaded per scene on demand, none at startup)
+  singleImageKB: 450, // largest single image (Stage 13: jungle backdrop 428 KB at q84 — q80 failed the derivative quality gate)
   startupKB: 900, // start screen + first menu, raw bytes: core code + fonts + backdrop + portrait (Stage 12 measured ~868 KB raw)
   mediaKB: 8000, // music, streamed on demand only (measured 7,331 KB)
   iconsKB: 140, // PWA icons (PNG by spec), generated from approved art (measured 113 KB)
   swKB: 16, // service worker + build manifest (measured 8 KB)
-  totalKB: 9800, // whole dist (measured 9.1 MB)
+  totalKB: 11200, // whole dist (Stage 13 measured ~10.9 MB: music 7.3 MB + images 3.0 MB)
 };
 const size = (f) => statSync(f).size;
 const rel = (f) => f.slice(dist.length);

@@ -189,15 +189,29 @@ function setSaveHealth(ok: boolean): void {
   } else if (el) el.hidden = true;
 }
 
-// ---- Story: NO REST FOR COUSIN (case file + scene player) -------------------------------
+// ---- Story: NO REST FOR COUSIN (case file + scene player + chapter hands) ----------------
+/** A story hand's table: separate from Quick Play (no Quick Play save, no statistics, no analytics). */
+let storyTable: { table: TableScreen; controller: TableController } | null = null;
+function endStoryHand(): void {
+  storyTable?.table.destroy();
+  storyTable?.controller.dispose();
+  storyTable = null;
+  document.documentElement.classList.remove('table-lock');
+  audio.setScene('menu');
+}
+/** Story tables never show Quick Play banter: Roberto is the player here, and serious scenes stay serious. */
+const storySettingsApi = { get: () => ({ ...settings, banter: false }), set: (p: Partial<Settings>) => settingsApi.set(p) };
 function openStory(): void {
   teardown();
   active = null;
   audio.setScene('menu');
+  const fast = DEV && Boolean((window as unknown as { __sbStoryFast?: boolean }).__sbStoryFast);
   void renderStoryHome({
     root,
     store,
+    fast,
     onBack: () => {
+      endStoryHand();
       root.onclick = null;
       root.onkeydown = null;
       root.style.removeProperty('--scene-image');
@@ -205,9 +219,44 @@ function openStory(): void {
     },
     reduceMotion: () => reduceMotion(settings, matchMedia('(prefers-reduced-motion: reduce)').matches),
     onSaveFailed: () => setSaveHealth(false),
+    cue: (c) => void audio.cue(c),
+    endHand: endStoryHand,
+    playHand: (req) => {
+      endStoryHand();
+      const timing = fast ? FAST_TIMING : DEFAULT_TIMING;
+      const session = req.restore
+        ? new GameSession({ state: req.restore.state, opponent: 'ai', difficulty: 'normal', aiRng: req.restore.aiRng }, { runner, timing })
+        : new GameSession({ mode: req.setup.mode, opponent: 'ai', humanSeats: [0], seatNames: req.setup.seatNames, difficulty: 'normal', seed: secureSeed(), aiSeed: secureSeed() }, { runner, timing });
+      const controller = new TableController(session, req.restore ? { restored: true } : {});
+      const table = new TableScreen(req.host, controller, {
+        onMenu: () => req.onLeave(),
+        onRestart: () => playStoryAgain(),
+        settings: storySettingsApi,
+        audio: audioApi,
+        story: { onContinue: () => req.onContinue() },
+      });
+      const playerTeam = session.rules.teams.findIndex((t) => t.includes(0));
+      root.classList.add('is-table');
+      document.documentElement.classList.add('table-lock');
+      audio.setScene('gameplay');
+      table.mount();
+      controller.subscribe((events) => {
+        if (!events.length) return;
+        const resolved = events.find((e) => e.type === 'hand-resolved');
+        if (resolved && resolved.type === 'hand-resolved') req.onResolved(resolved.result.winnerTeam, playerTeam);
+        else if (session.phase === 'playing') req.onSnapshot({ state: session.debugState(), aiRng: session.exportAiRng() });
+      });
+      storyTable = { table, controller };
+      // Save the deal itself: a refresh before the first move resumes this exact hand too.
+      if (session.phase === 'playing') req.onSnapshot({ state: session.debugState(), aiRng: session.exportAiRng() });
+      // "Restart match" in a story hand returns to the case file; Continue Case deals the chapter hand again.
+      function playStoryAgain() {
+        req.onLeave();
+      }
+      if (DEV) (window as unknown as { __sb: unknown }).__sb = { session, controller, runnerKind: runner.kind, matchId: `story:${req.sceneId}`, stats: () => stats };
+    },
   });
 }
-
 // ---- the active match ----------------------------------------------------------------
 interface Active {
   table: TableScreen;

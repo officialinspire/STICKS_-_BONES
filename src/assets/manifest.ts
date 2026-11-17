@@ -289,7 +289,7 @@ export const IMAGE_ASSETS = [
   {
     id: "env.back-alley",
     category: "environment",
-    status: "variant",
+    status: "runtime",
     path: "assets/art/environments/Sunlit San Juan Back Alley.png",
     originalName: "Sunlit San Juan Back Alley.png",
     bytes: 2832333,
@@ -302,7 +302,7 @@ export const IMAGE_ASSETS = [
   {
     id: "env.resort-patio",
     category: "environment",
-    status: "variant",
+    status: "runtime",
     path: "assets/art/environments/Puerto Rico Resort Patio by the Sea.png",
     originalName: "Puerto Rico Resort Patio by the Sea.png",
     bytes: 2924393,
@@ -315,7 +315,7 @@ export const IMAGE_ASSETS = [
   {
     id: "env.executive-terrace",
     category: "environment",
-    status: "variant",
+    status: "runtime",
     path: "assets/art/environments/Sleek Puerto Rican Executive Resort Terrace.png",
     originalName: "Sleek Puerto Rican Executive Resort Terrace.png",
     bytes: 2576870,
@@ -328,7 +328,7 @@ export const IMAGE_ASSETS = [
   {
     id: "env.moonlit-promenade",
     category: "environment",
-    status: "variant",
+    status: "runtime",
     path: "assets/art/environments/Moonlit Puerto Rican Beachfront Promenade.png",
     originalName: "Moonlit Puerto Rican Beachfront Promenade.png",
     bytes: 2493674,
@@ -341,7 +341,7 @@ export const IMAGE_ASSETS = [
   {
     id: "env.jungle-camp",
     category: "environment",
-    status: "variant",
+    status: "runtime",
     path: "assets/art/environments/Puerto Rican Jungle Camp Clearing.png",
     originalName: "Puerto Rican Jungle Camp Clearing.png",
     bytes: 3342573,

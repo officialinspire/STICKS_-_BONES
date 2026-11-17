@@ -37,6 +37,8 @@ export interface SessionOptions {
   readonly humanSeats?: readonly SeatIndex[];
   /** Display names by human slot (Player 1, Player 2). */
   readonly names?: readonly string[];
+  /** Display names by seat for any seat, including computer seats (Story: Tío Rafa, Marisol, Vale…). Names only; never rules. */
+  readonly seatNames?: Readonly<Partial<Record<SeatIndex, string>>>;
   readonly targetScore?: TargetScore;
   readonly difficulty?: Difficulty;
   /** Shuffle seed (secret). */
@@ -136,6 +138,10 @@ export class GameSession {
       this.opponent = opts.opponent;
       const humanSeats: readonly SeatIndex[] = opts.opponent === 'ai' ? [0] : (opts.humanSeats ?? [0, 1]);
       const displayNames: Record<number, string> = {};
+      for (const [seat, n] of Object.entries(opts.seatNames ?? {})) {
+        const c = cleanName(n);
+        if (c) displayNames[Number(seat)] = c;
+      }
       humanSeats.forEach((seat, slot) => {
         const n = cleanName(opts.names?.[slot]);
         if (n && opts.opponent !== 'ai') displayNames[seat] = n;

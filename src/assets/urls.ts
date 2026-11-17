@@ -22,6 +22,12 @@ export const RUNTIME_ASSET_URLS = {
   'env.neighborhood-patio': new URL('../../assets/generated/web/neighborhood-patio.webp', import.meta.url).href,
   // Story only (Prologue dream); warmed when the Story screen opens, never at startup.
   'env.cave-waterfall': new URL('../../assets/generated/web/cave-waterfall.webp', import.meta.url).href,
+  // Story chapter backdrops: warmed only when their scene is next (src/story/staging.ts).
+  'env.back-alley': new URL('../../assets/generated/web/back-alley.webp', import.meta.url).href,
+  'env.resort-patio': new URL('../../assets/generated/web/resort-patio.webp', import.meta.url).href,
+  'env.moonlit-promenade': new URL('../../assets/generated/web/moonlit-promenade.webp', import.meta.url).href,
+  'env.jungle-camp': new URL('../../assets/generated/web/jungle-camp.webp', import.meta.url).href,
+  'env.executive-terrace': new URL('../../assets/generated/web/executive-terrace.webp', import.meta.url).href,
 } as const satisfies Partial<Record<ImageAssetId, string>>;
 
 export type RuntimeAssetId = keyof typeof RUNTIME_ASSET_URLS;

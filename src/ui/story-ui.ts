@@ -9,13 +9,15 @@
  * dialogue. Routes that need chapter hand play (next stage) are labelled as
  * such instead of pretending to work.
  */
-import { assetUrl } from '../assets';
 import { warm } from '../assets/warm';
 import type { KeyValueStore } from '../app/storage';
 import type { Block, Scene } from '../story/parse';
-import { clearStory, newProgress, readStory, TEXT_SCALES, writeStory, type SceneId, type StoryProgress } from '../story/progress';
+import { clearStory, newProgress, readStory, writeStory, type SceneId, type StoryHand, type StoryProgress } from '../story/progress';
+import type { HandSetup } from '../story/chapters';
+import { STAGING } from '../story/staging';
+import type { StoryCue } from '../audio/manager';
+import { renderStoryRun } from './story-player';
 import { wordmarkHtml } from './brand';
-import { wrapTab } from './focus-trap';
 import { esc } from './svg';
 
 // ---- speakers -----------------------------------------------------------------------
@@ -39,7 +41,7 @@ export function speakerLabelHtml(tag: string): string {
 }
 
 /** Stage directions are shown as descriptive captions (the script's square brackets are its own markup). */
-const captionText = (raw: string) => (raw.startsWith('[') && raw.endsWith(']') ? raw.slice(1, -1) : raw);
+export const captionText = (raw: string) => (raw.startsWith('[') && raw.endsWith(']') ? raw.slice(1, -1) : raw);
 
 export function dialoguePanelHtml(b: Block): string {
   if (b.kind === 'line') {
@@ -95,6 +97,23 @@ export const loadScript = (): Promise<ScriptJson> => (scriptPromise ??= import('
 /** Blocks the player shows in this stage: spoken lines and descriptive captions. */
 export const playable = (s: Scene): Block[] => s.blocks.filter((b) => b.kind === 'line' || b.kind === 'direction');
 
+export interface StoryHandRequest {
+  readonly sceneId: SceneId;
+  readonly setup: HandSetup;
+  /** Resume this exact hand (refresh mid-hand); null deals a new one. */
+  readonly restore: StoryHand | null;
+  readonly replay: boolean;
+  /** The table's own container (the story stage stays mounted beside it, hidden). */
+  readonly host: HTMLElement;
+  onSnapshot(h: StoryHand): void;
+  /** The hand resolved (any result advances the story). */
+  onResolved(winnerTeam: number | null, playerTeam: number): void;
+  /** "Continue the case" on the results sheet. */
+  onContinue(): void;
+  /** Left the table from the pause sheet (the hand is kept for Continue Case). */
+  onLeave(): void;
+}
+
 export interface StoryDeps {
   readonly root: HTMLElement;
   readonly store: KeyValueStore | null;
@@ -102,21 +121,30 @@ export interface StoryDeps {
   reduceMotion(): boolean;
   /** Storage refused a write: show persistent feedback (never claim it saved). */
   onSaveFailed(): void;
+  /** Mount a chapter hand at the table (main.ts: GameSession + TableController + TableScreen in story mode). */
+  playHand(req: StoryHandRequest): void;
+  /** Tear the table down again (after Continue the case / leaving). */
+  endHand(): void;
+  /** Central audio manager's story cue hook (no second playback system). */
+  cue(c: StoryCue): void;
+  /** Dev/test: fast AI timings. */
+  readonly fast?: boolean;
 }
 
 /** Write progress; on refusal, report it (persistent banner) and return false. */
-function save(d: StoryDeps, p: StoryProgress): boolean {
+export function save(d: StoryDeps, p: StoryProgress): boolean {
   const ok = writeStory(d.store, p);
   if (!ok) d.onSaveFailed();
   return ok;
 }
 
-const SCENE_ENV: Partial<Record<SceneId, 'env.cave-waterfall' | 'env.neighborhood-patio'>> = { prologue: 'env.cave-waterfall' };
 
 // ---- case file (Story home) --------------------------------------------------------
 export async function renderStoryHome(d: StoryDeps, notice?: string): Promise<void> {
   const { root } = d;
-  void warm(['env.cave-waterfall']);
+  // Warm the backdrop of the scene the player will see next (bounded queue, never at startup).
+  const nextEnv = STAGING[(readStory(d.store).value?.sceneId ?? 'prologue') as SceneId].env;
+  if (nextEnv) void warm([nextEnv]);
   const script = await loadScript();
   const read = readStory(d.store);
   const p = read.value;
@@ -142,12 +170,12 @@ export async function renderStoryHome(d: StoryDeps, notice?: string): Promise<vo
             : `<button type="button" class="btn primary" data-act="story-new">New Case</button>
                <p class="case-where">Seven chapters, seven hands. Every win, loss or blocked tie moves the case forward.</p>`
         }
-        <p class="stage-note"><strong>In this build:</strong> the Prologue plays in full. Chapter scenes and their hands arrive in the next build stage.</p>
+
       </section>
       <section class="chapter-select" aria-labelledby="chapters-h">
         <h2 id="chapters-h" class="section-h">Chapters</h2>
-        <p class="note-dark">Completed chapters can be replayed here once chapter play is available.</p>
-        <ol class="chapter-list">${chapters.map((s) => `<li>${chapterCardHtml(s, status(s), { compact: true })}${status(s) === 'completed' ? `<button type="button" class="btn-ghost small" disabled>Replay — next stage</button>` : ''}</li>`).join('')}</ol>
+        <p class="note-dark">Replay any completed chapter. Replays never change your case progress.</p>
+        <ol class="chapter-list">${chapters.map((s) => `<li>${chapterCardHtml(s, status(s), { compact: true })}${status(s) === 'completed' ? `<button type="button" class="btn-ghost small" data-act="story-replay" data-scene="${esc(s.id)}">Replay chapter ${s.number}</button>` : ''}</li>`).join('')}</ol>
       </section>
       <section class="notebook" aria-labelledby="notebook-h">
         <h2 id="notebook-h" class="section-h">Case notebook</h2>
@@ -157,7 +185,8 @@ export async function renderStoryHome(d: StoryDeps, notice?: string): Promise<vo
     </div>`;
   const on = (act: string, fn: () => void) => root.querySelector(`[data-act="${act}"]`)?.addEventListener('click', fn);
   on('story-home', () => d.onBack());
-  on('story-continue', () => void renderStoryPlayer(d));
+  on('story-continue', () => void renderStoryRun(d, { replay: null }));
+  root.querySelectorAll<HTMLElement>('[data-act="story-replay"]').forEach((b) => b.addEventListener('click', () => void renderStoryRun(d, { replay: b.dataset.scene as SceneId })));
   const newBtn = root.querySelector<HTMLButtonElement>('[data-act="story-new"]');
   newBtn?.addEventListener('click', () => {
     // With a case in progress, the first tap only arms (no accidental reset).
@@ -168,109 +197,8 @@ export async function renderStoryHome(d: StoryDeps, notice?: string): Promise<vo
     }
     clearStory(d.store);
     save(d, newProgress(Date.now()));
-    void renderStoryPlayer(d);
+    void renderStoryRun(d, { replay: null });
   });
   (root.querySelector('[data-act="story-continue"], [data-act="story-new"]') as HTMLElement | null)?.focus();
 }
 
-// ---- scene player -------------------------------------------------------------------
-export async function renderStoryPlayer(d: StoryDeps): Promise<void> {
-  const { root } = d;
-  const script = await loadScript();
-  let p = readStory(d.store).value ?? newProgress(Date.now());
-  let saved = true;
-  const scene = script.scenes.find((s) => s.id === p.sceneId) ?? script.scenes[0]!;
-  const blocks = playable(scene);
-  const env = SCENE_ENV[scene.id as SceneId];
-  const envUrl = env ? assetUrl(env) : null;
-  if (env) void warm([env], { front: true });
-  root.className = 'is-story is-playing';
-  root.style.setProperty('--scene-image', envUrl ? `url("${envUrl}")` : 'none');
-  root.dataset.scene = scene.id;
-  const draw = () => {
-    const atEnd = p.index >= blocks.length;
-    const block = blocks[Math.min(p.index, blocks.length - 1)];
-    root.style.setProperty('--story-scale', String(p.textScale));
-    root.innerHTML = `
-      <div class="story-stage" data-scene="${esc(scene.id)}">
-        <header class="story-bar">
-          <button type="button" class="btn-ghost back" data-act="story-file">← Case file</button>
-          <h1 class="story-bar-title"><span class="chapter-num">${esc(scene.number === null ? scene.heading.split(' — ')[0]! : `Chapter ${scene.number}`)}</span> ${esc(scene.title)}</h1>
-        </header>
-        <section class="story-main" aria-label="Scene">
-          ${
-            atEnd
-              ? endCardHtml(script, scene, saved)
-              : `${p.index === 0 ? chapterCardHtml(scene, 'reading') : ''}<div class="dialogue-slot" aria-live="polite">${dialoguePanelHtml(block!)}</div>`
-          }
-        </section>
-        ${cinematicControlsHtml({ canBack: p.index > 0, atEnd, position: atEnd ? 'End of scene' : `${p.index + 1} / ${blocks.length}` })}
-        <dialog class="sheet transcript" aria-labelledby="transcript-h"></dialog>
-      </div>`;
-    if (!d.reduceMotion()) root.querySelector('.dialogue-panel')?.classList.add('is-entering');
-    (root.querySelector('[data-act="story-next"]') as HTMLElement).focus({ preventScroll: true });
-  };
-  const go = (index: number) => {
-    p = { ...p, index: Math.max(0, Math.min(index, blocks.length)) };
-    if (p.index >= blocks.length && !p.completed.includes(scene.id as SceneId) && scene.id === 'prologue') p = { ...p, completed: [...p.completed, 'prologue'] };
-    saved = save(d, p);
-    draw();
-  };
-  const transcript = () => {
-    const dlg = root.querySelector<HTMLDialogElement>('dialog.transcript')!;
-    const seen = blocks.slice(0, Math.min(p.index + 1, blocks.length));
-    dlg.innerHTML = `<h2 id="transcript-h">Transcript</h2><p class="note">${esc(scene.heading)} — everything shown so far.</p><ol class="transcript-list">${seen
-      .map((b) => `<li>${b.kind === 'line' ? `<strong>${esc(speakerOf(b.speaker!).label)}${speakerOf(b.speaker!).qualifier ? ` (${esc(speakerOf(b.speaker!).qualifier!)})` : ''}:</strong> ${esc(b.text!)}` : `<em>${esc(captionText(b.raw))}</em>`}</li>`)
-      .join('')}</ol><div class="sheet-actions"><button type="button" class="btn" data-act="transcript-close">Close</button></div>`;
-    dlg.showModal();
-    (dlg.querySelector('[data-act="transcript-close"]') as HTMLElement).focus();
-  };
-  root.onclick = (e) => {
-    const act = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act;
-    if (!act) return;
-    if (act === 'story-next') {
-      if (p.index >= blocks.length) void renderStoryHome(d);
-      else go(p.index + 1);
-    } else if (act === 'story-back') go(p.index - 1);
-    else if (act === 'story-skip') go(blocks.length);
-    else if (act === 'story-file') void renderStoryHome(d);
-    else if (act === 'story-text') {
-      const i = TEXT_SCALES.indexOf(p.textScale);
-      p = { ...p, textScale: TEXT_SCALES[(i + 1) % TEXT_SCALES.length]! };
-      save(d, p);
-      draw();
-      (root.querySelector('[data-act="story-text"]') as HTMLElement).focus();
-    } else if (act === 'story-transcript') transcript();
-    else if (act === 'transcript-close') {
-      root.querySelector<HTMLDialogElement>('dialog.transcript')?.close();
-      (root.querySelector('[data-act="story-transcript"]') as HTMLElement).focus();
-    }
-  };
-  root.onkeydown = (e) => {
-    const dlg = root.querySelector<HTMLDialogElement>('dialog.transcript[open]');
-    if (dlg) {
-      wrapTab(e, dlg);
-      return;
-    }
-    const t = e.target as HTMLElement;
-    if (t.closest('button:not([data-act="story-next"])')) return; // let focused buttons handle their own keys
-    if (e.key === 'ArrowRight' || ((e.key === 'Enter' || e.key === ' ') && !t.closest('button'))) {
-      e.preventDefault();
-      (root.querySelector('[data-act="story-next"]') as HTMLElement).click();
-    } else if (e.key === 'ArrowLeft' && p.index > 0) {
-      e.preventDefault();
-      go(p.index - 1);
-    }
-  };
-  draw();
-}
-
-function endCardHtml(script: ScriptJson, scene: Scene, saved: boolean): string {
-  const idx = script.scenes.findIndex((s) => s.id === scene.id);
-  const next = script.scenes[idx + 1];
-  return `<section class="end-card" aria-labelledby="end-h">
-    <h2 id="end-h" class="section-h">End of ${esc(scene.number === null ? scene.heading.split(' — ')[0]! : `Chapter ${scene.number}`)}</h2>
-    ${next ? chapterCardHtml(next, 'next') : ''}
-    <p class="stage-note"><strong>Not playable yet:</strong> ${next ? esc(`${next.number === null ? 'The epilogue' : `Chapter ${next.number}`}`) : 'The next scene'}’s scenes and its domino hand arrive in the next build stage. ${saved ? 'Your place in the case is saved on this device.' : '<strong>Your place could not be saved</strong> — this browser refused storage.'}</p>
-  </section>`;
-}

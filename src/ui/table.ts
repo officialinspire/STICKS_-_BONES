@@ -37,6 +37,8 @@ export interface TableCallbacks {
   readonly audio?: TableAudio;
   /** A new app version is waiting (PWA). `apply` saves, hides every hand and reloads. */
   readonly update?: { ready(): boolean; apply(): void };
+  /** Story hand (NO REST FOR COUSIN): one hand only; the results sheet continues the case instead of dealing again. */
+  readonly story?: { onContinue(): void };
 }
 
 export interface TableAudio {
@@ -560,9 +562,11 @@ export class TableScreen {
     const winnerName = over ? this.#s.teamName(v.winnerTeam!) : '';
     const plural = (this.#s.opponent === 'ai' && v.winnerTeam === 0) || winnerName.includes(' & ');
     const matchLine = over ? `<p class="match-line">${esc(winnerName)} ${plural ? 'win' : 'wins'} the match!</p>` : '';
-    const buttons = over
-      ? `<button type="button" class="btn" data-act="new-match">Rematch</button><button type="button" class="btn-ghost" data-act="menu-now">Menu</button>`
-      : `<button type="button" class="btn" data-act="next-hand">Next hand</button>`;
+    const buttons = this.#cb.story
+      ? `<button type="button" class="btn primary" data-act="story-hand-done">Continue the case</button>`
+      : over
+        ? `<button type="button" class="btn" data-act="new-match">Rematch</button><button type="button" class="btn-ghost" data-act="menu-now">Menu</button>`
+        : `<button type="button" class="btn" data-act="next-hand">Next hand</button>`;
     const mood: Mood = r.winnerTeam === null ? 'thinking' : this.#s.opponent === 'ai' ? (r.winnerTeam === 0 ? (over ? 'delighted' : 'surprised') : over ? 'pumped' : 'laughing') : over ? 'delighted' : 'explaining';
     dlg.innerHTML = `<div class="results-head"><div class="results-host">${hostFigureHtml(mood, 'full')}</div><div><h2 id="results-title">${esc(title)}</h2><p class="why">${esc(why)}</p></div></div>${hands}${teamLine}<p class="points">${pts}</p><p class="scores-line">${scores} · to ${v.targetScore}</p>${matchLine}<div class="sheet-actions">${buttons}</div>`;
     if (!dlg.open) dlg.showModal();
@@ -865,6 +869,10 @@ export class TableScreen {
         break;
       case 'pause-resume':
         this.#closePause();
+        break;
+      case 'story-hand-done':
+        this.#q<HTMLDialogElement>('results').close();
+        this.#cb.story?.onContinue();
         break;
       case 'update-now':
         // Stable point: the table is paused behind the pause sheet; main saves, hides the hand and reloads.

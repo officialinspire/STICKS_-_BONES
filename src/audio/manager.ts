@@ -19,6 +19,12 @@ export type Scene = 'init' | 'intro' | 'menu' | 'gameplay' | 'paused' | 'results
 export type Bus = 'music' | 'sfx' | 'voice' | 'ambience';
 export type TrackId = 'menu' | 'gameplay';
 export type SfxId = 'place' | 'knock' | 'draw' | 'slam' | 'tap';
+/**
+ * Story scene-audio cues, raised by the SceneDirector. They route through THIS manager only (no second
+ * playback system). Today: knocks use the existing knock SFX; the rest are reserved hooks for the sound
+ * bank in docs/STORY_SCRIPT.md §6 and are counted, not played.
+ */
+export type StoryCue = 'knock' | 'water' | 'whisper' | 'surf' | 'dinner' | 'ambience-off';
 
 export interface SfxHandle {
   stop(): void;
@@ -96,7 +102,7 @@ export class AudioManager {
    */
   #fadingOut: { id: TrackId; timer: unknown } | null = null;
   #active: { id: SfxId; h: SfxHandle }[] = [];
-  readonly stats = { musicStarts: 0, staleDropped: 0, playRejected: 0, sfxPlayed: 0, sfxDropped: 0 };
+  readonly stats = { musicStarts: 0, staleDropped: 0, playRejected: 0, sfxPlayed: 0, sfxDropped: 0, cuesReserved: 0 };
 
   constructor(d: ManagerDeps) {
     this.#b = d.backend;
@@ -193,6 +199,13 @@ export class AudioManager {
     h.onEnded(() => (this.#active = this.#active.filter((a) => a !== entry)));
     this.stats.sfxPlayed++;
     return true;
+  }
+
+  /** Story cue hook (mute, scene SFX policy and instance limits all still apply). */
+  cue(c: StoryCue): boolean {
+    if (c === 'knock') return this.playSfx('knock');
+    this.stats.cuesReserved++;
+    return false;
   }
 
   stopAllSfx(): void {

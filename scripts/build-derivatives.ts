@@ -29,6 +29,12 @@ export const DERIVE: Record<string, { file: string; lossless?: boolean; quality?
   'env.neighborhood-patio': { file: 'neighborhood-patio.webp', quality: 82, maxMeanErr: 6 },
   // Story: the Prologue's dream (always shown dimmed under a night scrim), loaded only when Story opens.
   'env.cave-waterfall': { file: 'cave-waterfall.webp', quality: 80, maxMeanErr: 6 },
+  // Story chapter backdrops (loaded only when their scene is next; never at startup).
+  'env.back-alley': { file: 'back-alley.webp', quality: 80, maxMeanErr: 6 },
+  'env.resort-patio': { file: 'resort-patio.webp', quality: 80, maxMeanErr: 6 },
+  'env.moonlit-promenade': { file: 'moonlit-promenade.webp', quality: 80, maxMeanErr: 6 },
+  'env.jungle-camp': { file: 'jungle-camp.webp', quality: 84, maxMeanErr: 6 }, // dense foliage: q80 measured 6.05 mean error
+  'env.executive-terrace': { file: 'executive-terrace.webp', quality: 80, maxMeanErr: 6 },
   'table.weathered': { file: 'weathered-tabletop.webp', quality: 82, maxMeanErr: 6 },
   'cousin.atlas.portrait': { file: 'cousin-portrait-atlas.webp', quality: 88 },
   'cousin.anim.slam': { file: 'cousin-slam-strip.webp', quality: 86 },
