@@ -13,6 +13,8 @@ export type IntroEnd = 'skip' | 'ended' | 'error' | 'timeout' | 'rejected' | 'mi
 /** The few things the intro needs from a <video> element (faked in tests). */
 export interface VideoPort {
   play(): Promise<void>;
+  /** Pause without releasing (the app went to the background). */
+  pause(): void;
   /** Stop and release the media so its audio can never overlap the menu. */
   release(): void;
   on(event: 'ended' | 'error' | 'playing' | 'waiting' | 'stalled' | 'loadedmetadata', cb: () => void): () => void;
@@ -35,6 +37,7 @@ export class IntroController {
   #o: Required<Omit<IntroOptions, 'video'>> & { video: VideoPort | null };
   #done = false;
   #started = false;
+  #suspended = false;
   #timers = new Map<string, unknown>();
   #offs: (() => void)[] = [];
   /** Why the intro finished (for tests / diagnostics). */
@@ -64,8 +67,8 @@ export class IntroController {
         this.#clear('start');
         this.#clear('stall');
       }),
-      v.on('waiting', () => this.#timer('stall', this.#o.stallTimeoutMs, () => this.finish('timeout'))),
-      v.on('stalled', () => this.#timer('stall', this.#o.stallTimeoutMs, () => this.finish('timeout'))),
+      v.on('waiting', () => this.#suspended || this.#timer('stall', this.#o.stallTimeoutMs, () => this.finish('timeout'))),
+      v.on('stalled', () => this.#suspended || this.#timer('stall', this.#o.stallTimeoutMs, () => this.finish('timeout'))),
       v.on('loadedmetadata', () => {
         const d = v.durationSec();
         if (d && Number.isFinite(d)) this.#timer('max', Math.min(this.#o.maxMs, d * 1000 + 3000), () => this.finish('timeout'));
@@ -78,6 +81,29 @@ export class IntroController {
 
   skip(): void {
     this.finish('skip');
+  }
+
+  /**
+   * The app went to the background mid-credit: pause the video and stop every timer, so the
+   * credit can't time out (and the menu can't open) while nobody is looking.
+   */
+  suspend(): void {
+    if (!this.#started || this.#done || this.#suspended || !this.#o.video) return; // no video: the 'missing' path stays armed
+    this.#suspended = true;
+    for (const t of this.#timers.values()) this.#o.scheduler.clear(t);
+    this.#timers.clear();
+    this.#o.video?.pause();
+  }
+
+  /** Back in the foreground: play on with fresh start/overall timers; a refusal ends the credit. */
+  resume(): void {
+    if (!this.#suspended || this.#done) return;
+    this.#suspended = false;
+    const v = this.#o.video;
+    if (!v) return;
+    this.#timer('start', this.#o.startTimeoutMs, () => this.finish('timeout'));
+    this.#timer('max', this.#o.maxMs, () => this.finish('timeout'));
+    v.play().catch(() => this.finish('rejected'));
   }
 
   /** The single guarded transition. Idempotent. */

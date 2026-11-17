@@ -1,31 +1,57 @@
 # Startup, intro and audio
 
-## Startup flow (`src/ui/intro-screen.ts`, `src/app/intro.ts`)
+## Startup flow (`src/ui/intro-screen.ts`, `src/app/intro.ts`, `src/assets/warm.ts`)
 
 ```
-start screen ──tap / click / any key──► studio intro (if supplied) ──► fade through black ──► menu
-                                         Skip · Esc · ended · error · start/stall/overall timeout · play() refused
+initialization ──ready──► start prompt ──tap / click / Enter──► studio credit ──► fade through black ──► menu reveal
+ (progress, retries)                                            video if supplied, else a text card
+                                                                Skip · Esc · ended · error · timeouts · play() refused
 ```
 
-- **Start gesture:** a touch, click or key press. It unlocks audio (the
-  AudioContext is created inside the gesture) and plays **no sound of its own**.
-  Double clicks and key repeats can't start twice.
-- **Intro video:** the owner's `assets/video/inspiresoftwareintro.mp4` is used
-  **if present**. It is **not in the repository yet**, so today the start screen
-  fades straight to the menu. The file is picked up by a build-time glob, so
-  adding it later needs no code change.
-  - The video is buffered (`preload="auto"`) while the start screen waits.
-  - It plays inline (`playsinline`) with an accessible **Skip intro** button
-    (focused, Esc also skips) and a **Mute** toggle (persisted).
-- **One guarded transition:** `IntroController.finish(reason)` handles Skip, ended,
-  error, a start timeout (6 s), a stall timeout (5 s), an overall cap (duration +
-  3 s, max 45 s), play() refusal and a missing file. The first one wins.
-  - Later signals are ignored, listeners and timers are removed, and the video is
-    paused and released (`src` removed) before the fade.
-  - So the credit's audio can never overlap menu music, and the menu is entered
-    exactly once.
-- **Startup preloads:** the menu backdrop and portrait, plus only the metadata of
-  the menu track. Gameplay music loads when a table opens.
+- **Initialization:** loads what the first menu and the first table need, before the start prompt is
+  enabled.
+  - **What:** the fonts (FontFace API), then the menu backdrop, Cousin's portrait and the tile atlas.
+  - **How:** the images go through the app's one bounded loader (`warm`, 2 at a time), fetched AND
+    decoded, with `warmWithRetry`: 3 attempts, 400 / 800 ms backoff.
+  - **Progress is truthful:** "Loading… n of 4". A failure names the item ("Couldn't load the domino
+    tiles. Drawn stand-ins will be used, so you can still play.") and offers **Try again**, which
+    retries only what failed.
+  - **No artificial delay:** the prompt enables the moment everything has settled (a warm start is
+    immediate). On a very slow network it enables after 8 s anyway and says "Still loading… You can
+    start now".
+  - Later scenes stay lazy: Story art per chapter, gameplay music when a table opens.
+- **Start gesture:** a touch, click or key press (Enter is shown). It unlocks audio (the AudioContext
+  is created inside the gesture) and plays **no sound of its own**. Double clicks and key repeats can't
+  start twice.
+- **Intro video:** the owner's `assets/video/inspiresoftwareintro.mp4` is used **if present**. It is
+  **not in the repository yet**. The file is picked up by a build-time glob, so adding it later needs
+  no code change.
+  - It's buffered (`preload="auto"`) only once initialization has finished, so it never competes with
+    the essentials.
+  - It plays inline (`playsinline`) with an accessible **Skip intro** button (focused, Esc also
+    skips) and a **Mute** toggle (persisted).
+  - The service worker never caches it (`docs/PWA.md`).
+- **Fallback credit (no video):** a short typeset card, "INSPIRE / presents", in the game's fonts on
+  black.
+  - It holds 1.6 s, is skippable the same way, and has no logo art or imitation video.
+  - It's static under reduced motion.
+- **One guarded transition:** `IntroController.finish(reason)` handles Skip, ended, error, a start
+  timeout (6 s), a stall timeout (5 s), an overall cap (duration + 3 s, max 45 s), play() refusal and a
+  missing file. The first one wins.
+  - Later signals are ignored, listeners and timers are removed, and the video is paused and released
+    (`src` removed) before the fade.
+  - So the credit's audio can never overlap menu music, and the menu is entered exactly once.
+- **Backgrounding:** hiding the app mid-credit calls `suspend()`, which pauses the video and clears
+  every timer, so nothing can time out and no menu can open while hidden. Returning calls `resume()`,
+  which plays on with fresh timers (a refused play() ends the credit once). The text card holds the
+  same way.
+- **Menu reveal:** the menu mounts under black, then the black lifts, so the decoded backdrop appears
+  first.
+  - Then the title (120 ms), the menu panel (320 ms), Cousin (520 ms) and the footer rise or fade in.
+  - Any pointer or key input finishes the reveal at once, and the controls are clickable throughout.
+  - Reduced motion (the OS setting or the in-game one) skips it.
+  - Menu music starts only here, after the credit finished or was skipped.
+- **Startup audio preload:** only the metadata of the menu track, after initialization.
 
 ## Audio manager (`src/audio/manager.ts`, `src/audio/webaudio.ts`)
 
@@ -170,7 +196,7 @@ arrive.
 | Synthesized SFX (`src/audio/synth.ts`) | code | **fallback only** (decoding / missing file) |
 | Night-investigation bed, cave suspense bed, stingers | — | **missing**: briefs in `docs/MUSIC_BRIEFS.md` |
 | Contractor speaker voice and cough; trail voice | — | **missing**: caption only, never impersonated |
-| Studio intro | `assets/video/inspiresoftwareintro.mp4` | **not supplied yet** (the fallback fades to the menu) |
+| Studio intro | `assets/video/inspiresoftwareintro.mp4` | **not supplied yet** (fallback: a 1.6 s typeset text credit, then the menu) |
 
 Sources, creators, licences and every edit: `docs/SOUND_SOURCES.md` (generated from
 `src/assets/sound-manifest.json`; `npm run assets:verify` checks each file's bytes and sha256,

@@ -1164,6 +1164,73 @@ New coverage:
 - Achievements are a placeholder until stage 5.
 - Browser Back is not wired inside Story runs or the table (they keep their own Menu/Pause controls).
 
+## Startup stage: initialization → start → credit → reveal (2026-11-17)
+
+Extends the existing pipeline: the start screen, `IntroController`, the bounded `warm` loader and the one
+audio manager. No new manager.
+
+### Completed
+- **Initialization before the start prompt:** fonts (FontFace API), the menu backdrop, Cousin's portrait
+  and the tile atlas.
+  - Images are fetched AND decoded through `warm`, using the new `warmWithRetry`: same queue, 3 attempts,
+    400 / 800 ms backoff.
+  - Progress is truthful ("Loading… n of 4"). Failures are named, with **Try again** (retries only what
+    failed), and play is never blocked: drawn stand-ins are used.
+  - No artificial wait: ready the moment everything settles. A slow network gets the prompt after 8 s,
+    with the screen saying it's still loading.
+  - The credit video is buffered only after initialization.
+- **Start:** one gesture (tap, click or Enter) unlocks audio; the start tap makes no sound. The silent
+  'intro' scene refuses SFX through the credit.
+- **Credit:** the owner's video if supplied (still missing). Otherwise a 1.6 s typeset "INSPIRE /
+  presents" card that is honest about being text. Both are skippable with the button or Esc.
+- **Backgrounding mid-credit:** `IntroController.suspend()/resume()` pause the video and every timer, so
+  nothing times out and no menu opens while hidden. The text card holds the same way.
+- **Fade through black, then the menu reveal:** the backdrop first, then title, panel, Cousin and footer
+  in a 1.2 s stagger.
+  - Any input completes it at once; reduced motion (OS or in-game) skips it.
+  - Menu music starts only after the credit.
+  - If the credit ends while an essential is still loading, the black waits at most 1.5 s for it.
+
+### Budgets (measured, `docs/PERFORMANCE.md`)
+- **Code: 310 / 320 KB** (raised from 310, +5 KB).
+- **Startup: 936 / 960 KB** (raised from 900, because the tile atlas now counts toward startup).
+
+### Tests
+- **Unit:**
+  - `warmWithRetry`: backoff, per-id settle, recovery on the 3rd attempt, permanent failure.
+  - `IntroController` suspend/resume: no timers while hidden, a refusal after returning ends once, and the
+    no-video path stays armed.
+- **e2e:**
+  - § 7g: progress, a portrait failing twice then loading, the tiles failing → named fallback + Try again
+    → recovered, and cold vs warm timing.
+  - § 7h: text credit silent with no SFX, menu once, music after, reveal cancelled by input, reduced
+    motion.
+  - § 7i: backgrounding during the card and during a real video (paused 7 s past the start timeout, then
+    resumed to the end).
+  - § 7j: rotation during the credit.
+  - The existing 7a–7e (missing, ended, rapid Skip + mute, 404, refused play(), stall, mobile tap) still
+    run.
+- **pwa:**
+  - Offline startup decodes everything from the offline cache → "Ready.".
+  - Offline with missing art → the named fallback + Try again, and start still enabled.
+
+### Commands run and results (Chromium)
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | running at commit time; result recorded in the next commit |
+| `npm run e2e` | STARTUP_E2E |
+| `npm run qa` / `npm run a11y` | running at commit time; result recorded in the next commit |
+| `npm run pwa` | running at commit time; result recorded in the next commit |
+| `npm run audio` / `npm run story:e2e` | running at commit time; result recorded in the next commit |
+| `npm run matches` / `npm run smoke` | running at commit time; result recorded in the next commit |
+
+### Known issues
+- The intro video `assets/video/inspiresoftwareintro.mp4` is still **missing**. The text card stands in.
+  The video path is exercised with a generated WebM in e2e.
+- Only Chromium; no real devices. Warm/cold timings come from the dev server, not a phone on a real
+  network.
+
 ## Next stage
 
 The detailed list is in `docs/STORY_BUILD_STATUS.md`:

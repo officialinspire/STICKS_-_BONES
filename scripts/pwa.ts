@@ -268,6 +268,9 @@ try {
   await goOffline(ctx, true);
   state.requests = [];
   await page.reload();
+  // Offline startup: initialization decodes everything from the offline cache — no failures, start enabled.
+  await page.waitForFunction(() => /^Ready\.$/.test(document.querySelector('.start-status')?.textContent ?? '') && !(document.querySelector('.start-button') as HTMLButtonElement | null)?.disabled, null, { timeout: 15_000 }).then((h: { dispose(): unknown }) => h.dispose(), async () => check(false, `offline startup: not ready ("${await page.textContent('.start-status').catch(() => '')}")`));
+  notes.push('offline startup: fonts, backdrop, Cousin and tile atlas decoded from the offline cache → "Ready."');
   await enterMenu(page);
   await newGame(page, 'ai');
   const done = await playHand(page, 'offline game');
@@ -340,6 +343,11 @@ try {
     // Offline with images missing: the game still completes with drawn fallbacks.
     await goOffline(ctx, true);
     await page.reload();
+    // Missing art at startup: the prompt says what failed, offers Try again, and still lets the player start.
+    await page.waitForFunction(() => !(document.querySelector('.start-button') as HTMLButtonElement | null)?.disabled, null, { timeout: 30_000 }).then((h: { dispose(): unknown }) => h.dispose());
+    const missing = (await page.textContent('.start-status')) ?? '';
+    check(/Couldn’t load .*stand-ins/.test(missing) && (await page.locator('[data-act="start-retry"]:not([hidden])').count()) === 1, `offline startup with missing art: "${missing}"`);
+    notes.push(`offline startup with missing art: "${missing}" + Try again; start still enabled`);
     await enterMenu(page);
     await newGame(page, 'ai');
     const ok = await playHand(page, 'offline with missing images');

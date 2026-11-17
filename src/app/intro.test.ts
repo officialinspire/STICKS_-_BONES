@@ -21,6 +21,7 @@ function sched() {
 function video(opts: { reject?: boolean } = {}) {
   const handlers: Record<string, (() => void)[]> = {};
   let released = 0;
+  let paused = 0;
   let resolvePlay: () => void = () => {};
   let rejectPlay: () => void = () => {};
   const port: VideoPort = {
@@ -31,13 +32,14 @@ function video(opts: { reject?: boolean } = {}) {
         if (opts.reject) rej(new Error('NotAllowedError'));
       }),
     release: () => void released++,
+    pause: () => void paused++,
     on: (e, cb) => {
       (handlers[e] ??= []).push(cb);
       return () => (handlers[e] = (handlers[e] ?? []).filter((x) => x !== cb));
     },
     durationSec: () => 8,
   };
-  return { port, emit: (e: string) => (handlers[e] ?? []).slice().forEach((h) => h()), released: () => released, resolvePlay: () => resolvePlay(), rejectPlay: () => rejectPlay(), listeners: () => Object.values(handlers).flat().length };
+  return { port, emit: (e: string) => (handlers[e] ?? []).slice().forEach((h) => h()), released: () => released, paused: () => paused, resolvePlay: () => resolvePlay(), rejectPlay: () => rejectPlay(), listeners: () => Object.values(handlers).flat().length };
 }
 const tick = () => new Promise<void>((r) => setTimeout(r, 0));
 
@@ -143,5 +145,43 @@ describe('intro: one guarded transition', () => {
     await tick();
     expect(finished).toHaveLength(1);
     expect(v.released()).toBe(1);
+  });
+});
+
+describe('intro: backgrounding', () => {
+  it('suspend pauses the video and stops every timer; resume plays on with fresh timers', async () => {
+    const v = video();
+    const { c, sc, finished } = setup(v);
+    c.start();
+    v.emit('playing');
+    v.emit('waiting');
+    c.suspend();
+    expect(v.paused()).toBe(1);
+    expect(sc.size()).toBe(0); // no start/stall/max timer can fire while hidden
+    v.emit('stalled'); // a background stall arms nothing
+    expect(sc.size()).toBe(0);
+    c.resume();
+    expect(sc.size()).toBe(2); // start + overall
+    v.resolvePlay();
+    v.emit('playing');
+    await tick();
+    expect(finished).toEqual([]);
+    v.emit('ended');
+    expect(finished).toEqual(['ended']);
+  });
+
+  it('a refused play() after returning ends the credit once; suspend/resume after the end do nothing', async () => {
+    const v = video();
+    const { c, finished } = setup(v);
+    c.start();
+    c.suspend();
+    c.resume();
+    v.rejectPlay();
+    await tick();
+    expect(finished).toEqual(['rejected']);
+    c.suspend();
+    c.resume();
+    expect(v.paused()).toBe(1);
+    expect(finished).toEqual(['rejected']);
   });
 });

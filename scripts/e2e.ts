@@ -957,6 +957,117 @@ try {
       }
     }
 
+    // 7g. Initialization: truthful progress, retries, a usable fallback, Try again; cold vs warm timing.
+    {
+      const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+      const page = await ctx.newPage();
+      page.on('pageerror', (e: { message: string }) => failures.push(`page error: ${e.message}`));
+      let portraitTries = 0;
+      let tilesDown = true;
+      await page.route('**/cousin-portrait-atlas*.webp', (r: { abort(): Promise<void>; continue(): Promise<void> }) => (++portraitTries <= 2 ? r.abort() : r.continue()));
+      await page.route('**/double-six-atlas*.webp', (r: { abort(): Promise<void>; continue(): Promise<void> }) => (tilesDown ? r.abort() : r.continue()));
+      const t0 = Date.now();
+      await page.goto(BASE);
+      const early = { disabled: await page.locator('.start-button[disabled]').count(), status: (await page.textContent('.start-status')) ?? '' };
+      await page.waitForFunction(() => !(document.querySelector('.start-button') as HTMLButtonElement).disabled, null, { timeout: 15000 }).then((h: { dispose(): unknown }) => h.dispose());
+      const coldMs = Date.now() - t0;
+      const status = (await page.textContent('.start-status')) ?? '';
+      check(early.disabled === 1 && /Loading/.test(early.status), `init: the prompt should start disabled with progress (${JSON.stringify(early)})`);
+      check(portraitTries === 3 && /Couldn’t load the domino tiles\. Drawn stand-ins/.test(status) && !/Cousin/.test(status), `init: retries/fallback wrong (portrait tries ${portraitTries}; "${status}")`);
+      check((await page.locator('[data-act="start-retry"]:not([hidden])').count()) === 1, 'init: no Try again after a failure');
+      tilesDown = false;
+      await page.click('[data-act="start-retry"]');
+      await page.waitForFunction(() => document.querySelector('.start-status')?.textContent === 'Ready.', null, { timeout: 10000 }).then((h: { dispose(): unknown }) => h.dispose(), () => check(false, 'init: Try again did not recover'));
+      check(await page.evaluate(() => document.activeElement === document.querySelector('.start-retry') || document.activeElement === document.querySelector('.start-button') || document.activeElement === document.body), 'init: focus lost');
+      notes.push(`init: progress shown while loading; Cousin's portrait failed twice then loaded on retry 3; tiles failed → "${status}" with Try again; Try again → Ready. Cold ready ${coldMs} ms (incl. backoff)`);
+      // Warm: everything from the HTTP cache. Ready as soon as decoding finishes — no artificial wait.
+      const t1 = Date.now();
+      await page.reload();
+      await page.waitForFunction(() => !(document.querySelector('.start-button') as HTMLButtonElement).disabled, null, { timeout: 15000 }).then((h: { dispose(): unknown }) => h.dispose());
+      const warmMs = Date.now() - t1;
+      check(warmMs < 4000 && (await page.textContent('.start-status')) === 'Ready.', `init: warm start took ${warmMs} ms`);
+      notes.push(`init: warm reload ready in ${warmMs} ms ("Ready.")`);
+      await ctx.close();
+    }
+
+    // 7h. Text credit (no video), the reveal, no click SFX during the credit, music only after it.
+    for (const reduced of [false, true]) {
+      const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: reduced ? 'reduce' : 'no-preference' });
+      const page = await ctx.newPage();
+      page.on('pageerror', (e: { message: string }) => failures.push(`page error: ${e.message}`));
+      await page.addInitScript(INSTRUMENT);
+      await page.goto(BASE);
+      await page.click('.start-button');
+      await page.waitForSelector('.credit-card');
+      await page.click('.credit-card', { force: true }).catch(() => {});
+      const during = await probe(page);
+      check(during.scene === 'intro' && during.count === 0 && during.sfx === 0, `credit: silent intro scene, no music/SFX (${JSON.stringify(during)})`);
+      check(/INSPIRE/.test((await page.textContent('.credit-card')) ?? '') && (await page.locator('video').count()) === 0, 'credit: the text card should not pretend to be a video');
+      check(reduced === (await page.locator('.credit-card.no-motion').count()) > 0, `credit: reduced motion ${reduced} not honoured on the card`);
+      await page.waitForSelector('[data-go="setup"]', { timeout: 6000 });
+      const revealing = await page.locator('.scene.is-reveal').count();
+      check(reduced ? revealing === 0 : revealing === 1, `reveal: reduced ${reduced} → is-reveal ${revealing}`);
+      if (!reduced) {
+        await page.keyboard.press('Shift');
+        check((await page.locator('.scene.is-reveal').count()) === 0, 'reveal: input did not finish the reveal at once');
+      }
+      await page.waitForTimeout(1500);
+      const after = await probe(page);
+      check(after.menus === 1 && after.playing === 'menu' && after.count === 1, `credit → menu: ${JSON.stringify(after)}`);
+      notes.push(`text credit (reduced motion ${reduced}): silent, no SFX on taps, menu once, music after; reveal ${reduced ? 'skipped' : 'staggered, cancelled by input'}`);
+      await ctx.close();
+    }
+
+    // 7i. Backgrounding during the credit pauses it (no timeout, no menu while hidden).
+    {
+      const hide = (page: Page, h: boolean) => page.evaluate(`Object.defineProperty(document, 'hidden', { configurable: true, get() { return ${h}; } }); document.dispatchEvent(new Event('visibilitychange'));`);
+      const { ctx, page } = await intro('none');
+      await page.click('.start-button');
+      await page.waitForSelector('.credit-card');
+      await hide(page, true);
+      await page.waitForTimeout(2600);
+      check((await page.locator('[data-go="setup"]').count()) === 0, 'background: the text credit ended while hidden');
+      await hide(page, false);
+      await page.waitForSelector('[data-go="setup"]', { timeout: 5000 });
+      check((await probe(page)).menus === 1, 'background: menu not entered exactly once after returning');
+      notes.push('background during the text credit: held while hidden, finished after returning, menu once');
+      await ctx.close();
+      if (haveVideo) {
+        const v = await intro('ok');
+        await v.page.click('.start-button');
+        await v.page.waitForFunction(() => { const el = document.querySelector('video'); return !!el && el.currentTime > 0.2; }, null, { timeout: 8000 }).then((h: { dispose(): unknown }) => h.dispose());
+        await hide(v.page, true);
+        const pausedAt = await v.page.evaluate(() => (document.querySelector('video') as HTMLVideoElement).currentTime);
+        await v.page.waitForTimeout(7000); // past the clip length and the 6 s start timeout
+        const hidden = await v.page.evaluate(() => ({ video: !!document.querySelector('video'), paused: (document.querySelector('video') as HTMLVideoElement | null)?.paused, menu: !!document.querySelector('[data-go="setup"]') }));
+        check(hidden.video && hidden.paused === true && !hidden.menu, `background: the video should wait paused (${JSON.stringify(hidden)})`);
+        await hide(v.page, false);
+        await v.page.waitForSelector('[data-go="setup"]', { timeout: 10000 });
+        const r = await probe(v.page);
+        check(r.menus === 1 && r.maxMedia <= 1 && r.rej.length === 0, `background video → menu: ${JSON.stringify(r)}`);
+        notes.push(`background during the video: paused at ${pausedAt.toFixed(2)} s for 7 s with no timeout, resumed and ended → menu once`);
+        await v.ctx.close();
+        // 7j. Rotation during the credit: the video and its controls stay on screen.
+        const rot = await intro('ok');
+        await rot.page.click('.start-button');
+        await rot.page.waitForSelector('[data-act="intro-skip"]');
+        for (const vp of [{ width: 844, height: 390 }, { width: 390, height: 844 }]) {
+          await rot.page.setViewportSize(vp);
+          await rot.page.waitForTimeout(150);
+          const fit = await rot.page.evaluate(() => {
+            const inView = (el: Element | null) => { const r = el?.getBoundingClientRect(); return !!r && r.left >= -1 && r.top >= -1 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1 && r.width > 0; };
+            return { video: inView(document.querySelector('video')), skip: inView(document.querySelector('[data-act="intro-skip"]')), mute: inView(document.querySelector('[data-act="intro-mute"]')) };
+          });
+          check(fit.video && fit.skip && fit.mute, `rotation ${vp.width}×${vp.height} during the credit: ${JSON.stringify(fit)}`);
+        }
+        await rot.page.click('[data-act="intro-skip"]');
+        await rot.page.waitForSelector('[data-go="setup"]');
+        check((await probe(rot.page)).menus === 1, 'rotation: menu not entered once');
+        notes.push('rotation during the credit (390×844 ↔ 844×390): video, Skip and Mute stay on screen; Skip → menu once');
+        await rot.ctx.close();
+      }
+    }
+
     // 7f. Gameplay: one music source through results and rematch; reset cuts sounds.
     {
       const page = await newPage({ width: 1366, height: 900 });

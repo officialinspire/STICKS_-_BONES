@@ -72,6 +72,31 @@ describe('asset warm-up', () => {
     expect(pending).toHaveLength(0);
   });
 
+  it('warmWithRetry re-queues a failed image after a backoff and reports each id once', async () => {
+    const { warmWithRetry } = await import('./warm');
+    const settled: [string, boolean, number][] = [];
+    const waits: number[] = [];
+    const r = warmWithRetry(['tile.atlas', 'fx.sheet'], { attempts: 3, baseMs: 100, wait: async (ms) => void waits.push(ms), onSettle: (id, ok, n) => settled.push([id, ok, n]) });
+    // tile.atlas: fails twice, then loads. fx.sheet: fails every time.
+    for (let round = 0; round < 3; round++) {
+      await flush();
+      const now = pending.splice(0);
+      expect(now).toHaveLength(2);
+      for (const p of now) {
+        if (/double-six/.test(p.src) && round === 2) p.ok();
+        else p.fail(new Error('net'));
+      }
+      await flush();
+    }
+    expect(await r).toBe(false);
+    expect(settled.sort()).toEqual([
+      ['fx.sheet', false, 3],
+      ['tile.atlas', true, 3],
+    ]);
+    expect(waits.sort((x, y) => x - y)).toEqual([100, 100, 200, 200]);
+    expect(warmState('tile.atlas')).toBe('ready');
+  });
+
   it('repeated requests share one download', async () => {
     const a = warm(['tile.atlas']);
     const b = warm(['tile.atlas'], { front: true });

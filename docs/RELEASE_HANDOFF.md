@@ -29,7 +29,7 @@
 | Music | **Two approved tracks:** "Patio Dominoes (Take 2)" (menu) and "Domino Table (Subtle Vibe)" (play). They restart after their composed ending; **loop points need the owner's audition** (`dev/audio-audition.html`). |
 | Sound effects and patio ambience | **Placeholder:** synthesized in code and labelled "(placeholder)" in Settings. Not final audio. |
 | Voice | None. Cousin's lines are subtitles. |
-| Studio intro video (`assets/video/inspiresoftwareintro.mp4`) | **Not supplied.** The start screen fades straight to the menu. |
+| Studio intro video (`assets/video/inspiresoftwareintro.mp4`) | **Not supplied.** A short typeset text credit ("INSPIRE / presents"), skippable, then the menu. |
 | Other characters and opponents | Not supplied. Seat badges are used instead. |
 
 Everything else that renders only when art is missing (vector tile faces,

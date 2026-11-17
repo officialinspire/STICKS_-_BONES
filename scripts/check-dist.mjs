@@ -33,14 +33,14 @@ const bytes = files.reduce((s, f) => s + statSync(f).size, 0);
 // raise it only on purpose, with a measurement, in the same change.
 const KB = 1024;
 export const BUDGET = {
-  codeKB: 310, // core JS + CSS + HTML, excluding the lazy Story chunks (menu polish measured 305 KB raw: +6 KB for the confirm sheet, Achievements page, stats cards, menu history; was 300)
+  codeKB: 320, // core JS + CSS + HTML, excluding the lazy Story chunks. Measured 310.3 KB after the startup stage (init progress/retries, text credit, reveal: +5 KB); 305 KB after menu polish; the inline wordmark SVGs are ~29 KB of it
   storyKB: 130, // lazy Story chunks, loaded only when Story opens: the approved script (76 KB) + player/director/staging/cast frames (36 KB) = 112 KB measured
   fontsKB: 100, // self-hosted DM Sans + Bricolage Grotesque WOFF2 subsets (measured 82 KB)
   imagesKB: 3300, // CORE images: menu, table, Cousin, effects, tiles + the seven full-frame backdrops (measured ~3,050 KB; unchanged)
   storyImagesKB: 1600, // Story-only additions, on demand per chapter: 7 portrait crops + 4 cleaned cast sheets = 1,474 KB measured
   chapterImagesKB: 1000, // the most ONE chapter downloads (full-frame backdrop + its cast sheets); measured max 923 KB (Chapter 3)
   singleImageKB: 450, // largest single image (Stage 13: jungle backdrop 428 KB at q84 — q80 failed the derivative quality gate)
-  startupKB: 900, // start screen + first menu, raw bytes: core code + fonts + ONE patio variant (the larger: landscape) + portrait (unchanged)
+  startupKB: 960, // initialization, raw bytes: core code + fonts + ONE patio variant (the larger: landscape) + Cousin's portrait + the tile atlas (startup stage: the tiles are decoded before the start prompt; measured ~931 KB, was 900 without the atlas)
   mediaKB: 8000, // music, streamed on demand only (measured 7,331 KB)
   sfxKB: 720, // short CC0 SFX (WAV, decoded once after the first gesture; measured ~600 KB)
   ambienceKB: 2200, // five CC0 ambience beds (MP3, fetched per scene on demand; measured ~1,900 KB)
@@ -72,9 +72,9 @@ const iconsKB = sumKB(files.filter(isIcon));
 const swKB = sumKB(files.filter((f) => /(^|\/)(sw\.js|build\.json)$/.test(rel(f))));
 const imagesKB = sumKB(coreImages);
 const biggest = images.reduce((m, f) => (size(f) > (m ? size(m) : 0) ? f : m), null);
-// Startup set: code + the two essential images (src/assets/warm.ts ESSENTIAL_ASSETS).
+// Startup set: code + fonts + what initialization decodes (main.ts startup(): patio, Cousin's portrait, tile atlas).
 // One patio variant per device: count the larger (full frame, landscape) so the limit holds for both.
-const startupKB = code + fontsKB + sumKB(coreImages.filter((f) => /neighborhood-patio|cousin-portrait-atlas/.test(f)));
+const startupKB = code + fontsKB + sumKB(coreImages.filter((f) => /neighborhood-patio|cousin-portrait-atlas|double-six-atlas/.test(f)));
 // Per chapter: its backdrops (full frame, the larger variant) + the cast sheets it uses (src/ui/story-assets.ts).
 const CHAPTER_IMAGES = {
   'chapter-1': ['neighborhood-patio', 'rafa', 'marisol'],

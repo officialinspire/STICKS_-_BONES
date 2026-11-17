@@ -320,7 +320,7 @@ art already in the repository that was not yet runtime: the four cast atlases.
 | Story illustrations / props / evidence-card art | **none supplied** | Typeset evidence card and notebook panels |
 | Opponent seat portraits for Quick Play | **missing** | Initial badges |
 | Edge-on tile art (boneyard, opponents' hands) | **missing** | Vector backs |
-| INSPIRE studio intro video | **missing** | Start screen fades to the menu |
+| INSPIRE studio intro video (`assets/video/inspiresoftwareintro.mp4`) | **missing** | A 1.6 s typeset text credit ("INSPIRE / presents"), skippable, then the menu. It is code-drawn type, not a substitute logo or video |
 | Recorded domino foley, commissioned music, speaker recording | **missing** | CC0 stand-ins / silence + ambience / captions (`docs/AUDIO.md`) |
 | Cousin's large atlas and reference sheets | variant/reference | Not runtime (need cleaned cut-outs) |
 

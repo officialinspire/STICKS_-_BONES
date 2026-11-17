@@ -112,6 +112,41 @@ export function warm(ids: readonly WarmKey[], opts: { front?: boolean; concurren
 export function essentialAssets(): WarmKey[] {
   return [envKey('env.neighborhood-patio'), 'cousin.atlas.portrait'];
 }
+
+/**
+ * The same bounded queue, with retries: a failed image is re-queued after a short backoff
+ * (attempts total, delays baseMs, 2×baseMs, …). `onSettle` reports each id once, with its final
+ * result and how many attempts it took, so the caller can show truthful progress.
+ * Resolves true only if every id loaded. Nothing here waits longer than the network does.
+ */
+export async function warmWithRetry(
+  ids: readonly WarmKey[],
+  o: { attempts?: number; baseMs?: number; front?: boolean; onSettle?: (id: WarmKey, ok: boolean, attempts: number) => void; wait?: (ms: number) => Promise<void> } = {},
+): Promise<boolean> {
+  const attempts = Math.max(1, o.attempts ?? 3);
+  const base = o.baseMs ?? 400;
+  const wait = o.wait ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const one = async (id: WarmKey): Promise<boolean> => {
+    if (state.get(id) === 'failed') forget(id); // an explicit retry fetches again
+    for (let n = 1; ; n++) {
+      const [ok] = await warm([id], { front: o.front });
+      if (ok || n >= attempts || !urlFor(id)) {
+        o.onSettle?.(id, Boolean(ok), n);
+        return Boolean(ok);
+      }
+      await wait(base * 2 ** (n - 1));
+      if (state.get(id) === 'failed') forget(id); // a later caller may already have re-queued it
+    }
+  };
+  return (await Promise.all(ids.map(one))).every(Boolean);
+}
+
+/** Drop a failed id so the next warm() fetches it again. */
+function forget(id: WarmKey): void {
+  state.delete(id);
+  waiters.delete(id);
+  resolvers.delete(id);
+}
 /** Everything that may be warmed after the menu is up, in the order a first game needs them. */
 export const DEFERRED_ASSETS: readonly RuntimeAssetId[] = ['tile.atlas', 'table.weathered', 'fx.sheet', 'cousin.anim.slam'];
 

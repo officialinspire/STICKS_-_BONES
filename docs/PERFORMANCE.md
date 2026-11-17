@@ -190,3 +190,12 @@ The Story content is on-demand, so instead of raising the image budget, images a
 **Menu polish stage (2026-11-17):** code **310 KB (was 300)**, measured 305 KB raw. The +6 KB is the shared
 confirmation sheet, the Achievements page, the per-mode statistics cards, menu Back/Escape history and their
 styles; 1 KB of styles for the removed statistics table was deleted. Startup stays under its 900 KB budget.
+
+**Startup stage (2026-11-17):**
+- **Code: 320 KB (was 310).** Measured 310.3 KB raw. The +5 KB is initialization progress, retries,
+  the text credit, the menu reveal and backgrounding during the credit.
+  - The two inline wordmark SVGs are about 29 KB of the core code. Serving them as image files would be
+    the next saving, if the budget needs to come down.
+- **Startup: 960 KB (was 900).** The start prompt now waits until the tile atlas (115 KB) is decoded, so
+  the atlas is counted.
+  - Measured: code + fonts + the larger patio variant + Cousin's portrait + tile atlas.

@@ -9,7 +9,7 @@ import { loadStats, recordAbandoned, recordCompleted, resetStats, saveStats, typ
 import type { ReadStatus } from './app/storage';
 import type { ModeId, SeatIndex } from './engine/types';
 import { initTileArt, setForceSvg } from './render/tile-art';
-import { deferredAssets, essentialAssets, warm } from './assets/warm';
+import { deferredAssets, warm, warmWithRetry } from './assets/warm';
 import { envKey, onViewportShape } from './assets/env';
 import { urlFor } from './assets';
 import { MUSIC } from './assets/audio-manifest';
@@ -682,11 +682,19 @@ function boot(): void {
     },
     videoVolume: () => ({ muted: settings.audio.muted, volume: Math.max(0, Math.min(1, settings.audio.master * Math.max(settings.audio.music, settings.audio.voice))) }),
     setMuted: (muted) => settingsApi.set({ audio: { ...settings.audio, muted } }),
-    preload: () => {
-      // Only what the first menu needs; the rest is warmed once the menu is up.
-      void warm(essentialAssets());
-      audio.preload('menu', 'metadata');
+    // Initialization: what the first menu and the first table need, fetched AND decoded through the one
+    // bounded loader (with retries). Fonts load through the FontFace API. Later scenes stay lazy.
+    startup: () => {
+      const img = (id: Parameters<typeof warmWithRetry>[0][number]) => () => warmWithRetry([id], { front: true, attempts: 3 });
+      const font = (spec: string) => document.fonts.load(spec).then((f) => f.length > 0);
+      return [
+        { label: 'the fonts', run: () => Promise.all([font('800 1em "Bricolage Grotesque"'), font('400 1em "DM Sans"'), font('700 1em "DM Sans"')]).then((r) => r.every(Boolean)) },
+        { label: 'the menu backdrop', run: img(envKey('env.neighborhood-patio')) },
+        { label: 'Cousin’s portrait', run: img('cousin.atlas.portrait') },
+        { label: 'the domino tiles', run: img('tile.atlas') },
+      ];
     },
+    afterStartup: () => audio.preload('menu', 'metadata'),
     // After an update reload: return once to the same place (story scene or encounter, or the saved match).
     onMenu: () => {
       if (resumeAfterUpdate?.to === 'story') {
