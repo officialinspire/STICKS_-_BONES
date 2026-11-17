@@ -156,3 +156,37 @@ and WebKit on a machine that has them means changing the `chromium` import.
   the WebP art, and thermal behaviour during a long match.
 - **Screen readers on desktop:** NVDA + Firefox and JAWS + Chrome, for the dialog
   traps and the results arithmetic reading order.
+
+## Release quality pass (1.0.0-rc.2, 2026-11-17)
+
+**Viewports now captured** (`npm run qa`, Chromium device emulation at DPR 3 with touch below 1100 px):
+360×800, 390×844, **667×375 (new)**, 844×390, 768×1024, 1024×768, 1366×768 and **1920×1080 (new)**.
+That's 13 screens each: startup, menu, setup, case file, story scene, **a cast line (Vale's portrait,
+new)**, **the transcript (new)**, longest chain, largest hand, partnership, handoff, pause and results.
+Text scaling at 150% and 200% is checked too.
+
+**Faults found by the new viewports and fixed:**
+
+| Viewport | Fault | Fix |
+| --- | --- | --- |
+| 667×375 | The score header wrapped into two rows, and the view tools covered the turn banner | A narrow short-landscape layout: Pause shows its icon (same accessible name), scores and match line share one row, and the view tools get their own top-right row |
+| 667×375 | On the longest chain, one open end was hidden behind the player's tiles: the 26-px tile floor couldn't fit the chain | On screens ≤ 400 px tall the fit may go down to 22 px (pips ≈ 4.2 px; QA floor 3 px). The whole chain and both ends now show |
+| 667×375 | My first fix truncated text ("Pl…", "Partnership · to 200 · …") | Names and the match line now wrap to two short lines and are never cut (QA's clipped-text check caught it) |
+
+**Comfort warning kept on purpose:** at 667×375 on the longest chain, the two end slots are 64×41 px. That's
+above the 32-px floor but under the 44-px comfortable target, the cost of fitting the whole chain on that
+screen. Zoom (+) enlarges them.
+
+**Browsers:** only Chromium exists in this environment. **Firefox and WebKit were not run.** Installing
+browsers isn't allowed here. Every viewport above is **emulation**, not an actual iPhone, Android phone or
+tablet.
+
+### Real-device and browser checks still needed
+
+| Check | Why emulation isn't enough |
+| --- | --- |
+| iOS Safari (iPhone SE, a notched iPhone) and an iPad | Real safe areas, browser bars collapsing, WebKit audio unlock, MP3 decoding and loop priming, home-screen storage |
+| Android Chrome (a small and a large phone) | Real touch latency, the install prompt, memory pressure with story images, background audio suspension |
+| Firefox desktop | A different layout and audio engine |
+| A screen reader on a real device (VoiceOver, TalkBack) | Live-region pacing, rotor/landmark navigation, privacy of concealed hands |
+| Headphones and speakers | Levels, knock motif clarity, bed seams (nothing has been listened to) |

@@ -1811,26 +1811,27 @@ label.check {
   .score-bar {
     display: none;
   }
-  /* Names are protected (who has which score); the match line gives way first. */
+  /* Team names wrap to two short lines rather than being cut ("Cousin & / Tío Rafa"): who has which score
+     always stays readable. */
   .score {
     flex: 0 0 auto;
+    align-items: center;
   }
   .score-name {
     font-size: 0.75rem;
-    max-width: 10ch;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    max-width: 9ch;
+    white-space: normal;
+    line-height: 1.1;
   }
   .score-val {
     font-size: 1.05rem;
   }
+  /* The match line wraps to (at most) two small lines inside the 44-px header row — never truncated. */
   .score-meta {
     flex: 1 1 auto;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
+    line-height: 1.15;
     font-size: 0.68rem;
   }
   .view-tools [data-act='sort'] {
