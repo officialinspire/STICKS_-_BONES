@@ -248,7 +248,7 @@ Rendering contracts:
 | Id | Kind | Needed for | Fallback today |
 | --- | --- | --- | --- |
 | `audio.music` | audio | Original soundtrack (owner to supply) | Silence |
-| `audio.sfx` | audio | Tile click/slam, shuffle, draw, pass, win | Silence; visual feedback only |
+| `audio.sfx` | audio | Recorded domino foley, the contractor speaker recording, commissioned beds/stingers | Selected CC0 samples and beds (`docs/SOUND_SOURCES.md`, tile sounds are stand-ins); captions for the speaker; silence + ambience for the missing music |
 | `video.intro` | video | Not required for v1 | Static title screen |
 | `image.opponents` | image | AI / second-human seat portraits | Initial badges |
 | `image.tile-sideview` | image | Edge-on/stacked tiles for the boneyard and opponents' hands | Vector backs |

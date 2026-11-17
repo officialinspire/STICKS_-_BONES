@@ -61,13 +61,34 @@ const audio = new AudioManager({
 });
 // Any later gesture re-unlocks if the browser suspended audio (iOS, focus loss).
 const regesture = () => {
-  if (!audio.unlocked || (audio.playing === null && audio.scene !== 'intro' && audio.scene !== 'init')) void audio.unlock();
+  if (!audio.unlocked || (audio.wantsMusic && audio.scene !== 'intro' && audio.scene !== 'init')) void audio.unlock();
 };
 document.addEventListener('pointerdown', regesture, { capture: true, passive: true });
 document.addEventListener('keydown', regesture, { capture: true });
 document.addEventListener('visibilitychange', () => audio.setHidden(document.hidden));
 window.addEventListener('pagehide', () => audio.setHidden(true));
 window.addEventListener('pageshow', () => audio.setHidden(document.hidden));
+
+// UI feedback sounds: ONE delegated listener (capture phase, so the scene is judged before a button's own
+// handler changes it). The manager refuses SFX in the init/intro scenes, so the start tap never leaks into
+// the studio credit. Table moves, story advance and intro controls are silent here (they have their own sounds
+// or none); everything else gets a quiet select/confirm/back.
+const SILENT_ACTS = new Set(['draw', 'pass', 'place', 'select', 'story-next', 'story-back', 'story-skip', 'focus-end', 'intro-skip', 'intro-mute', 'start', 'zoom-in', 'zoom-out']);
+const BACK_ACTS = new Set(['home', 'story-home', 'story-file', 'menu', 'menu-now', 'cover-back', 'cover-menu', 'confirm-no', 'transcript-close', 'discard']);
+const CONFIRM_ACTS = new Set(['confirm-yes', 'story-deal', 'story-onward', 'story-new', 'story-continue', 'new-match', 'next-hand', 'restart', 'update-now', 'resume', 'pause-resume']);
+document.addEventListener(
+  'click',
+  (e) => {
+    const el = (e.target as Element | null)?.closest<HTMLElement>('button, [role="button"], a[href], summary, input[type="checkbox"], input[type="radio"]');
+    if (!el || el.matches(':disabled, [aria-disabled="true"]')) return;
+    const act = el.dataset.act ?? '';
+    const tag = el.dataset.sfx;
+    if (tag === 'none' || SILENT_ACTS.has(act) || el.closest('.hand, .board')) return;
+    const id: SfxId = tag === 'back' || BACK_ACTS.has(act) || el.classList.contains('back') || /^back\b/i.test(el.getAttribute('aria-label') ?? el.textContent?.trim() ?? '') ? 'back' : tag === 'confirm' || CONFIRM_ACTS.has(act) || el.classList.contains('primary') ? 'confirm' : 'select';
+    audio.playSfx(id);
+  },
+  { capture: true },
+);
 
 const audioApi = {
   scene: (s: Scene) => audio.setScene(s),
@@ -196,7 +217,8 @@ function endStoryHand(): void {
   storyTable?.controller.dispose();
   storyTable = null;
   document.documentElement.classList.remove('table-lock');
-  audio.setScene('menu');
+  // Back to the scene's dialogue (its profile stays), or the case file's menu music.
+  audio.setScene(audio.profile ? 'story' : 'menu');
 }
 /** Story tables never show Quick Play banter: Roberto is the player here, and serious scenes stay serious. */
 const storySettingsApi = { get: () => ({ ...settings, banter: false }), set: (p: Partial<Settings>) => settingsApi.set(p) };
@@ -220,6 +242,11 @@ function openStory(): void {
     reduceMotion: () => reduceMotion(settings, matchMedia('(prefers-reduced-motion: reduce)').matches),
     onSaveFailed: () => setSaveHealth(false),
     cue: (c) => void audio.cue(c),
+    audioScene: (id) => {
+      audio.setStoryProfile(id);
+      audio.setScene(id ? 'story' : 'menu');
+    },
+    beat: () => audio.beat(),
     endHand: endStoryHand,
     playHand: (req) => {
       endStoryHand();
@@ -240,6 +267,7 @@ function openStory(): void {
       document.documentElement.classList.add('table-lock');
       audio.setScene('gameplay');
       table.mount();
+      if (!req.restore) audio.playSfx('shuffle');
       controller.subscribe((events) => {
         if (!events.length) return;
         const resolved = events.find((e) => e.type === 'hand-resolved');
@@ -297,6 +325,7 @@ function abandon(matchId: string, mode: ModeId): void {
 /** Stop the current table: cancels AI work, timers, effects and sounds. */
 function teardown(): void {
   audio.reset();
+  audio.setStoryProfile(null); // Quick Play, menus and the case file use the default mix
   active?.table.destroy();
   active?.controller.dispose();
   active = null;
@@ -370,6 +399,8 @@ function mount(controller: TableController, matchId: string, counted: boolean, o
   audio.setScene('gameplay');
   audio.preload('gameplay');
   table.mount();
+  // The first deal happened before the table subscribed: shuffle once for a fresh match (never on restore).
+  if (!how.restored) audio.playSfx('shuffle');
   const info = matchInfo(session, matchId);
   const tracked = session.opponent !== 'dev-both';
   const humanTeam = session.rules.teams.findIndex((t) => t.includes(session.humanSeats[0] ?? 0));

@@ -43,7 +43,7 @@ export interface TableCallbacks {
 
 export interface TableAudio {
   scene(s: 'gameplay' | 'paused' | 'results'): void;
-  sfx(id: 'place' | 'knock' | 'draw' | 'slam'): void;
+  sfx(id: 'place' | 'knock' | 'draw' | 'slam' | 'pickup' | 'invalid' | 'shuffle'): void;
   haptic(cue: 'place' | 'knock' | 'domino'): void;
 }
 
@@ -659,6 +659,7 @@ export class TableScreen {
     let placed = false;
     let drew = false;
     let domino = false;
+    let dealt = false;
     const say = (ctx: BanterContext) => {
       const line = this.#banter.say(ctx);
       if (line) quip = line;
@@ -667,6 +668,7 @@ export class TableScreen {
     for (const e of events) {
       switch (e.type) {
         case 'hand-started':
+          dealt = true;
           this.#lastPlayed = null;
           this.#message = this.#openingLine(v);
           this.#mood = 'explaining';
@@ -736,11 +738,12 @@ export class TableScreen {
     // Presentation only — fired after the state is already applied; nothing waits on these.
     const a = this.#cb.audio;
     if (a) {
+      if (dealt) a.sfx('shuffle');
       if (domino) {
         a.sfx('slam');
         a.haptic('domino');
       } else if (placed) {
-        a.sfx('place');
+        a.sfx(slam ? 'slam' : 'place'); // Cousin slaps his doubles down
         a.haptic('place');
       }
       if (knocks.length) {
@@ -781,9 +784,11 @@ export class TableScreen {
       this.#selected = null;
       this.#status = reason ?? 'Not your turn.';
       this.render();
+      this.#cb.audio?.sfx('invalid'); // restrained: one soft low tone, the status line explains
       return;
     }
     this.#selected = this.#selected === id ? null : id;
+    if (this.#selected) this.#cb.audio?.sfx('pickup');
     const ends = v.legalMoves.filter((m) => m.tile === id);
     this.#status = this.#selected ? (v.line.tiles.length === 0 ? 'Tap the glowing spot to lead.' : ends.length > 1 ? `${tileShort(id)} fits both ends — choose one.` : 'Tap the glowing end to place it.') : '';
     this.render();

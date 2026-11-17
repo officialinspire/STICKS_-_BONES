@@ -26,8 +26,8 @@ function slug(name: string): string {
  * PWA: writes dist/sw.js from src/pwa/sw.js with this build's exact file lists.
  *   shell  — index.html, every emitted JS/CSS file (entry + AI worker), the
  *            manifest and the 192-px icons: the minimum to start and play.
- *   assets — the optimized runtime images (WebP derivatives) only. Never the PNG
- *            source sheets (the build fails if one is bundled), never music/video.
+ *   assets — the optimized runtime images (WebP derivatives) and the short SFX (WAV). Never the PNG
+ *            source sheets (the build fails if one is bundled), never music, ambience beds or video.
  * All paths are relative to sw.js, so the same build works under any subpath.
  * BUILD is a hash of every emitted file, so any change yields a new shell cache.
  */
@@ -39,7 +39,8 @@ export function pwaPlugin(): Plugin {
     generateBundle(_options, bundle) {
       const files = Object.keys(bundle).sort();
       const shell = ['index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-maskable-192.png', ...files.filter((f) => /\.(js|css|woff2)$/.test(f))];
-      const assets = files.filter((f) => /\.webp$/.test(f));
+      // Images + the short SFX (tactile sounds work offline). Never music, ambience beds or video.
+      const assets = files.filter((f) => /\.(webp|wav)$/.test(f));
       if (files.some((f) => /\.png$/.test(f))) this.error('a PNG source sheet is in the bundle; only WebP derivatives may be cached');
       const h = createHash('sha256');
       for (const f of files) {
@@ -67,7 +68,8 @@ export default defineConfig({
   define: { __SB_BUILD_TAG__: JSON.stringify(process.env.SB_BUILD_TAG ?? 'local') },
   build: {
     target: 'es2022',
-    assetsInlineLimit: 4096,
+    // Audio is never inlined into JS (decoded on demand after the first gesture); small images still may be.
+    assetsInlineLimit: (file: string) => (/\.(wav|mp3)$/.test(file) ? false : undefined),
     rolldownOptions: {
       output: {
         assetFileNames: (info) => {

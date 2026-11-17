@@ -127,6 +127,10 @@ export interface StoryDeps {
   endHand(): void;
   /** Central audio manager's story cue hook (no second playback system). */
   cue(c: StoryCue): void;
+  /** The story scene on screen (its audio profile), or null on the case file. */
+  audioScene(id: SceneId | null): void;
+  /** A new beat (or card) replaced the last one: cancel its unfinished cue sounds. */
+  beat(): void;
   /** Dev/test: fast AI timings. */
   readonly fast?: boolean;
 }
@@ -141,6 +145,7 @@ export function save(d: StoryDeps, p: StoryProgress): boolean {
 
 // ---- case file (Story home) --------------------------------------------------------
 export async function renderStoryHome(d: StoryDeps, notice?: string): Promise<void> {
+  d.audioScene(null);
   const { root } = d;
   // Warm the backdrop of the scene the player will see next (bounded queue, never at startup).
   const nextEnv = STAGING[(readStory(d.store).value?.sceneId ?? 'prologue') as SceneId].env;

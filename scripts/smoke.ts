@@ -25,7 +25,7 @@ if (!existsSync(join(dist, 'index.html'))) {
 const APP = '/STICKS_-_BONES/';
 const PORT = 5192;
 const ORIGIN = `http://localhost:${PORT}`;
-const TYPES: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.webp': 'image/webp', '.png': 'image/png', '.mp3': 'audio/mpeg', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
+const TYPES: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.webp': 'image/webp', '.png': 'image/png', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
 let down = false;
 const server = createServer((req, res) => {
   if (down) return void req.socket.destroy();

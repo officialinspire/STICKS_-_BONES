@@ -1,10 +1,11 @@
 /**
- * PLACEHOLDER sounds, synthesized in code. No sound effects or ambience have
- * been supplied by the owner; these exist so the audio pipeline (buses, caps,
- * scenes) is real and testable. They are NOT final audio — replace them with
- * approved files when available (see docs/AUDIO.md).
+ * PLACEHOLDER sounds, synthesized in code. The game now plays decoded local
+ * samples (src/audio/sounds.ts); these remain only as the fallback while a
+ * sample is still decoding, or if its file is missing or broken. They are NOT
+ * final audio. The old synthesized ambience bed is kept for tests and the
+ * audition page only — the game uses recorded beds (docs/AUDIO.md).
  */
-import type { SfxId } from './manager';
+import type { SynthId } from './manager';
 
 function noiseBuffer(ctx: BaseAudioContext, seconds: number): AudioBuffer {
   const len = Math.max(1, Math.floor(ctx.sampleRate * seconds));
@@ -28,8 +29,8 @@ function env(g: GainNode, t: number, peak: number, attack: number, decay: number
 }
 
 /** Build a placeholder sound into `out`; returns all source nodes and its length. */
-export function synthSfx(ctx: AudioContext, out: AudioNode, id: SfxId): { sources: AudioScheduledSourceNode[]; seconds: number } {
-  const t = ctx.currentTime + 0.005;
+export function synthSfx(ctx: AudioContext, out: AudioNode, id: SynthId, at = ctx.currentTime + 0.005): { sources: AudioScheduledSourceNode[]; seconds: number } {
+  const t = at;
   const sources: AudioScheduledSourceNode[] = [];
   const thump = (at: number, freq: number, peak: number, decay: number) => {
     const o = ctx.createOscillator();
@@ -78,6 +79,10 @@ export function synthSfx(ctx: AudioContext, out: AudioNode, id: SfxId): { source
     case 'tap':
       click(t, 3200, 0.2, 0.025);
       return { sources, seconds: 0.06 };
+    case 'thud': // one knuckle knock (motif fallback: one voice per knock, so the count stays exact)
+      thump(t, 185, 0.42, 0.08);
+      click(t, 900, 0.22, 0.04);
+      return { sources, seconds: 0.15 };
   }
 }
 

@@ -929,13 +929,78 @@ Details: `docs/CINEMATICS.md`. Story checklist: `docs/STORY_BUILD_STATUS.md`.
 - **Audio:** story cue hooks other than the knock are reserved, waiting for the sound bank.
 - **Browsers and devices:** only Chromium was tested.
 
+## Audio stage — Scene soundtrack and tactile sound ✅ (2026-11-17)
+
+### Completed
+
+- **Audit.** Kept the two approved music tracks. The SFX and the patio bed were code-synthesized
+  placeholders: they're replaced by **selected local CC0 samples**. The synth stays only as the
+  fallback while a sample decodes or if its file is missing.
+- **Sources and licences** (`docs/SOUND_SOURCES.md`, generated from `src/assets/sound-manifest.json`):
+  - Kenney Interface Sounds 1.0 and Casino Audio 1.1, licence read from the `License.txt` in each
+    zip. kenney.nl returned 403 here, so Kenney's own OpenGameArt uploads were used.
+  - BigSoundBank (Joseph Sardin), CC0 per sound page.
+  - Freesound was **not** used; no sound API exists at runtime; no credentials anywhere.
+  - Every file records source, creator, licence, edits, bytes, sha256 and `final: false`.
+    `npm run assets:verify` enforces CC0 and exact hashes.
+- **One manager** (`src/audio/manager.ts`) now owns:
+  - SFX: decoded buffers, matched variants, no back-to-back repeats, restrained variation,
+    instance limits, quiet defaults.
+  - Ambience beds on their own bus with gentle cross-fades (≤ 2 beds).
+  - Per-scene story **profiles** (`src/audio/profiles.ts`): one track or none, plus a bed, for
+    dialogue and hand.
+  - Story **cues** scheduled on the audio clock, with cancellation.
+- **The motif** is exact: three matched knocks 0.62 s apart, then the answer from beyond
+  1.15 s after the third. The prologue splits it across its two beats; soft and single variants
+  are used for the taps, the domino box, the gate and "one quiet knock". The fake speaker and the
+  trail voice are **caption-only** (no impersonation).
+- **No ghost sounds:** cue voices are cancelled on each beat, skip, card, scene or profile change,
+  reset and backgrounding. A resumed scene restores mix-state cues but never replays its knock.
+- **UI and table sounds:** one delegated listener (capture phase; refused during init/intro, so
+  nothing leaks into the credit); pickup / invalid on tile taps; shuffle on fresh deals; Cousin
+  slaps his doubles.
+- **Scene ambience on by default** (real recordings now). The short SFX are precached for offline
+  play; music, beds and video are never cached.
+- **Music briefs** for the missing night-investigation bed, cave suspense bed and stingers
+  (`docs/MUSIC_BRIEFS.md`); no music was generated.
+- **Audition page** (`/dev/audio-audition.html`): bed wraps exactly as the game loops them, the
+  motif, and every SFX variant, for the owner's listening pass.
+- **New browser suite** `npm run audio`.
+
+### Commands run and results (Chromium)
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | pass: 313 tests in 34 files, lint, assets:verify (30 SFX + 5 beds, CC0, hashes), all budgets (code 279/300 KB, sfx 554/720, ambience 2035/2200, total 13558/13900) |
+| `npm run audio` (new) | pass: A–J (see `docs/AUDIO.md` § Verification) |
+| `npm run story:e2e` | pass |
+| `npm run e2e` / `qa` / `a11y` / `pwa` / `smoke` | running at the time of this commit; results follow in the next commit |
+
+### Bugs found and fixed while testing
+
+- The first bed build's ffmpeg graph silently dropped the loop cross-fade (beds 3 s short, hard
+  wrap; patio's wrap jump was 43× a typical step). Rebuilt with an exact equal-power cross-fade
+  in numpy and one static gain; every wrap is now inside the bed's normal step range.
+- Resuming exactly on a knock beat replayed the knock.
+- A fresh match's first deal had no shuffle (it happens before the table subscribes).
+- Small WAVs were being inlined into the JS bundle as data URLs; audio is no longer inlined.
+
+### Known issues
+
+- **Nothing has been listened to.** This environment has no audio output: no headphone or
+  speaker check, and no seam audition by ear. All sounds are `final: false`; all seams are
+  `auditioned: false`.
+- Tile sounds are casino-chip/card **stand-ins** until real dominoes are recorded.
+- Missing: the intro video (fallback works), commissioned music, the speaker recording.
+- Only Chromium was tested (Safari's MP3 decoding may add priming; `src/audio/loop.ts` trims it).
+
 ## Next stage
 
-**Stage 13: Story chapter play.** The detailed list is in `docs/STORY_BUILD_STATUS.md`:
-- one guarded hand per chapter, with outcome inserts, notebook/evidence progression,
-  chapter replay and the epilogue;
-- the interrupted resilience items: update-time save retry, music recovery, AI worker
-  timeouts;
+The detailed list is in `docs/STORY_BUILD_STATUS.md`:
+- the interrupted resilience items: update-time save retry, bounded music recovery, AI worker
+  timeouts / `messageerror` / cancellation;
+- cast portraits once their expressions are labelled;
+- Finish Hand with AI assistance, skip with recap;
 - version alignment.
 
 Still waiting on the owner:
@@ -943,5 +1008,5 @@ Still waiting on the owner:
 - enabling Pages and authorising the merge;
 - the intro video;
 - cast expression labels;
-- the sound bank;
+- a listening pass on the selected sounds and bed seams; commissioned music; recorded domino foley;
 - real-device and Firefox/WebKit playtests.

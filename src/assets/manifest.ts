@@ -465,7 +465,7 @@ export const IMAGE_ASSETS = [
 export type ImageAssetId = (typeof IMAGE_ASSETS)[number]['id'];
 
 export const MISSING_ASSETS: readonly MissingAsset[] = [
-  { id: 'audio.sfx', kind: 'audio', description: 'Tile place, knock (pass), draw, slam sound effects and patio ambience.', fallback: 'Code-synthesized PLACEHOLDER sounds (src/audio/synth.ts); not final audio.' },
+  { id: 'audio.sfx', kind: 'audio', description: 'Owner-approved or recorded domino foley (real tiles on wood), the contractor speaker recording and the commissioned music beds/stingers (docs/MUSIC_BRIEFS.md).', fallback: 'Selected CC0 samples and beds (src/assets/sound-manifest.json, docs/SOUND_SOURCES.md; tile sounds are casino stand-ins, not final); captions for the speaker; silence + ambience instead of the missing beds. Synthesized sounds only while a sample decodes or if a file is missing.' },
   { id: 'audio.voice', kind: 'audio', description: 'Spoken lines for Cousin.', fallback: 'Subtitles (speech bubble + live region) and expressions only.' },
   { id: 'video.intro', kind: 'video', description: 'INSPIRE studio intro, expected at assets/video/inspiresoftwareintro.mp4.', fallback: 'Start screen fades through black straight to the menu.' },
   { id: 'image.opponents', kind: 'image', description: 'Opponent / partner seat portraits for AI and second-human seats.', fallback: 'Seat badges with initials. Story cast atlases (Vale, Luz, Marisol, Rafa) were supplied on Nov 16, 2026 and are catalogued as variants; they need expression labels and WebP derivatives before runtime use.' },

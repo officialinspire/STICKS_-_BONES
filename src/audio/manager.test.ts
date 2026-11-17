@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_AUDIO, type AudioSettings } from '../app/settings';
 import type { Scheduler } from '../app/session';
-import { AudioManager, MAX_SFX, SFX_LIMIT, type AudioBackend, type SfxHandle, type SfxId, type TrackId } from './manager';
+import { AudioManager, MAX_SFX, SFX_LIMIT, STATE_CUES, type AudioBackend, type SfxHandle, type SfxId, type TrackId, type Voice } from './manager';
+import { MOTIF, VARIANTS, type BedId } from './sounds';
 
 /** Fake backend: records calls; play() resolution is controlled by the test. */
 function fakeBackend(opts: { missing?: TrackId[]; reject?: boolean; unlock?: boolean } = {}) {
@@ -11,8 +12,10 @@ function fakeBackend(opts: { missing?: TrackId[]; reject?: boolean; unlock?: boo
   const errored: Partial<Record<TrackId, () => void>> = {};
   const audible = new Set<TrackId>();
   const gains: Record<string, number> = {};
-  const sfx: { id: SfxId; end: () => void; stopped: boolean }[] = [];
-  let ambience = false;
+  const sfx: { id: Voice; end: () => void; stopped: boolean }[] = [];
+  let ambience: { bed: BedId | null; level: number } = { bed: null, level: 0 };
+  const beds: (BedId | null)[] = [];
+  const preloaded: string[] = [];
   const b: AudioBackend = {
     unlock: async () => opts.unlock ?? true,
     suspend: () => log.push('suspend'),
@@ -58,9 +61,13 @@ function fakeBackend(opts: { missing?: TrackId[]; reject?: boolean; unlock?: boo
       };
       return h;
     },
-    ambience: (on) => void (ambience = on),
+    preloadSamples: (ids) => void preloaded.push(...ids),
+    ambience: (bed, level) => {
+      ambience = { bed, level };
+      beds.push(bed);
+    },
   };
-  return { b, log, pendingPlays, ended, errored, audible, gains, sfx, ambienceOn: () => ambience, resolveAll: (ok = true) => pendingPlays.splice(0).forEach((p) => p.resolve(ok)) };
+  return { b, log, pendingPlays, ended, errored, audible, gains, sfx, beds, preloaded, ambienceOn: () => ambience.bed !== null, ambience: () => ambience, resolveAll: (ok = true) => pendingPlays.splice(0).forEach((p) => p.resolve(ok)) };
 }
 
 function manualScheduler() {
@@ -296,8 +303,221 @@ describe('AudioManager', () => {
     m.setScene('menu');
     expect(fb.ambienceOn()).toBe(false);
     m.setScene('gameplay');
-    expect(fb.ambienceOn()).toBe(true);
+    expect(fb.ambience().bed).toBe('amb-patio');
     m.setLevels({ ...m.levels, ambienceOn: false });
     expect(fb.ambienceOn()).toBe(false);
+  });
+});
+
+/** Sounding cue/SFX voices in the fake backend (not stopped and not finished). */
+const live = (fb: ReturnType<typeof fakeBackend>) => fb.sfx.filter((s) => !s.stopped);
+
+describe('AudioManager: samples, variations and voices', () => {
+  it('plays decoded-sample voices with matched variants, never the same file twice in a row, within restrained gain/rate', async () => {
+    const { m, fb } = make();
+    await m.unlock();
+    m.setScene('gameplay');
+    expect(fb.preloaded.length).toBeGreaterThan(20); // short samples decode once audio is live
+    const picks: string[] = [];
+    for (let i = 0; i < 30; i++) {
+      m.playSfx('place');
+      const v = fb.sfx.at(-1)!.id;
+      picks.push(v.sample!);
+      expect(VARIANTS.place).toContain(v.sample);
+      expect(v.rate).toBeGreaterThanOrEqual(0.97);
+      expect(v.rate).toBeLessThanOrEqual(1.03);
+      expect(v.gain).toBeGreaterThan(0.8 * 10 ** (-1.6 / 20));
+      expect(v.gain).toBeLessThan(0.8 * 10 ** (1.6 / 20));
+      m.stopAllSfx();
+    }
+    for (let i = 1; i < picks.length; i++) expect(picks[i]).not.toBe(picks[i - 1]);
+    expect(new Set(picks).size).toBe(VARIANTS.place.length);
+  });
+
+  it('every SFX id maps to at least one local sample', () => {
+    for (const id of Object.keys(SFX_LIMIT) as SfxId[]) expect(VARIANTS[id].length).toBeGreaterThan(0);
+  });
+
+  it('silent play: master or SFX level at zero sends nothing to the backend', async () => {
+    for (const levels of [{ sfx: 0 }, { master: 0 }, { muted: true }]) {
+      const { m, fb } = make(levels);
+      await m.unlock();
+      m.setScene('story');
+      expect(m.playSfx('select')).toBe(false);
+      expect(m.cue('knock-motif')).toBe(false);
+      expect(fb.sfx).toHaveLength(0);
+    }
+  });
+});
+
+describe('AudioManager: story profiles, cues and the knock motif', () => {
+  async function story(levels: Partial<AudioSettings> = {}) {
+    const r = make({ ambienceOn: true, ...levels });
+    await r.m.unlock();
+    r.m.setStoryProfile('chapter-6');
+    r.m.setScene('story');
+    return r;
+  }
+
+  it('the motif is exact: three identical-spacing knocks, then one answer from beyond after a longer gap', async () => {
+    const { m, fb } = await story();
+    expect(m.cue('knock-motif')).toBe(true);
+    const v = fb.sfx.map((s) => s.id);
+    expect(v.map((x) => x.sample)).toEqual([...MOTIF.knocks, MOTIF.beyond]);
+    const d = v.map((x) => x.delay);
+    expect(d[1]! - d[0]!).toBeCloseTo(MOTIF.interval, 6);
+    expect(d[2]! - d[1]!).toBeCloseTo(MOTIF.interval, 6);
+    expect(d[3]! - d[2]!).toBeCloseTo(MOTIF.answerGap, 6);
+    expect(MOTIF.answerGap).toBeGreaterThan(MOTIF.interval * 1.5); // the answer is clearly separate
+    expect(new Set(v.slice(0, 3).map((x) => `${x.gain}/${x.rate}`)).size).toBe(1); // matched, never varied
+    for (const x of v) expect(x.rate).toBe(1);
+    // Every time, the same.
+    m.beat();
+    m.cue('knock-motif');
+    expect(fb.sfx.slice(4).map((s) => [s.id.sample, s.id.delay])).toEqual(v.map((x) => [x.sample, x.delay]));
+  });
+
+  it('prologue split: "three measured knocks" then, on the next beat, the fourth alone', async () => {
+    const { m, fb } = await story();
+    m.cue('knock-three');
+    expect(fb.sfx.map((s) => s.id.sample)).toEqual([...MOTIF.knocks]);
+    m.beat();
+    m.cue('knock-beyond');
+    expect(fb.sfx.at(-1)!.id.sample).toBe(MOTIF.beyond);
+    expect(fb.sfx.at(-1)!.id.delay).toBe(0);
+  });
+
+  it('the fake speaker and the whisper are caption-only: no sound, no voice impersonation', async () => {
+    const { m, fb } = await story();
+    expect(m.cue('speaker')).toBe(false);
+    expect(m.cue('whisper')).toBe(false);
+    expect(fb.sfx).toHaveLength(0);
+    expect(m.stats.cuesCaptionOnly).toBe(2);
+  });
+
+  it('no ghost sounds: a new beat, scene change, profile change, reset or backgrounding cancels every unfinished cue voice', async () => {
+    for (const leave of [(m: AudioManager) => m.beat(), (m: AudioManager) => m.setScene('menu'), (m: AudioManager) => m.setStoryProfile('chapter-7'), (m: AudioManager) => m.reset(), (m: AudioManager) => m.setHidden(true)]) {
+      const { m, fb } = await story();
+      m.cue('knock-motif');
+      expect(live(fb)).toHaveLength(4);
+      leave(m);
+      expect(live(fb)).toHaveLength(0);
+      expect(m.pendingCueVoices()).toBe(0);
+    }
+  });
+
+  it('rapid advance through knock beats leaves at most one cue’s voices alive', async () => {
+    const { m, fb } = await story();
+    for (let i = 0; i < 10; i++) {
+      m.beat();
+      m.cue(i % 2 ? 'knock-motif' : 'knock-three');
+      expect(live(fb).length).toBeLessThanOrEqual(4);
+    }
+    m.beat();
+    expect(live(fb)).toHaveLength(0);
+  });
+
+  it('a second cue in the same beat replaces the first (bounded voices)', async () => {
+    const { m, fb } = await story();
+    m.cue('knock-motif');
+    m.cue('water');
+    expect(live(fb)).toHaveLength(1);
+  });
+
+  it('cues are refused before unlock, in the intro, while paused and when muted; nothing is queued for later', async () => {
+    const r = make();
+    r.m.setStoryProfile('prologue');
+    r.m.setScene('story');
+    expect(r.m.cue('knock-three')).toBe(false);
+    await r.m.unlock();
+    expect(r.fb.sfx).toHaveLength(0); // unlocking never replays a refused cue
+    r.m.setScene('paused');
+    expect(r.m.cue('knock-three')).toBe(false);
+    r.m.setScene('intro');
+    expect(r.m.cue('knock-three')).toBe(false);
+    expect(r.fb.sfx).toHaveLength(0);
+  });
+
+  it('profiles choose the bed and the single track; supernatural scenes have no music', async () => {
+    const { m, fb, sc } = await story();
+    expect(fb.ambience().bed).toBe('amb-cave');
+    expect(fb.log.some((l) => l.startsWith('play'))).toBe(false);
+    m.setStoryProfile('chapter-4');
+    expect(fb.ambience().bed).toBe('amb-promenade');
+    m.setStoryProfile('chapter-1');
+    expect(fb.ambience().bed).toBe('amb-patio');
+    expect(fb.log).toContain('play:menu');
+    fb.resolveAll();
+    await tick();
+    expect(fb.log).toContain('fade:menu:0.45'); // low under the talk
+    // The hand: the table track, still one source at a time.
+    m.setScene('gameplay');
+    sc.flushAll();
+    fb.resolveAll();
+    await tick();
+    expect([...fb.audible]).toEqual(['gameplay']);
+    expect(fb.ambience().bed).toBe('amb-patio');
+    // Back to a no-music profile: the track fades out and nothing replaces it.
+    m.setStoryProfile('chapter-5');
+    m.setScene('story');
+    sc.flushAll();
+    expect(fb.audible.size).toBe(0);
+    expect(fb.ambience().bed).toBe('amb-jungle');
+  });
+
+  it('surf swells the bed only for its beat; ambience-off holds for the scene and is a replayable state cue', async () => {
+    const { m, fb } = await story();
+    m.setStoryProfile('chapter-4');
+    const base = fb.ambience().level;
+    m.cue('surf');
+    expect(fb.ambience().level).toBeGreaterThan(base);
+    m.beat();
+    expect(fb.ambience().level).toBe(base);
+    m.setStoryProfile('epilogue');
+    m.cue('ambience-off');
+    expect(fb.ambience().bed).toBeNull();
+    m.beat();
+    expect(fb.ambience().bed).toBeNull();
+    expect(STATE_CUES.has('ambience-off')).toBe(true);
+    expect(STATE_CUES.has('knock-motif')).toBe(false); // one-shots never replay on resume
+  });
+
+  it('silent caption changes never duck or touch the music', async () => {
+    const { m, fb } = await story();
+    m.setStoryProfile('chapter-1');
+    fb.resolveAll();
+    await tick();
+    const before = fb.log.length;
+    for (let i = 0; i < 20; i++) m.beat();
+    expect(fb.log.slice(before).filter((l) => l.startsWith('fade') || l.startsWith('play') || l.startsWith('pause'))).toEqual([]);
+  });
+
+  it('the user’s levels stay authoritative: profiles and cues never change bus gains', async () => {
+    const { m, fb } = await story({ music: 0.2, ambience: 0.3, sfx: 0.4 });
+    const g = { ...fb.gains };
+    m.setStoryProfile('chapter-1');
+    m.cue('surf');
+    m.cue('knock-motif');
+    m.beat();
+    expect(fb.gains).toEqual(g);
+  });
+
+  it('backgrounding drops the bed; foregrounding restores the current scene’s bed and track', async () => {
+    const { m, fb } = await story();
+    m.setHidden(true);
+    expect(fb.ambienceOn()).toBe(false);
+    m.setHidden(false);
+    await tick();
+    expect(fb.ambience().bed).toBe('amb-cave');
+  });
+
+  it('a pause keeps no bed; resuming the hand restores the profile’s hand mix', async () => {
+    const { m, fb } = await story();
+    m.setScene('gameplay');
+    expect(fb.ambience().bed).toBe('amb-cave');
+    m.setScene('paused');
+    expect(fb.ambienceOn()).toBe(false);
+    m.setScene('gameplay');
+    expect(fb.ambience().bed).toBe('amb-cave');
   });
 });

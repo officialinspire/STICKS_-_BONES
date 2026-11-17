@@ -15,7 +15,7 @@
  *   shell:<build>  — the minimal app shell (HTML, JS, CSS, manifest, small icons).
  *                    All-or-nothing (cache.addAll): install fails and retries on
  *                    the next visit if any shell file is missing.
- *   assets:v1      — the optimized approved images (WebP derivatives). Best effort,
+ *   assets:v1      — the optimized approved images (WebP derivatives) and the short SFX (WAV). Best effort,
  *                    2 at a time, quota errors reported to the page, never fatal.
  * Music and video are NOT cached (streamed; the game is silent offline).
  */

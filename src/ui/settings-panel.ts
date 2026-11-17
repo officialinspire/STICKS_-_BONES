@@ -21,7 +21,7 @@ export function settingsPanelHtml(s: Settings): string {
       ${slider('sfx', 'Sound effects', '(placeholder sounds)')}
       ${slider('voice', 'Voice', '(no recorded voice yet — subtitles only)')}
       ${slider('ambience', 'Ambience')}
-      <label class="check"><input type="checkbox" name="set-ambience" ${a.ambienceOn ? 'checked' : ''}> Quiet patio ambience during play <small>(placeholder)</small></label>
+      <label class="check"><input type="checkbox" name="set-ambience" ${a.ambienceOn ? 'checked' : ''}> Scene ambience <small>(patio, surf, jungle, cave)</small></label>
       ${hapticsSupported() ? `<label class="check"><input type="checkbox" name="set-haptics" ${s.haptics ? 'checked' : ''}> Vibration (haptics)</label>` : '<p class="note">Vibration isn’t available on this device.</p>'}
     </fieldset>
     <fieldset><legend>Cousin’s language</legend><div class="row">

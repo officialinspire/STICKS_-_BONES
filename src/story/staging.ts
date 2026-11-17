@@ -55,8 +55,8 @@ export const STAGING: Readonly<Record<SceneId, SceneStaging>> = {
     establishing: 'push',
     cousin: false,
     cues: [
-      { at: '[Water. A narrow line of warm light', cues: [{ kind: 'threshold', to: 'on' }, { kind: 'pulse' }, { kind: 'audio', cue: 'knock' }] },
-      { at: '[No voice answers. A fourth knock', cues: [{ kind: 'pulse' }, { kind: 'audio', cue: 'knock' }, { kind: 'threshold', to: 'bright' }] },
+      { at: '[Water. A narrow line of warm light', cues: [{ kind: 'threshold', to: 'on' }, { kind: 'pulse' }, { kind: 'audio', cue: 'knock-three' }] },
+      { at: '[No voice answers. A fourth knock', cues: [{ kind: 'pulse' }, { kind: 'audio', cue: 'knock-beyond' }, { kind: 'threshold', to: 'bright' }] },
       { at: '[Cut to the neighborhood patio at dawn.', cues: [{ kind: 'threshold', to: 'off' }, { kind: 'backdrop', env: 'env.neighborhood-patio', light: 'dawn', focus: '50% 55%' }, { kind: 'cousin', to: 'in' }, { kind: 'expr', mood: 'thinking' }] },
       { at: '[A neighbor calls “Cousin!” outside.', cues: [{ kind: 'expr', mood: 'smirk' }] },
     ],
@@ -111,7 +111,7 @@ export const STAGING: Readonly<Record<SceneId, SceneStaging>> = {
       { at: '[Let the surf hold the silence.', cues: [{ kind: 'audio', cue: 'surf' }, { kind: 'warmth', on: true }] },
       { at: '[He looks out over the water.]', cues: [{ kind: 'expr', mood: 'neutral' }] },
       { at: '[They share a quiet smile. Under the bench, a thin crescent of water', cues: [{ kind: 'water', to: 'crescent' }, { kind: 'audio', cue: 'water' }] },
-      { at: '[Three light taps beneath the bench.', cues: [{ kind: 'pulse' }, { kind: 'audio', cue: 'knock' }, { kind: 'expr', mood: 'surprised' }] },
+      { at: '[Three light taps beneath the bench.', cues: [{ kind: 'pulse' }, { kind: 'audio', cue: 'knock-motif-soft' }, { kind: 'expr', mood: 'surprised' }] },
     ],
   },
   'chapter-5': {
@@ -137,13 +137,15 @@ export const STAGING: Readonly<Record<SceneId, SceneStaging>> = {
     handEnv: null,
     handNote: 'Modern inspection rest area near the entrance. The ancient platform stays untouched.',
     cues: [
+      // The contractor speaker's voice and repeating cough: CAPTION ONLY (no recording supplied; never impersonated).
+      { at: '[A cough. The identical cough repeats', cues: [{ kind: 'audio', cue: 'speaker' }] },
       { at: '[The group documents the equipment.', cues: [{ kind: 'audio', cue: 'water' }] },
       { at: '[Roberto turns toward the waterfall. The warm line of reflected light', cues: [{ kind: 'threshold', to: 'on' }, { kind: 'expr', mood: 'neutral' }] },
-      { at: '[He nods. Three knocks. A fourth answers from beyond the platform.', cues: [{ kind: 'pulse' }, { kind: 'audio', cue: 'knock' }] },
+      { at: '[He nods. Three knocks. A fourth answers from beyond the platform.', cues: [{ kind: 'pulse' }, { kind: 'audio', cue: 'knock-motif' }] },
       { at: '[Water lifts in a thin curve along the stone', cues: [{ kind: 'water', to: 'rise' }, { kind: 'audio', cue: 'water' }] },
       { at: '[The reflection brightens as if a door has opened farther.', cues: [{ kind: 'threshold', to: 'bright' }, { kind: 'boundary', show: true }] },
       { at: '[Roberto kneels on the modern walkway, staying behind the agreed boundary.]', cues: [{ kind: 'boundary', show: true }, { kind: 'expr', mood: 'thinking' }] },
-      { at: '[The lifted water lowers.', cues: [{ kind: 'water', to: 'recede' }, { kind: 'threshold', to: 'dim' }, { kind: 'pulse' }, { kind: 'boundary', show: false }] },
+      { at: '[The lifted water lowers.', cues: [{ kind: 'water', to: 'recede' }, { kind: 'threshold', to: 'dim' }, { kind: 'pulse' }, { kind: 'boundary', show: false }, { kind: 'audio', cue: 'knock-one' }] },
       { at: '[Cut to the entrance rest area.', cues: [{ kind: 'threshold', to: 'off' }, { kind: 'water', to: 'none' }, { kind: 'backdrop', env: null, light: 'rest-area' }, { kind: 'warmth', on: true }] },
       { at: '[She takes his hand. He lets her.]', cues: [{ kind: 'expr', mood: 'neutral' }] },
     ],
@@ -171,8 +173,8 @@ export const STAGING: Readonly<Record<SceneId, SceneStaging>> = {
       { at: '[A simple dinner has been interrupted by neither a laptop nor a case folder.', cues: [{ kind: 'audio', cue: 'dinner' }, { kind: 'expr', mood: 'smirk' }] },
       // A mutual moment: warmth and the caption only — never one portrait standing in for two people.
       { at: '[She touches his jaw, giving him a moment to meet her halfway. They kiss.', cues: [{ kind: 'warmth', on: true }] },
-      { at: '[A knock at the gate.', cues: [{ kind: 'pulse' }, { kind: 'audio', cue: 'knock' }, { kind: 'expr', mood: 'laughing' }] },
-      { at: '[No one stands outside. A shallow line of water lies beneath the gate.', cues: [{ kind: 'water', to: 'line' }, { kind: 'pulse' }, { kind: 'audio', cue: 'knock' }, { kind: 'expr', mood: 'thinking' }] },
+      { at: '[A knock at the gate.', cues: [{ kind: 'pulse' }, { kind: 'audio', cue: 'knock-one' }, { kind: 'expr', mood: 'laughing' }] },
+      { at: '[No one stands outside. A shallow line of water lies beneath the gate.', cues: [{ kind: 'water', to: 'line' }, { kind: 'pulse' }, { kind: 'audio', cue: 'knock-motif-soft' }, { kind: 'expr', mood: 'thinking' }] },
       { at: '[He looks toward the doorway. The light stays on.]', cues: [{ kind: 'threshold', to: 'on' }] },
       { at: '[A beat. His familiar grin returns, with less armor behind it.]', cues: [{ kind: 'expr', mood: 'smirk' }] },
       { at: '[The water goes still.', cues: [{ kind: 'water', to: 'still' }, { kind: 'audio', cue: 'ambience-off' }] },

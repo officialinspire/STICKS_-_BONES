@@ -23,6 +23,7 @@
     "icons:build": "tsx scripts/build-icons.ts",
     "story:build": "tsx scripts/build-story.ts",
     "story:e2e": "tsx scripts/story.ts",
+    "audio": "tsx scripts/audio.ts",
     "pwa": "tsx scripts/pwa.ts",
     "matches": "tsx scripts/matches.ts",
     "smoke": "tsx scripts/smoke.ts",

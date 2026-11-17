@@ -1,12 +1,24 @@
 /**
  * Browser backend for AudioManager: Web Audio buses (master → music / sfx /
  * voice / ambience) with music streamed from <audio> elements through
- * per-track gain nodes (no full-file decode). The AudioContext is created only
- * inside the user-gesture unlock, so no autoplay warnings fire at startup.
- * Every play() promise is caught; missing files report through onError.
+ * per-track gain nodes (no full-file decode). Short SFX and the ambience beds
+ * are fetched once and DECODED into buffers (bounded: one buffer per file).
+ * The AudioContext is created only inside the user-gesture unlock, so no
+ * autoplay warnings fire at startup. Every play() promise and decode is caught;
+ * missing files report through onError or fall back (synth placeholder for SFX,
+ * silence for beds).
  */
-import type { AudioBackend, Bus, SfxHandle, SfxId, TrackId } from './manager';
-import { ambienceBuffer, synthSfx } from './synth';
+import type { AudioBackend, Bus, SfxHandle, TrackId, Voice } from './manager';
+import { loopBounds } from './loop';
+import { bedUrl, sampleUrl, type BedId } from './sounds';
+import { synthSfx } from './synth';
+
+type Decoded = AudioBuffer | 'loading' | 'missing' | 'broken';
+interface BedVoice {
+  id: BedId;
+  src: AudioBufferSourceNode;
+  gain: GainNode;
+}
 
 interface Track {
   el: HTMLAudioElement;
@@ -22,7 +34,13 @@ export class WebAudioBackend implements AudioBackend {
   #pendingGain = new Map<'master' | Bus, number>();
   #tracks = new Map<TrackId, Track>();
   #urls: Partial<Record<TrackId, string>>;
-  #ambience: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
+  #buffers = new Map<string, Decoded>();
+  #waiters = new Map<string, (() => void)[]>();
+  /** The bed currently sounding (or fading in) and the ones fading out (bounded to one). */
+  #bed: BedVoice | null = null;
+  #bedOut: BedVoice | null = null;
+  #wantBed: { id: BedId | null; level: number; gen: number } = { id: null, level: 0, gen: 0 };
+  readonly stats = { decoded: 0, decodeFailed: 0, missing: 0, synthFallback: 0, bedStarts: 0, bedLoops: [] as { id: string; start: number; end: number; length: number }[] };
 
   constructor(urls: Partial<Record<TrackId, string>>, gainDb: Partial<Record<TrackId, number>>) {
     this.#urls = urls;
@@ -146,25 +164,85 @@ export class WebAudioBackend implements AudioBackend {
     if (t) t.error = cb;
   }
 
-  playSfx(id: SfxId): SfxHandle | null {
+  /** Fetch + decode one file into the bounded buffer cache. Resolves when it is usable (or known unusable). */
+  #decode(key: string, url: string | null): void {
+    const ctx = this.#ctx;
+    if (!ctx || this.#buffers.has(key)) return;
+    if (!url) {
+      this.#buffers.set(key, 'missing');
+      this.stats.missing++;
+      return;
+    }
+    this.#buffers.set(key, 'loading');
+    const done = (v: Decoded) => {
+      this.#buffers.set(key, v);
+      for (const w of this.#waiters.get(key) ?? []) w();
+      this.#waiters.delete(key);
+    };
+    fetch(url)
+      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((ab) => ctx.decodeAudioData(ab))
+      .then((buf) => {
+        this.stats.decoded++;
+        done(buf);
+      })
+      .catch(() => {
+        this.stats.decodeFailed++;
+        done('broken'); // never retried in a loop: the sound falls back for the rest of the session
+      });
+  }
+
+  preloadSamples(ids: readonly string[]): void {
+    for (const id of ids) this.#decode(id, sampleUrl(id));
+  }
+
+  playSfx(v: Voice): SfxHandle | null {
     const ctx = this.#ctx;
     const bus = this.#bus.get('sfx');
     if (!ctx || !bus || ctx.state !== 'running') return null;
-    const { sources, seconds } = synthSfx(ctx, bus, id);
+    const startAt = ctx.currentTime + 0.005 + Math.max(0, v.delay);
+    const gain = ctx.createGain();
+    gain.gain.value = v.gain;
+    gain.connect(bus);
+    let sources: AudioScheduledSourceNode[];
+    let seconds: number;
+    const buf = v.sample ? this.#buffers.get(v.sample) : undefined;
+    if (buf instanceof AudioBuffer) {
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.playbackRate.value = v.rate;
+      src.connect(gain);
+      src.start(startAt);
+      sources = [src];
+      seconds = buf.duration / v.rate;
+    } else {
+      // Not decoded (yet), missing or broken: the synthesized placeholder, one voice per sound.
+      if (v.sample && !this.#buffers.has(v.sample)) this.#decode(v.sample, sampleUrl(v.sample));
+      this.stats.synthFallback++;
+      ({ sources, seconds } = synthSfx(ctx, gain, v.synth, startAt));
+    }
     let done = false;
     let cb: (() => void) | null = null;
     const finish = () => {
       if (done) return;
       done = true;
       cb?.();
+      // Disconnect after any release ramp has finished.
+      window.setTimeout(() => gain.disconnect(), 120);
     };
-    const timer = window.setTimeout(finish, seconds * 1000 + 60);
+    const timer = window.setTimeout(finish, (startAt - ctx.currentTime + seconds) * 1000 + 60);
     return {
       stop: () => {
+        if (done) return;
         clearTimeout(timer);
+        const now = ctx.currentTime;
+        // Not started yet: cancel outright. Sounding: a 30 ms release, no click.
+        gain.gain.cancelScheduledValues(now);
+        gain.gain.setValueAtTime(gain.gain.value, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.03);
         for (const s of sources) {
           try {
-            s.stop();
+            s.stop(now < startAt ? 0 : now + 0.035);
           } catch {
             /* already stopped */
           }
@@ -175,29 +253,88 @@ export class WebAudioBackend implements AudioBackend {
     };
   }
 
-  ambience(on: boolean, fadeSec: number): void {
+  ambience(bed: BedId | null, level: number, fadeSec: number): void {
+    const gen = this.#wantBed.gen + 1;
+    this.#wantBed = { id: bed, level, gen };
     const ctx = this.#ctx;
     const bus = this.#bus.get('ambience');
     if (!ctx || !bus) return;
+    const fade = Math.max(0.01, fadeSec);
     const now = ctx.currentTime;
-    if (on && !this.#ambience) {
-      const src = ctx.createBufferSource();
-      src.buffer = ambienceBuffer(ctx);
-      src.loop = true;
-      const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0, now);
-      gain.gain.linearRampToValueAtTime(0.06, now + Math.max(0.01, fadeSec)); // very quiet bed
-      src.connect(gain).connect(bus);
-      src.start();
-      this.#ambience = { src, gain };
-    } else if (!on && this.#ambience) {
-      const a = this.#ambience;
-      this.#ambience = null;
-      a.gain.gain.cancelScheduledValues(now);
-      a.gain.gain.setValueAtTime(a.gain.gain.value, now);
-      a.gain.gain.linearRampToValueAtTime(0, now + Math.max(0.01, fadeSec));
-      a.src.stop(now + Math.max(0.01, fadeSec) + 0.05);
+    const ramp = (g: GainNode, to: number, sec: number) => {
+      g.gain.cancelScheduledValues(now);
+      g.gain.setValueAtTime(g.gain.value, now);
+      g.gain.linearRampToValueAtTime(to, now + sec);
+    };
+    if (this.#bed && this.#bed.id === bed) {
+      ramp(this.#bed.gain, level, fade); // same bed: only its level moves
+      return;
     }
+    // Retire the current bed (gentle fade); a bed still fading from before is cut at once (≤ 2 beds ever).
+    if (this.#bedOut) this.#stopBed(this.#bedOut, 0);
+    this.#bedOut = null;
+    if (this.#bed) {
+      const old = this.#bed;
+      this.#bed = null;
+      ramp(old.gain, 0, fade);
+      this.#stopBed(old, fade + 0.05);
+      this.#bedOut = old;
+    }
+    if (!bed) return;
+    const key = `bed:${bed}`;
+    const start = () => {
+      if (this.#wantBed.gen !== gen || !this.#ctx) return; // superseded while decoding: never start late
+      const buf = this.#buffers.get(key);
+      if (!(buf instanceof AudioBuffer)) return; // missing or broken: silence, not a placeholder
+      const c = this.#ctx;
+      const t = c.currentTime;
+      const src = c.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      const chans = Array.from({ length: buf.numberOfChannels }, (_, i) => buf.getChannelData(i));
+      const lb = loopBounds(chans, Math.floor(buf.sampleRate * 0.2));
+      src.loopStart = lb.start / buf.sampleRate;
+      src.loopEnd = lb.end / buf.sampleRate;
+      if (!this.stats.bedLoops.some((l) => l.id === bed)) this.stats.bedLoops.push({ id: bed, start: lb.start, end: lb.end, length: buf.length });
+      const g = c.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(this.#wantBed.level, t + fade);
+      src.connect(g).connect(bus);
+      src.start(t, src.loopStart);
+      this.#bed = { id: bed, src, gain: g };
+      this.stats.bedStarts++;
+    };
+    const cur = this.#buffers.get(key);
+    if (cur instanceof AudioBuffer) start();
+    else if (cur === 'loading') this.#waiters.set(key, [...(this.#waiters.get(key) ?? []), start]);
+    else if (cur === undefined) {
+      this.#waiters.set(key, [start]);
+      this.#decode(key, bedUrl(bed));
+      if (this.#buffers.get(key) === 'missing') this.#waiters.delete(key);
+    }
+  }
+
+  #stopBed(b: BedVoice, afterSec: number): void {
+    try {
+      b.src.stop(this.#ctx ? this.#ctx.currentTime + afterSec : 0);
+    } catch {
+      /* already stopped */
+    }
+  }
+
+  /** Debug/tests: the audio clock (null before the first gesture). */
+  get context(): AudioContext | null {
+    return this.#ctx;
+  }
+
+  /** Debug: the bed sounding now (and whether one is fading out). */
+  bedState(): { bed: BedId | null; fadingOut: BedId | null; wanted: BedId | null } {
+    return { bed: this.#bed?.id ?? null, fadingOut: this.#bedOut?.id ?? null, wanted: this.#wantBed.id };
+  }
+
+  /** Debug: decoded-buffer cache states. */
+  bufferStates(): Record<string, string> {
+    return Object.fromEntries([...this.#buffers].map(([k, v]) => [k, v instanceof AudioBuffer ? 'decoded' : v]));
   }
 
   /** Debug: how many music elements are currently playing (must be ≤ 1). */

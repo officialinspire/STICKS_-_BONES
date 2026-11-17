@@ -55,8 +55,8 @@ share our CacheStorage, localStorage and service-worker registry.
 | Cache | Contents | How |
 | --- | --- | --- |
 | `inspire:sticks-and-bones:shell:<build>` | The minimal app shell: `index.html`, the JS entry, the AI worker, CSS, the manifest, the two 192-px icons. **7 files, 216.4 KB** (211.8 KB at Stage 10, before the analytics adapter). | At install, all or nothing (`cache.addAll`, bypassing the HTTP cache). If any file fails, install fails and retries on the next visit. |
-| `inspire:sticks-and-bones:assets:v1` | The six optimized WebP runtime images: backdrop, tabletop, portrait, slam, effects, tile atlas. **6 files, 1,417.2 KB.** | After the shell, best effort, 2 at a time. A truncated or failed download is never stored. Quota errors stop the job and are reported to the page. Images no build references are pruned on activate. |
-| — | **Not cached:** PNG source sheets (the build fails if one is bundled), music, the studio intro video, the 512-px icons. | Music and video stream from the network. |
+| `inspire:sticks-and-bones:assets:v1` | The optimized WebP runtime images (backdrops, tabletop, portrait, slam, effects, tile atlas, story scenes) and, since the audio stage, the 30 short CC0 SFX (WAV, ~550 KB) so table sounds work offline. (Stage 10 measured 6 files, 1,417.2 KB; the current total is reported by `npm run pwa`.) | After the shell, best effort, 2 at a time. A truncated or failed download is never stored. Quota errors stop the job and are reported to the page. Images no build references are pruned on activate. |
+| — | **Not cached:** PNG source sheets (the build fails if one is bundled), music, the ambience beds, the studio intro video, the 512-px icons. | Music, beds and video stream from the network; offline, a scene is simply quieter. |
 
 **Measured cache size after a complete first visit: 2,188,958 bytes (2.09 MiB)** (Stage 12: shell 10 files 435 KB incl. the two web fonts and the lazy story-script chunk; 7 images 1,702.5 KB incl. the Prologue's cave backdrop). Earlier: 1,672,882 B (Stage 11), 1,668,179 B (Stage 10).
 That's 13 files across 2 caches, read back from CacheStorage by `npm run pwa`.

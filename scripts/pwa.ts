@@ -75,7 +75,7 @@ const OTHER: Record<string, [string, string]> = {
   ],
   '/other-app/sw.js': ['text/javascript', `self.addEventListener('install', (e) => e.waitUntil(caches.open('inspire:other-app:shell').then((c) => c.put('/other-app/shell', new Response('shell')))));`],
 };
-const TYPES: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.webp': 'image/webp', '.png': 'image/png', '.mp3': 'audio/mpeg', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
+const TYPES: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.webp': 'image/webp', '.png': 'image/png', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
 const server: Server = createServer((req, res: ServerResponse) => {
   const url = new URL(req.url ?? '/', ORIGIN);
   state.requests.push(url.pathname);

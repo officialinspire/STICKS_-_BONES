@@ -20,6 +20,21 @@ import { measureFrames, rectsEqual, rectWithin } from './lib/measure.ts';
 import sharp from 'sharp';
 import derivativesJson from '../src/assets/derivatives.json' with { type: 'json' };
 import iconsJson from '../src/assets/icons.json' with { type: 'json' };
+import soundJson from '../src/assets/sound-manifest.json' with { type: 'json' };
+
+interface SoundEntry {
+  id: string;
+  file: string;
+  creator: string;
+  license: string;
+  source: string;
+  edits: string;
+  bytes: number;
+  sha256: string;
+  final: boolean;
+  auditioned?: boolean;
+}
+const SOUNDS = [...soundJson.sfx, ...soundJson.ambience] as SoundEntry[];
 
 interface Derivative {
   id: string;
@@ -143,8 +158,8 @@ for (const file of walk(join(repoRoot, 'assets'))) {
   const rel = relative(repoRoot, file).split('\\').join('/');
   if (/\.(png|jpe?g|webp|gif|avif|svg)$/i.test(rel) && !registered.has(rel))
     errors.push(`unregistered image ${rel} — add it to src/assets/manifest.ts`);
-  if (/\.(mp3|ogg|wav|m4a|aac|flac|mp4|webm|mov)$/i.test(rel) && !MUSIC.some((m) => m.path === rel) && rel !== 'assets/video/inspiresoftwareintro.mp4')
-    errors.push(`uncatalogued media ${rel} — add it to src/assets/audio-manifest.ts`);
+  if (/\.(mp3|ogg|wav|m4a|aac|flac|mp4|webm|mov)$/i.test(rel) && !MUSIC.some((m) => m.path === rel) && !SOUNDS.some((x) => x.file === rel) && rel !== 'assets/video/inspiresoftwareintro.mp4')
+    errors.push(`uncatalogued media ${rel} — add it to src/assets/audio-manifest.ts (music) or rebuild src/assets/sound-manifest.json (scripts/build-audio.py)`);
 }
 
 // Stray art at the repo root (where uploads land) should be moved under assets/art.
@@ -261,6 +276,29 @@ for (const m of MISSING_ASSETS) notes.push(`missing (${m.kind}) ${m.id}: fallbac
 
 console.log(`Checked ${IMAGE_ASSETS.length} image assets.`);
 for (const n of notes) console.log(`  note: ${n}`);
+// Sound bank (scripts/build-audio.py): every file catalogued with provenance, CC0 only, bytes + sha256 exact.
+// Nothing is marked final or auditioned without a person's sign-off recorded in the manifest.
+{
+  const ids = new Set<string>();
+  for (const x of SOUNDS) {
+    if (ids.has(x.id)) errors.push(`[sound ${x.id}] duplicate id`);
+    ids.add(x.id);
+    for (const k of ['creator', 'license', 'source', 'edits'] as const) if (!x[k]) errors.push(`[sound ${x.id}] missing provenance field "${k}"`);
+    if (!/^CC0 1\.0/.test(x.license)) errors.push(`[sound ${x.id}] license "${x.license}" is not CC0 1.0 — check its terms before shipping`);
+    if (!/^https:\/\//.test(x.source)) errors.push(`[sound ${x.id}] source must be an https URL`);
+    const path = join(repoRoot, x.file);
+    if (!existsSync(path)) {
+      errors.push(`[sound ${x.id}] missing file ${x.file}`);
+      continue;
+    }
+    const buf = readFileSync(path);
+    if (buf.length !== x.bytes) errors.push(`[sound ${x.id}] bytes ${buf.length} ≠ manifest ${x.bytes}`);
+    const h = createHash('sha256').update(buf).digest('hex');
+    if (h !== x.sha256) errors.push(`[sound ${x.id}] sha256 drift — rebuild with scripts/build-audio.py, never edit by hand`);
+  }
+  console.log(`sound bank: ${soundJson.sfx.length} SFX + ${soundJson.ambience.length} beds verified (final: ${SOUNDS.filter((x) => x.final).length}, seams auditioned: ${soundJson.ambience.filter((x) => x.auditioned).length})`);
+}
+
 if (errors.length) {
   console.error(`\n${errors.length} asset error(s):`);
   for (const e of errors) console.error(`  ✗ ${e}`);

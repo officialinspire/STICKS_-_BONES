@@ -40,9 +40,11 @@ export const BUDGET = {
   singleImageKB: 450, // largest single image (Stage 13: jungle backdrop 428 KB at q84 — q80 failed the derivative quality gate)
   startupKB: 900, // start screen + first menu, raw bytes: core code + fonts + backdrop + portrait (Stage 12 measured ~868 KB raw)
   mediaKB: 8000, // music, streamed on demand only (measured 7,331 KB)
+  sfxKB: 720, // short CC0 SFX (WAV, decoded once after the first gesture; measured ~600 KB)
+  ambienceKB: 2200, // five CC0 ambience beds (MP3, fetched per scene on demand; measured ~1,900 KB)
   iconsKB: 140, // PWA icons (PNG by spec), generated from approved art (measured 113 KB)
   swKB: 16, // service worker + build manifest (measured 8 KB)
-  totalKB: 11200, // whole dist (Stage 13 measured ~10.9 MB: music 7.3 MB + images 3.0 MB)
+  totalKB: 13900, // whole dist (audio stage measured ~13.4 MB: music 7.3 MB + images 3.0 MB + sound bank 2.5 MB)
 };
 const size = (f) => statSync(f).size;
 const rel = (f) => f.slice(dist.length);
@@ -50,7 +52,9 @@ const isStory = (f) => /assets\/(script|story-ui)-[\w-]+\.js$/.test(rel(f)); // 
 const isCode = (f) => /\.(js|css|html)$/.test(f) && !isStory(f);
 const isFont = (f) => /\.woff2$/.test(f);
 const isImage = (f) => /\.(webp|png|avif|jpe?g|svg|gif)$/.test(f);
-const isMedia = (f) => /\.(mp3|ogg|m4a|mp4|webm)$/.test(f);
+const isAmbience = (f) => /\/amb-[a-z]+-[\w-]+\.mp3$/.test(f);
+const isSfx = (f) => /\.wav$/.test(f);
+const isMedia = (f) => /\.(mp3|ogg|m4a|mp4|webm)$/.test(f) && !isAmbience(f);
 const sumKB = (fs) => fs.reduce((s, f) => s + size(f), 0) / KB;
 const code = sumKB(files.filter(isCode));
 const storyKB = sumKB(files.filter(isStory));
@@ -65,6 +69,8 @@ const biggest = images.reduce((m, f) => (size(f) > (m ? size(m) : 0) ? f : m), n
 // Startup set: code + the two essential images (src/assets/warm.ts ESSENTIAL_ASSETS).
 const startupKB = code + fontsKB + sumKB(images.filter((f) => /neighborhood-patio|cousin-portrait-atlas/.test(f)));
 const mediaKB = sumKB(files.filter(isMedia));
+const sfxKB = sumKB(files.filter(isSfx));
+const ambienceKB = sumKB(files.filter(isAmbience));
 const over = [];
 const gate = (name, value, limit) => {
   const line = `${name} ${value.toFixed(0)} KB / ${limit} KB`;
@@ -78,7 +84,9 @@ const budgetLines = [
   gate('images', imagesKB, BUDGET.imagesKB),
   gate(`largest image (${biggest ? rel(biggest) : '-'})`, biggest ? size(biggest) / KB : 0, BUDGET.singleImageKB),
   gate('startup', startupKB, BUDGET.startupKB),
-  gate('media', mediaKB, BUDGET.mediaKB),
+  gate('music', mediaKB, BUDGET.mediaKB),
+  gate('sfx', sfxKB, BUDGET.sfxKB),
+  gate('ambience', ambienceKB, BUDGET.ambienceKB),
   gate('icons', iconsKB, BUDGET.iconsKB),
   gate('service worker', swKB, BUDGET.swKB),
   gate('total', bytes / KB, BUDGET.totalKB),

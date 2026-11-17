@@ -60,8 +60,20 @@ v0.2, committed to `main` by the owner as 242ee60). The general project log stay
 | | Staging for every moment in the brief, anchored to the script's exact stage directions; Chapter 6 hand never on the ancient platform | ✅ |
 | | Five chapter backdrops as on-demand WebP derivatives (decode before reveal; drawn fallback) | ✅ |
 | | Story audio cue hooks on the central AudioManager (knock live; others reserved); story tables without banter | ✅ |
+| **Audio stage: scene soundtrack and tactile sound** | Audit: two approved music tracks kept; every synthesized SFX and the synthesized bed replaced by selected local CC0 samples (synth now only a decoding/missing-file fallback) | ✅ |
+| | Licences verified per pack (Kenney `License.txt` in each zip; BigSoundBank per-sound CC0), source / creator / edits / sha256 per file, `docs/SOUND_SOURCES.md` generated; `assets:verify` enforces CC0 + hashes; Freesound not used | ✅ |
+| | Decoded-buffer SFX with matched variants, no back-to-back repeats, restrained gain/rate variation, bounded voices, quiet defaults; UI select / confirm / back / invalid; tile pickup / place / slap / shuffle / draw; pass knock | ✅ (tile sounds are **stand-ins**, not final) |
+| | Five ambience beds on their own bus (patio, promenade surf, jungle, cave water, corporate terrace), gentle cross-fades, ≤ 2 beds ever | ✅ (seams machine-measured; **not auditioned by ear**) |
+| | Per-scene profiles: one track or none per scene and hand; no constant ominous music | ✅ |
+| | Exact motif: three matched knocks 0.62 s apart + the answer from beyond 1.15 s later; the prologue's split beats; soft and single variants; scheduled on the audio clock | ✅ (sample-exact in Chromium) |
+| | Fake speaker and trail voice caption-only (no impersonation), so the motif can't be confused with it | ✅ |
+| | No ghost sounds: cancel on beat / skip / card / scene / profile / reset / background; refused cues never queued; resume restores mix state but never replays the knock | ✅ |
+| | Captions never duck music (no speech recordings exist) | ✅ |
+| | Intro: touch-to-start → video (Skip) → black → menu retained; no SFX or music during init/intro | ✅ (video **still missing**: the fallback runs) |
+| | Original music briefs: night-investigation bed, cave suspense bed, four stingers (`docs/MUSIC_BRIEFS.md`); no music generated | ✅ (briefs; music **missing**) |
 | **Next** | Cast portraits in dialogue (needs expression labels → derivatives) | ☐ |
-| | Story audio: night/cave beds, case-complete cue, real SFX (reserved hooks exist) | ☐ |
+| | Owner listening pass: SFX choices, bed seams (`/dev/audio-audition.html`), levels on headphones and speakers; mark `auditioned` / `final` | ☐ |
+| | Commissioned music (night bed, cave bed, stingers) and recorded domino foley | ☐ |
 | | Finish Hand with AI assistance, skip with recap, optional table banter in safe gaps | ☐ |
 | | Interrupted resilience items: update-time save retry, music recovery, AI worker timeouts | ☐ |
 | | Version alignment (package vs release notes) | ☐ |
@@ -86,7 +98,10 @@ Stage 12 entry of `docs/BUILD_STATUS.md`.
 | Input | Needed for |
 | --- | --- |
 | **Expression labels** for the four cast atlases (which frame is neutral, angry, smiling…) | Portraits in dialogue. Frames are currently named e1–e8 by position. |
-| Story sound bank (Kenney UI pack audition, table foley, night/cave beds) per the script's §6 | Replacing the placeholder SFX and adding story ambience |
+| Owner's listening approval of the selected sounds and bed seams | Marking any sound `final` / any seam `auditioned` |
+| Recorded domino foley (real double-six tiles on wood) | Replacing the casino-chip stand-ins |
+| Commissioned original music: night-investigation bed, cave suspense bed, round/case stingers (`docs/MUSIC_BRIEFS.md`) | Chapter 4 and 6 music, results and case-complete cues |
+| The contractor speaker recording (voice + repeating cough), if the owner wants it voiced | Chapter 6 (caption-only until then; never impersonated) |
 | INSPIRE intro video `assets/video/inspiresoftwareintro.mp4` | The studio credit (the fallback already works) |
 | INSPIRE analytics contract | Analytics (still disabled) |
 | Representative first-time playtesters | The 90–110-minute target and the under-two-hours requirement |
@@ -101,16 +116,14 @@ Stage 12 entry of `docs/BUILD_STATUS.md`.
 
 ## Next stage
 
-1. **Chapter play:**
-   - Story sessions that end after one resolved hand, with state outside the engine,
-     guarded against double completion on reload.
-   - The matching outcome insert, the notebook entry, evidence flags and chapter
-     replay.
-   - Through Chapter 7 and the Epilogue.
+1. **Owner listening pass** on `/dev/audio-audition.html` (headphones and speakers): approve or
+   swap the selected SFX, audition the five bed seams, set levels; record `auditioned` / `final`
+   in the manifest (via `scripts/build-audio.py`).
 2. **The interrupted resilience items:**
    - update-time save retry / proceed;
    - bounded music recovery;
    - AI worker timeouts, `messageerror` and cancellation tests.
 3. **Version alignment:** pick one label (package, release notes, handoff).
-4. **Cast portraits** once their expressions are labelled; the chapter backdrops.
-5. **Firefox/WebKit and real-device passes**, and timed playtests.
+4. **Cast portraits** once their expressions are labelled.
+5. **Commissioned music and recorded foley** when delivered (wire through the profiles).
+6. **Firefox/WebKit and real-device passes**, and timed playtests.

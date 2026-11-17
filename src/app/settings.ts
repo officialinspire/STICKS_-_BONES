@@ -20,7 +20,7 @@ export interface AudioSettings {
   readonly ambienceOn: boolean;
 }
 
-export const DEFAULT_AUDIO: AudioSettings = { master: 0.8, music: 0.6, sfx: 0.8, voice: 0.9, ambience: 0.5, muted: false, ambienceOn: false };
+export const DEFAULT_AUDIO: AudioSettings = { master: 0.8, music: 0.6, sfx: 0.8, voice: 0.9, ambience: 0.5, muted: false, ambienceOn: true };
 
 export interface Settings {
   /** Cousin may swear ("Fuck that…"); off uses the clean wording ("Forget that…"). */

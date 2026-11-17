@@ -18,6 +18,7 @@ import { DEFAULT_TIMINGS, REDUCED_TIMINGS, SceneDirector, type DirectorState, ty
 import type { Block, Scene } from '../story/parse';
 import { newProgress, readStory, TEXT_SCALES, type Part, type SceneId, type StoryProgress } from '../story/progress';
 import { cuesFor, STAGING, type Cue, type Light } from '../story/staging';
+import { STATE_CUES } from '../audio/manager';
 import { wrapTab } from './focus-trap';
 import { HostView } from './host';
 import { captionText, chapterCardHtml, loadScript, renderStoryHome, save, speakerLabelHtml, speakerOf, type StoryDeps } from './story-ui';
@@ -206,6 +207,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
   const dispose = () => {
     disposed = true;
     director?.cancel();
+    d.beat();
     document.removeEventListener('visibilitychange', onVisibility);
     root.onclick = null;
     root.onkeydown = null;
@@ -216,6 +218,8 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
   async function open(sceneId: SceneId): Promise<void> {
     director?.cancel(); // a new scene invalidates every callback of the previous one
     if (disposed) return;
+    d.beat();
+    d.audioScene(sceneId);
     const scene = sceneOf(sceneId);
     const seg = segments(scene);
     const st = STAGING[sceneId];
@@ -250,7 +254,12 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
         <div class="st-curtain is-closed" aria-hidden="true"></div>
       </div>
       <div class="story-table-host" hidden></div>`;
-    stage = new DomStage(root.querySelector('.story-stage')!, sceneId, reduce, (c) => c.kind === 'audio' && d.cue(c.cue));
+    // Resuming a saved position: the beat you land on shows its staging, but its one-shot sound (a knock)
+    // is not replayed — only mix-state cues are. Cleared once that first beat is on screen.
+    let quietOnce = false;
+    stage = new DomStage(root.querySelector('.story-stage')!, sceneId, reduce, (c) => {
+      if (c.kind === 'audio' && !(quietOnce && !STATE_CUES.has(c.cue))) d.cue(c.cue);
+    });
     stage.mountActor();
     stage.cousinPresent(st.cousin);
     const s = stage;
@@ -262,7 +271,8 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
     // Replay all cues up to the resume point so light/water/expression match the saved position.
     const replayCues = (upto: number) => {
       const prior = part === 'pre' ? preBeats.slice(0, upto) : [...preBeats, ...afterBeats(p.outcome).slice(0, upto)];
-      for (const b of prior) for (const c of b.cues) if (c.kind !== 'audio' && c.kind !== 'pulse') s.apply(c);
+      // One-shot sounds (knocks, accents) are never replayed on resume; mix-state cues (the bed going quiet) are.
+      for (const b of prior) for (const c of b.cues) if (c.kind === 'audio' ? STATE_CUES.has(c.cue) : c.kind !== 'pulse') s.apply(c);
     };
 
     const pos = () => {
@@ -271,6 +281,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
     };
 
     const showHandCard = () => {
+      d.beat();
       const setup = HANDS[sceneId]!;
       const slot = root.querySelector<HTMLElement>('.scene-card-slot')!;
       root.querySelector<HTMLElement>('.dialogue-slot')!.innerHTML = '';
@@ -280,6 +291,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
     };
 
     const showEndCard = () => {
+      d.beat();
       const idx = SCENES_IN_ORDER.indexOf(sceneId);
       const next = o.replay ? null : SCENES_IN_ORDER[idx + 1] ?? null;
       const slot = root.querySelector<HTMLElement>('.scene-card-slot')!;
@@ -299,7 +311,9 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
         curtain: (to, ms) => s.curtain(to, ms),
         establishing: (ms) => s.establishing(ms),
         showBeat: (b, i, ms) => {
+          d.beat(); // the previous beat's knocks never trail into this one
           s.showBeat(b, i, ms);
+          quietOnce = false;
           root.querySelector<HTMLElement>('.scene-card-slot')!.innerHTML = '';
           root.querySelector<HTMLElement>('[data-act="story-next"]')!.hidden = false;
           pos();
@@ -382,6 +396,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
       if (!disposed) showEndCard();
     } else {
       const at = Math.min(p.sceneId === sceneId ? p.index : 0, Math.max(0, beats.length - 1));
+      quietOnce = p.sceneId === sceneId && (at > 0 || part === 'post');
       replayCues(at);
       void dir.load(beats, at);
     }
