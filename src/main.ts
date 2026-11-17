@@ -228,8 +228,8 @@ function applyUpdate(force = false): void {
     to = { to: 'quick' };
   } else if (storyHooks) {
     saved = storyHooks.flush();
-    to = { to: 'story' };
-  }
+    to = { to: 'story', run: true };
+  } else if (storyOpen) to = { to: 'story', run: false }; // on the case file: progress is already saved
   setSaveHealth(saved);
   if (!saved && !force) return void confirmUnsavedUpdate();
   pwa.applyUpdate(() => {
@@ -327,8 +327,11 @@ function endStoryHand(): void {
 const storySettingsApi = { get: () => ({ ...settings, banter: false }), set: (p: Partial<Settings>) => settingsApi.set(p) };
 /** Set by an update reload: the case file reopens the saved scene once, without a tap. */
 let autoContinueOnce = false;
+/** The Story screens are open (case file or a run). */
+let storyOpen = false;
 function openStory(): void {
   teardown();
+  storyOpen = true;
   active = null;
   audio.setScene('menu');
   const fast = DEV && Boolean((window as unknown as { __sbStoryFast?: boolean }).__sbStoryFast);
@@ -348,6 +351,13 @@ function openStory(): void {
     onSaveFailed: () => setSaveHealth(false),
     cue: (c) => void audio.cue(c),
     registerRun: (hooks) => (storyHooks = hooks),
+    // Story analytics: separate events from Quick Play; disabled adapter until the owner's contract.
+    track: {
+      chapterComplete: (scene, outcome, replay, key) => analytics.storyChapterComplete(scene, outcome, replay, key),
+      caseComplete: (key) => analytics.storyCaseComplete(key),
+      resume: (scene, part, via, key) => analytics.storyResume(scene, part, via, key),
+      assist: (scene, key) => analytics.storyAssist(scene, 'skip_scene', key),
+    },
     offlineNote: (id) => {
       if (pwa.view.offline.kind === 'unsupported' || !pwa.status) return null;
       return readyScenes().includes(id) ? 'Saved for offline play.' : 'Needs a connection the first time (it saves for offline as you play).';
@@ -385,8 +395,11 @@ function openStory(): void {
       audio.setScene('gameplay');
       table.mount();
       if (!req.restore) audio.playSfx('shuffle');
+      // The encounter really starts on its first accepted move (a restored hand never counts). Local token only.
+      const encounter = req.restore ? null : `${req.sceneId}:${performance.now()}`;
       controller.subscribe((events) => {
         if (!events.length) return;
+        if (encounter && events.some((e) => e.type === 'tile-played' || e.type === 'tile-drawn' || e.type === 'passed')) analytics.storyEncounter(req.sceneId, req.setup.mode, req.replay, encounter);
         const resolved = events.find((e) => e.type === 'hand-resolved');
         if (resolved && resolved.type === 'hand-resolved') req.onResolved(resolved.result.winnerTeam, playerTeam);
         else if (session.phase === 'playing') req.onSnapshot({ state: session.debugState(), aiRng: session.exportAiRng() });
@@ -441,6 +454,7 @@ function abandon(matchId: string, mode: ModeId): void {
 
 /** Stop the current table: cancels AI work, timers, effects and sounds. */
 function teardown(): void {
+  storyOpen = false;
   audio.reset();
   audio.setStoryProfile(null); // Quick Play, menus and the case file use the default mix
   active?.table.destroy();
@@ -665,7 +679,7 @@ function boot(): void {
     // After an update reload: return once to the same place (story scene or encounter, or the saved match).
     onMenu: () => {
       if (resumeAfterUpdate?.to === 'story') {
-        autoContinueOnce = true;
+        autoContinueOnce = resumeAfterUpdate.run === true;
         openStory();
       } else if (resumeAfterUpdate?.to === 'quick' && readSave(store).value) resume();
       else showMenu();

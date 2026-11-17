@@ -50,79 +50,80 @@ share our CacheStorage, localStorage and service-worker registry.
   keys. It asserts that all of these survive first visit, offline play, repair,
   erase and update.
 
-## What is cached, and when
+## What is cached, and when (integration stage: four groups)
 
-| Cache | Contents | How |
+Every file the worker may store is listed in the build with its **exact byte size** (`sw.js` → `GROUPS`,
+also in `dist/build.json`). A download is stored only if its body is complete (a truncated response is
+never cached), at most 2 at a time; a quota error stops the job and is reported; nothing throws to the page.
+Reading the status never creates a cache.
+
+| Cache | Contents (measured, this build) | When |
 | --- | --- | --- |
-| `inspire:sticks-and-bones:shell:<build>` | The minimal app shell: `index.html`, the JS entry, the AI worker, CSS, the manifest, the two 192-px icons. **7 files, 216.4 KB** (211.8 KB at Stage 10, before the analytics adapter). | At install, all or nothing (`cache.addAll`, bypassing the HTTP cache). If any file fails, install fails and retries on the next visit. |
-| `inspire:sticks-and-bones:assets:v1` | The optimized WebP runtime images (backdrops, tabletop, portrait, slam, effects, tile atlas, story scenes) and, since the audio stage, the 30 short CC0 SFX (WAV, ~550 KB) so table sounds work offline. (Stage 10 measured 6 files, 1,417.2 KB; the current total is reported by `npm run pwa`.) | After the shell, best effort, 2 at a time. A truncated or failed download is never stored. Quota errors stop the job and are reported to the page. Images no build references are pruned on activate. |
-| — | **Not cached:** PNG source sheets (the build fails if one is bundled), music, the ambience beds, the studio intro video, the 512-px icons. | Music, beds and video stream from the network; offline, a scene is simply quieter. |
+| `inspire:sticks-and-bones:shell:<build>` | HTML, JS (entry, AI worker and the two lazy Story chunks), CSS, fonts, manifest, the 192-px icons — **11 files, 486 KB** | At install, all or nothing (`cache.addAll`, bypassing the HTTP cache) |
+| `inspire:sticks-and-bones:assets:v1` (core) | What Quick Play needs: both patio variants, Cousin's portrait and slam, tile atlas, tabletop, effects, UI/table/pass sounds — **30 files, 1.80 MB** | After the shell, best effort (the name is unchanged so existing installs stay valid) |
+| `inspire:sticks-and-bones:story:v1` | Chapter backdrops (full + portrait), the four cast sheets, story accents — **23 files, 3.20 MB** | **Per chapter as it is played** (cache-on-fetch: the current chapter and the prefetched next one), and **in full only when the player chooses "Download the whole story"** |
+| `inspire:sticks-and-bones:audio:v1` | Music and the five ambience beds — **7 files, 9.15 MB** | **Optional, only when the player turns on offline audio** (size shown first). Served with byte ranges (206) for `<audio>` |
+| — | **Never cached:** PNG source sheets (the build fails if one is bundled), the studio intro video, the 512-px icons | Network only |
 
-**Measured cache size after a complete first visit: 2,188,958 bytes (2.09 MiB)** (Stage 12: shell 10 files 435 KB incl. the two web fonts and the lazy story-script chunk; 7 images 1,702.5 KB incl. the Prologue's cave backdrop). Earlier: 1,672,882 B (Stage 11), 1,668,179 B (Stage 10).
-That's 13 files across 2 caches, read back from CacheStorage by `npm run pwa`.
+**Policy change, deliberate and narrow:** music and ambience used to be "never cached". They are now cached
+**only** in `audio:v1`, **only** after the player's explicit choice, with the size disclosed beforehand, and
+removable in one tap. Nothing else changed: the first visit caches exactly shell + core
+(**2,349,692 B** measured by `npm run pwa`; Stage 12 was 2,188,958 B, when *every* image was precached).
 
-## Offline features and what needs a completed first online visit
+## What is ready offline, and how the game says so (Settings → Offline & storage)
 
-Offline play needs **one complete online visit**. The menu (and Settings →
-Offline & storage) shows **"✓ Ready to play offline (1.6 MB saved on this
-device)"** once both caches are complete. The status lines are live and announced
-to screen readers (`role="status"`).
+| Line | Meaning |
+| --- | --- |
+| **✓ Quick Play is ready offline (2.2 MB on this device).** | Shell + core complete: solo, AI partnership, two players, saves, rules, settings |
+| **Only the app is ready offline; story scenes download as you play them.** | No story scene is fully saved yet |
+| **n of 9 story scenes are ready offline (the ones you have opened, and the next one).** | Counted from the saved files of each scene's backdrop (this screen shape) and cast |
+| **The whole story is ready offline (3.2 MB).** | The story group is complete |
+| **Music and ambience are an optional 9.1 MB extra download.** / **…saved for offline play (9.1 MB).** | Offline audio off / on |
 
-| Feature | Offline after a complete first visit | Notes |
-| --- | --- | --- |
-| Start screen, menu, rules, settings, statistics | ✅ | From the shell cache |
-| Solo vs the computer (all modes, all difficulties), AI partnership | ✅ | The AI worker script is in the shell |
-| Two players on one device, privacy covers | ✅ | |
-| Saves, resume, statistics | ✅ | localStorage; works offline whether or not the cache is complete |
-| Table art: backdrop, tabletop, Cousin, tile faces, effects | ✅ | If an image is missing (interrupted or quota), the game draws its fallback: vector tile faces, gradients, monogram |
-| Music | ❌ | Streamed only. Offline, the game is silent; there are no errors and nothing retries in a loop. |
-| Studio intro video | ❌ | Not supplied yet. When it is, it won't be cached, and the start screen will fade straight to the menu. |
-| A visit that never completed | ❌ | If the shell never finished downloading, the browser has nothing to start offline |
+The case file adds one line for the current scene: **"Saved for offline play."** or **"Needs a connection the
+first time (it saves for offline as you play)."** A scene whose art is missing offline still plays with the
+drawn backdrop and name tags.
 
-**Status states:**
-- **Saving for offline play… n of 6 images**: the download is in progress.
-- **✓ Playable offline; n of 6 images still to download**: the shell is complete
-  but some images are missing. Offline play uses the drawn fallbacks.
-- **Not enough storage on this device…**: a quota error. The game still works
-  online.
-- **Offline play isn't available in this browser**: there is no service worker,
-  for example in some private modes.
+**Downloads (whole story, offline audio):** the button shows the measured size left
+(**Download the whole story (3.2 MB)**, **Save music & ambience for offline (9.1 MB)**). Before starting, the
+browser's storage estimate is checked; if the files would not fit, nothing is downloaded and the line says
+how much is needed and free. Persistent storage is requested (where offered). A progress bar shows bytes.
+- **Interrupted** (connection lost, a file cut off, the browser stopped the worker): finished files are kept;
+  **Retry (n MB left)** continues.
+- **Quota error mid-way:** reported with the sizes; the game keeps working online.
+- **Missing optional media** (e.g. an audio file not on the server): skipped and reported
+  ("1 audio file was unavailable and skipped"); Retry fetches only what is missing.
+- **No storage / no service worker:** the lines say offline files aren't available in this browser.
+
+The player's choices (story / audio) live in a versioned local record, `sticks-and-bones.offline`.
 
 ## Updates: "Update available" and how a waiting update is applied
 
-1. A new deploy changes `sw.js`, because the build id is a hash of every emitted
-   file. The browser installs the new worker next to the running one. Update
-   checks happen on load, when the tab becomes visible again, and every 30
-   minutes. `updateViaCache: 'none'` makes GitHub Pages' 10-minute HTTP cache
-   irrelevant.
-2. The new worker **waits**. The running build keeps serving its own cached HTML
-   and assets, so versions never mix mid-session.
-3. The player sees **"Update available"**:
-   - on the menu, as a banner with **Update now**;
-   - during a match, in the **pause sheet**. Pausing is the stable point: AI
-     thinking is stopped.
-4. **Update now:**
-   - writes the save from the engine state;
-   - tears the table down, so no AI move can land after the save;
-   - replaces the screen with "Updating — your game is saved…". No hand is
-     visible during the reload; the test checks the screen at unload.
-   - Only then does it tell the waiting worker to take over and reload.
-5. After the reload, the menu says "Updated to the latest version…" and offers
-   **Resume**. The restored match is exactly the saved one. With two humans it
-   opens behind the privacy cover, as every restore does (see `docs/SAVES.md`).
+1. A new deploy changes `sw.js` (the build id hashes every emitted file). The new worker installs next to the
+   running one and **waits**; checks run on load, on returning to the tab and every 30 minutes.
+2. **Update now** is offered on the menu, the case file, the story **scene bar**, and the pause sheet of any
+   table (Quick Play or a story hand).
+3. **Update now** first writes the stable state and checks the write succeeded:
+   - a Quick Play match: the save from the engine state;
+   - a story scene or hand: the case progress with the exact line, or the in-progress hand snapshot.
+
+   **If the write is refused**, the player is told ("Your place couldn't be saved") and chooses **Not now —
+   keep playing** (nothing reloads) or **Update anyway** (returns to the last saved point). It never claims
+   to have saved.
+4. Then the table is torn down (no AI move can land), the screen is replaced (no hand visible — checked at
+   unload), and the worker takes over.
+5. **After the reload, the start tap returns once** to where the player was: the same story line, the same
+   hand (engine state identical), the case file, or the saved match. Two-player matches reopen behind the
+   privacy cover. The return point is consumed before anything renders, so a second reload goes to the menu.
 
 ## Repair and erase (Settings → Offline & storage)
 
-- **Repair offline files:**
-  - deletes only `inspire:sticks-and-bones:*` caches, then downloads the shell and
-    images again;
-  - **saves, settings and statistics are not touched**;
-  - other apps' caches and workers are not touched.
-- **Erase saved game, settings & statistics…:**
-  - a separate action that needs two taps; the first only arms the button;
-  - removes only `sticks-and-bones.*` localStorage keys, then reloads with a
-    confirmation notice;
-  - **offline files are kept**.
+- **Repair offline files** deletes only `inspire:sticks-and-bones:*` caches, then downloads the shell, core
+  and **the groups the player chose** (whole story, offline audio) again. **Both save slots (the Quick Play
+  save and the Story case progress), settings and statistics are not touched**; other apps' caches and
+  workers are not touched.
+- **Erase saved game, settings & statistics…** (two taps) removes only `sticks-and-bones.*` keys; offline
+  files are kept.
 
 ## Evidence (`npm run pwa`)
 

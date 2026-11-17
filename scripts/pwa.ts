@@ -319,7 +319,7 @@ try {
   check(!keys.some((k: string) => k.startsWith('sticks-and-bones.')), `erase: our keys remain ${keys.join(', ')}`);
   await otherAppIntact(page, 'after erase');
   const cachesAfterErase = (await cacheReport(page)).filter((c) => c.name.startsWith('inspire:sticks-and-bones:'));
-  check(cachesAfterErase.length === 2, 'erase: offline files were removed (they must be kept)');
+  check(cachesAfterErase.length >= 2 && cachesAfterErase.every((c) => c.urls.length > 0 || !/:(shell|assets)/.test(c.name)) && cachesAfterErase.some((c) => /:shell:/.test(c.name)) && cachesAfterErase.some((c) => /:assets:v1$/.test(c.name)), `erase: offline files were removed (they must be kept): ${cachesAfterErase.map((c) => `${c.name}=${c.urls.length}`).join(', ')}`);
   await enterMenu(page);
   check(/erased/.test((await page.textContent('.notice')) ?? ''), 'erase: no confirmation notice');
   notes.push(`erase (two taps): removed only sticks-and-bones.* keys; other app's keys ('other-app.save', 'sticks-and-bones-fan-page') kept; offline files kept; notice shown`);
@@ -520,6 +520,13 @@ try {
     check(label.includes(`${mbStory} MB`), `story download: button should show the measured ${mbStory} MB — "${label}"`);
     // First attempt: two story files are cut off mid-transfer.
     state.cut = new Set(['jungle-camp-portrait', 'cast-luz']);
+    // Watch the progress bar from inside the page (a fast local download can finish between polls).
+    await page.evaluate(() => {
+      const w = window as unknown as { __sawProgress: boolean };
+      w.__sawProgress = false;
+      const el = document.querySelector('progress[data-region="offline-story-progress"]')!;
+      new MutationObserver(() => (w.__sawProgress ||= !(el as HTMLProgressElement).hidden)).observe(el, { attributes: true });
+    });
     let sawProgress = false;
     await page.click('[data-act="offline-story"]');
     const t0 = Date.now();
@@ -550,6 +557,7 @@ try {
     const full = (await cacheReport(page)).find((c) => c.name.endsWith(':story:v1'))!;
     check(/The whole story is ready offline/.test(line), `story download: did not finish — "${line}"`);
     check(full.urls.length === B.groups.story.length && full.bytes === B.bytes.story, `story download: cache has ${full.urls.length}/${B.groups.story.length} files, ${full.bytes}/${B.bytes.story} B`);
+    sawProgress ||= await page.evaluate(() => (window as unknown as { __sawProgress: boolean }).__sawProgress);
     check(sawProgress, 'story download: the progress bar never showed');
     const prefs = await page.evaluate(() => localStorage.getItem('sticks-and-bones.offline'));
     check(/"story":true/.test(prefs ?? ''), `story download: the choice was not remembered for Repair (${prefs})`);
@@ -584,6 +592,8 @@ try {
   // ---- 9. Optional offline audio: separate size, missing file, ranges, removal --------------------
   {
     const { ctx, page } = await newContext();
+    await page.goto(`${ORIGIN}/other-app/`);
+    await page.waitForSelector('#ok');
     await page.goto(`${ORIGIN}${APP}`);
     await enterMenu(page);
     await waitStatus(page, /Quick Play is ready offline/);
@@ -666,11 +676,11 @@ try {
     await page.waitForTimeout(600);
     const pos = await page.evaluate(() => document.querySelector('.cine-pos')?.textContent);
     const progBefore = await page.evaluate(() => localStorage.getItem('sticks-and-bones.story'));
-    await page.click('[data-act="story-file"]');
     state.site = SITE_B;
     await page.evaluate(async () => (await navigator.serviceWorker.getRegistration())!.update());
-    await page.waitForSelector('.story-shell [data-region="update"]:not([hidden])', { timeout: 60_000 });
-    await Promise.all([page.waitForNavigation({ timeout: 30_000 }), page.click('.story-shell [data-act="update-now"]')]);
+    // The scene bar offers the update in the middle of the dialogue.
+    await page.locator('.story-bar [data-act="update-now"]:not([hidden])').first().waitFor({ timeout: 60_000 });
+    await Promise.all([page.waitForNavigation({ timeout: 30_000 }), page.click('.story-bar [data-act="update-now"]')]);
     await page.waitForSelector('.start-button');
     await page.click('.start-button');
     const skip = page.locator('[data-act="intro-skip"]');
@@ -682,7 +692,7 @@ try {
     await page.reload();
     await enterMenu(page);
     check(await page.locator('[data-go="setup"]').count() === 1, 'update mid-dialogue: a second reload returned to the story again');
-    notes.push(`update A → B from the case file mid-dialogue: progress saved (${(progBefore ?? '').length} B record); after reload the start tap returned straight to Chapter 1 at line ${after.pos} on build "${after.build}"; a second reload went to the menu (once only)`);
+    notes.push(`update A → B from the scene bar mid-dialogue: progress saved (${(progBefore ?? '').length} B record); after reload the start tap returned straight to Chapter 1 at line ${after.pos} on build "${after.build}"; a second reload went to the menu (once only)`);
 
     // In-progress hand (encounter): update from the story table's pause sheet.
     state.site = SITE_A;

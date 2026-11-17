@@ -44,3 +44,21 @@ describe('cast derivatives', () => {
     }
   });
 });
+
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+describe('manifest prose is stripped from the bundle (vite stripManifestProse)', () => {
+  it('no runtime source reads proposedUse or originalName', () => {
+    const files: string[] = [];
+    const walk = (d: string) => {
+      for (const f of readdirSync(d)) {
+        const p = join(d, f);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (/\.ts$/.test(f) && !/\.test\.ts$/.test(f) && !/assets[\\/](manifest|types)\.ts$/.test(p)) files.push(p);
+      }
+    };
+    walk(join(__dirname, '..'));
+    const users = files.filter((f) => /\b(proposedUse|originalName)\b/.test(readFileSync(f, 'utf8')));
+    expect(users).toEqual([]);
+  });
+});

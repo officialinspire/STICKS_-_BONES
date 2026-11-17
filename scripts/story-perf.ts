@@ -38,7 +38,8 @@ const check = (ok: boolean, msg: string) => ok || failures.push(msg);
 
 /** Measured limits (docs/PERFORMANCE.md § Story). Change only with a new measurement and a reason. */
 const LIMITS = {
-  startupMenuKB: { portrait: 900, landscape: 1150 },
+  // Essential bytes to the menu; the build-time startup budget is 900 KB (scripts/check-dist.mjs).
+  startupMenuKB: { portrait: 900, landscape: 900 },
   startupRequests: 40,
   chapterEntryMs: 4500,
   nextTapMs: 200,
@@ -67,9 +68,12 @@ const INIT = `
   P.start = function (...a) { __sources++; let done = false; const end = () => { if (!done) { done = true; __sources--; } }; this.addEventListener('ended', end); this.__end = end; return s0.apply(this, a); };
   P.stop = function (...a) { return t0.apply(this, a); };
 `;
-const RES = `(() => performance.getEntriesByType('resource').map((e) => ({ name: e.name.split('/').pop().split('?')[0], bytes: e.transferSize || e.encodedBodySize, start: Math.round(e.startTime), end: Math.round(e.responseEnd) })))()`;
+const RES = `(() => performance.getEntriesByType('resource').map((e) => ({ name: e.name.split('/').pop().split('?')[0], bytes: e.encodedBodySize || e.transferSize, start: Math.round(e.startTime), end: Math.round(e.responseEnd) })))()`;
 type Res = { name: string; bytes: number; start: number; end: number };
-const kb = (r: Res[]) => Math.round(r.reduce((s, e) => s + e.bytes, 0) / 1024);
+// Bytes per distinct URL (a memory-cache hit or a service-worker answer repeats a URL; transferSize reads 0
+// for SW responses, so the body size is used, once per URL).
+const uniq = (r: Res[]) => [...new Map(r.map((e) => [e.name, e])).values()];
+const kb = (r: Res[]) => Math.round(uniq(r).reduce((s, e) => s + e.bytes, 0) / 1024);
 
 async function newPage(vp: { width: number; height: number; dpr: number }) {
   const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: vp.dpr, hasTouch: vp.dpr > 1 });
@@ -112,6 +116,8 @@ try {
     await page.click('.start-button');
     await page.locator('[data-act="story"]').first().waitFor({ timeout: 120_000 });
     const tMenu = Date.now() - t1;
+    // Gate: what it takes to reach the menu. Then 6 s of idle for the deliberate background warm-up (reported).
+    const arrive = ((await page.evaluate(RES)) as Res[]).filter((r) => !/\.mp3$/.test(r.name));
     await page.waitForTimeout(6000);
     const atMenu = (await page.evaluate(RES)) as Res[];
     const names = atMenu.map((r) => r.name);
@@ -122,11 +128,14 @@ try {
     // Music streams (the menu track plays after the gesture); count it separately from startup bytes.
     const music = atMenu.filter((r) => /\.mp3$/.test(r.name));
     const nonMusic = atMenu.filter((r) => !/\.mp3$/.test(r.name));
-    check(kb(nonMusic) <= LIMITS.startupMenuKB[name], `A ${name}: ${kb(nonMusic)} KB to the menu (limit ${LIMITS.startupMenuKB[name]})`);
-    check(nonMusic.length <= LIMITS.startupRequests, `A ${name}: ${nonMusic.length} requests to the menu`);
+    // Essential = what the first screens need (code, fonts, manifest, the viewport's patio variant and Cousin's
+    // portrait — src/assets/warm.ts essentialAssets). Everything else is the deliberate background warm-up.
+    const essential = arrive.filter((r) => /\.(js|css|html|woff2|webmanifest)$/.test(r.name) || !r.name.includes('.') || /^(neighborhood-patio|cousin-portrait-atlas)/.test(r.name));
+    check(kb(essential) <= LIMITS.startupMenuKB[name], `A ${name}: ${kb(essential)} KB essential to reach the menu (limit ${LIMITS.startupMenuKB[name]})`);
+    check(uniq(arrive).length <= LIMITS.startupRequests, `A ${name}: ${arrive.length} requests to reach the menu`);
     const imgs = nonMusic.filter((r) => /\.(webp|png)$/.test(r.name)).map((r) => `${r.name.replace(/-[\w-]{8}\./, '.')} ${Math.round(r.bytes / 1024)}`);
-    report[`startup-${name}`] = { startScreenMs: tStart, menuMs: tMenu, startKB: kb(atStart), startRequests: atStart.length, menuKB: kb(nonMusic), menuRequests: nonMusic.length, musicStreamedKB: kb(music), images: imgs };
-    notes.push(`A ${name}: start screen ${tStart} ms (${kb(atStart)} KB, ${atStart.length} req) · menu +${tMenu} ms · to menu + 6 s idle ${kb(nonMusic)} KB in ${nonMusic.length} requests (+ menu music streamed ${kb(music)} KB) · images: ${imgs.join(', ')}`);
+    report[`startup-${name}`] = { startScreenMs: tStart, menuMs: tMenu, startKB: kb(atStart), startRequests: atStart.length, essentialKB: kb(essential), arriveKB: kb(arrive), arriveRequests: arrive.length, idleWarmKB: kb(nonMusic) - kb(arrive), musicStreamedKB: kb(music), images: imgs };
+    notes.push(`A ${name}: start screen ${tStart} ms (${kb(atStart)} KB, ${atStart.length} req) · menu +${tMenu} ms: essential ${kb(essential)} KB (code, fonts, patio variant, portrait); ${kb(arrive)} KB in ${uniq(arrive).length} files had arrived including background warm-up · then 6 s idle: background warm-up +${kb(nonMusic) - kb(arrive)} KB (table art, offline core files) · menu music streamed ${kb(music)} KB · images: ${imgs.join(', ')}`);
     check(errors.length === 0, `A ${name}: page errors ${errors.join(' | ')}`);
     await ctx.close();
   }

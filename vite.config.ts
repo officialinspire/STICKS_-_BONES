@@ -42,6 +42,22 @@ export function offlineGroup(file: string): 'shell' | 'core' | 'story' | 'audio'
   if (/\.mp3$/.test(file)) return 'audio';
   return null;
 }
+/**
+ * The asset manifest's documentation prose (`proposedUse`, `originalName`) is for people and for
+ * `npm run assets:verify`; no runtime code reads it. Drop those lines from the shipped bundle only
+ * (the source file is unchanged; a test proves nothing at runtime depends on them).
+ */
+export function stripManifestProse(): Plugin {
+  return {
+    name: 'sticks-strip-manifest-prose',
+    apply: 'build',
+    transform(code, id) {
+      if (!id.replace(/\\/g, '/').endsWith('/src/assets/manifest.ts')) return null;
+      return { code: code.replace(/^[ \t]*(proposedUse|originalName): ".*",?\r?\n/gm, ''), map: null };
+    },
+  };
+}
+
 export function pwaPlugin(): Plugin {
   return {
     name: 'sticks-pwa',
@@ -83,7 +99,7 @@ export function pwaPlugin(): Plugin {
 
 export default defineConfig({
   base,
-  plugins: [pwaPlugin()],
+  plugins: [stripManifestProse(), pwaPlugin()],
   define: { __SB_BUILD_TAG__: JSON.stringify(process.env.SB_BUILD_TAG ?? 'local') },
   build: {
     target: 'es2022',

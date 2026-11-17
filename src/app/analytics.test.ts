@@ -87,3 +87,40 @@ describe('analytics adapter', () => {
     expect(() => b.matchEnd(M, 1, 'tie')).not.toThrow();
   });
 });
+
+describe('Story analytics (separate from Quick Play)', () => {
+  const make = () => {
+    const sent: Record<string, unknown>[] = [];
+    const a = new Analytics({ enabled: true, transport: { send: (e) => void sent.push(e) }, consent: () => true });
+    return { a, sent };
+  };
+  it('only fixed enums leave: unknown scenes, extra fields, names and hands are rejected or dropped', () => {
+    expect(sanitizeEvent({ name: 'story_encounter_start', scene: 'chapter-3', mode: 'partnership4', replay: false, hand: ['t66'], names: ['Ana'] })).toEqual({ name: 'story_encounter_start', scene: 'chapter-3', mode: 'partnership4', replay: false });
+    expect(sanitizeEvent({ name: 'story_encounter_start', scene: 'chapter-99', mode: 'draw2', replay: false })).toBeNull();
+    expect(sanitizeEvent({ name: 'story_resume', scene: 'chapter-1', part: 'dialogue', via: 'continue', progress: '{"raw":"save"}' })).toEqual({ name: 'story_resume', scene: 'chapter-1', part: 'dialogue', via: 'continue' });
+    expect(sanitizeEvent({ name: 'story_case_complete', seed: 'abc' })).toEqual({ name: 'story_case_complete' });
+  });
+  it('de-duplicates: one encounter per dealt hand, one completion per case + chapter, one case completion, one resume per position', () => {
+    const { a, sent } = make();
+    a.storyEncounter('chapter-1', 'draw2', false, 'tok1');
+    a.storyEncounter('chapter-1', 'draw2', false, 'tok1');
+    a.storyEncounter('chapter-1', 'draw2', false, 'tok2'); // a new deal of the same chapter (Continue after leaving)
+    a.storyChapterComplete('chapter-1', 'win', false, 'case:1');
+    a.storyChapterComplete('chapter-1', 'win', false, 'case:1');
+    a.storyChapterComplete('chapter-1', 'loss', true, 'replay:x'); // a replay is reported as one
+    a.storyCaseComplete('case:1');
+    a.storyCaseComplete('case:1');
+    a.storyResume('chapter-2', 'hand', 'update', 'k');
+    a.storyResume('chapter-2', 'hand', 'update', 'k');
+    a.storyAssist('chapter-2', 'skip_scene', 's');
+    expect(sent.map((e) => e.name)).toEqual(['story_encounter_start', 'story_encounter_start', 'story_chapter_complete', 'story_chapter_complete', 'story_case_complete', 'story_resume', 'story_assist']);
+    expect(sent.every((e) => e.app === 'sticks-and-bones')).toBe(true);
+    expect(sent.some((e) => String(e.name).startsWith('match_'))).toBe(false);
+  });
+  it('nothing is sent without consent or while disabled (the default)', () => {
+    const sent: unknown[] = [];
+    new Analytics({ enabled: true, transport: { send: (e) => void sent.push(e) }, consent: () => false }).storyCaseComplete('c');
+    new Analytics({ enabled: false, transport: { send: (e) => void sent.push(e) }, consent: () => true }).storyCaseComplete('c');
+    expect(sent).toEqual([]);
+  });
+});

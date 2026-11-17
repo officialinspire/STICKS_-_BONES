@@ -12,6 +12,11 @@
  *     accepted command of a NEW match (never on render, restore, or a replaced
  *     double-tapped deal); `match_resume` is separate and explicit; round/match
  *     ends once per match + hand.
+ *   - Story events are SEPARATE from Quick Play (a story hand never emits match_*): an encounter starts on
+ *     the chapter hand's first accepted command; chapter and case completion once per case; resume and
+ *     assistance explicit. Their only fields are fixed enums (the nine scene ids, outcomes) — never hands,
+ *     seeds, raw saves, entered names or dialogue. The story event NAMES are this build's proposal, not a
+ *     deployed contract: they must be mapped to the owner's contract before anything is sent.
  */
 import type { Difficulty } from '../ai/types';
 import type { ModeId } from '../engine/types';
@@ -27,7 +32,16 @@ export type AnalyticsEvent =
   | { name: 'match_resume'; mode: ModeId; opponent: Opponent; difficulty: Difficulty | null; hand_number: number }
   | { name: 'round_end'; mode: ModeId; opponent: Opponent; difficulty: Difficulty | null; hand_number: number; ending: 'domino' | 'blocked' | 'blocked_tie'; winner: Winner; points: number }
   | { name: 'match_end'; mode: ModeId; opponent: Opponent; difficulty: Difficulty | null; hands_played: number; winner: Winner }
-  | { name: 'app_error'; kind: 'error' | 'unhandledrejection'; area: 'boot' | 'menu' | 'table' | 'unknown'; message: string };
+  | { name: 'app_error'; kind: 'error' | 'unhandledrejection'; area: 'boot' | 'menu' | 'table' | 'unknown'; message: string }
+  | { name: 'story_encounter_start'; scene: StoryScene; mode: ModeId; replay: boolean }
+  | { name: 'story_chapter_complete'; scene: StoryScene; outcome: StoryOutcome; replay: boolean }
+  | { name: 'story_case_complete' }
+  | { name: 'story_resume'; scene: StoryScene; part: 'dialogue' | 'hand'; via: 'continue' | 'update' }
+  | { name: 'story_assist'; scene: StoryScene; kind: 'skip_scene' };
+
+export const STORY_SCENES = ['prologue', 'chapter-1', 'chapter-2', 'chapter-3', 'chapter-4', 'chapter-5', 'chapter-6', 'chapter-7', 'epilogue'] as const;
+export type StoryScene = (typeof STORY_SCENES)[number];
+export type StoryOutcome = 'win' | 'loss' | 'tie' | 'none';
 
 export type EventName = AnalyticsEvent['name'];
 
@@ -66,6 +80,11 @@ const SCHEMA: Record<EventName, Record<string, Check>> = {
   },
   match_end: { mode: oneOf(MODES), opponent: oneOf(['ai', 'local']), difficulty: diff, hands_played: int(999), winner: oneOf(['player', 'computer', 'team_1', 'team_2', 'tie']) },
   app_error: { kind: oneOf(['error', 'unhandledrejection']), area: oneOf(['boot', 'menu', 'table', 'unknown']), message: (v) => typeof v === 'string' && v.length <= 120 },
+  story_encounter_start: { scene: oneOf(STORY_SCENES), mode: oneOf(MODES), replay: oneOf([true, false]) },
+  story_chapter_complete: { scene: oneOf(STORY_SCENES), outcome: oneOf(['win', 'loss', 'tie', 'none']), replay: oneOf([true, false]) },
+  story_case_complete: {},
+  story_resume: { scene: oneOf(STORY_SCENES), part: oneOf(['dialogue', 'hand']), via: oneOf(['continue', 'update']) },
+  story_assist: { scene: oneOf(STORY_SCENES), kind: oneOf(['skip_scene']) },
 };
 
 /**
@@ -193,6 +212,35 @@ export class Analytics {
     if (this.#ended.has(m.matchId)) return;
     this.#ended.add(m.matchId);
     this.#emit({ name: 'match_end', mode: m.mode, opponent: m.opponent, difficulty: m.difficulty, hands_played: handsPlayed, winner });
+  }
+
+  // ---- Story (separate from Quick Play) --------------------------------------------------------
+  #story = new Set<string>();
+  #storyOnce(key: string): boolean {
+    if (this.#story.has(key)) return false;
+    this.#story.add(key);
+    return true;
+  }
+  /**
+   * A chapter hand really started: its first command was accepted. `token` identifies this dealt hand
+   * locally (never sent); a restored hand must not call this.
+   */
+  storyEncounter(scene: StoryScene, mode: ModeId, replay: boolean, token: string): void {
+    if (this.#storyOnce(`enc:${token}`)) this.#emit({ name: 'story_encounter_start', scene, mode, replay });
+  }
+  /** Chapter finished; `caseId` is a local key for this case (never sent). Once per case + scene (+ replay run). */
+  storyChapterComplete(scene: StoryScene, outcome: StoryOutcome, replay: boolean, caseId: string): void {
+    if (this.#storyOnce(`ch:${caseId}:${scene}:${replay}`)) this.#emit({ name: 'story_chapter_complete', scene, outcome, replay });
+  }
+  storyCaseComplete(caseId: string): void {
+    if (this.#storyOnce(`case:${caseId}`)) this.#emit({ name: 'story_case_complete' });
+  }
+  /** Continue Case into an in-progress position (or the automatic return after an update). Once per position per page. */
+  storyResume(scene: StoryScene, part: 'dialogue' | 'hand', via: 'continue' | 'update', positionKey: string): void {
+    if (this.#storyOnce(`res:${positionKey}:${via}`)) this.#emit({ name: 'story_resume', scene, part, via });
+  }
+  storyAssist(scene: StoryScene, kind: 'skip_scene', key: string): void {
+    if (this.#storyOnce(`assist:${key}`)) this.#emit({ name: 'story_assist', scene, kind });
   }
 
   /** Sanitised error report; each distinct message at most 3 times per page. */

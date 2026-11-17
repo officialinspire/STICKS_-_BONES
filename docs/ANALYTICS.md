@@ -29,6 +29,15 @@ scope and the request to attach it was refused. Its contract, consent behaviour
 and keys were therefore **not inspected and not copied**. If that is the INSPIRE
 standard, it is the natural source for the inputs below.
 
+**Re-checked in the integration stage (2026-11-17):** a fresh search again found
+`SPIRITBALL/js/analytics.js` and also **`SPIRITBALL/js/attribution.js`**. Attaching
+the repository read-only was refused again by this session's permission policy,
+so it is still uninspected; nothing was inferred from file names. **The exact
+missing input** is either (a) the owner's permission for a session to read
+`officialinspire/SPIRITBALL` (`js/analytics.js`, `js/attribution.js`,
+`qa/analytics-safety.mjs`), confirming that it is the INSPIRE contract to follow,
+or (b) the five inputs below supplied directly.
+
 ## Inputs the owner must supply to turn it on
 
 1. **Service and client contract:** endpoint or SDK, and the key / project /
@@ -88,6 +97,27 @@ of two or more digits.
 - **Double taps** on "Deal the tiles" or Resume start one match.
 - **A dealt match that never got a move** doesn't count.
 - **Rematch and restart** are new matches labelled `rematch` or `restart`.
+
+## Story events (proposed; separate from Quick Play)
+
+A story hand never emits `match_*` or `round_*`. Story events carry only fixed enums: the nine scene ids,
+the hand mode, outcome, part and route. They never carry hands, seeds, raw saves, entered names or dialogue
+(the story has no dialogue choices). These names are this build's **proposal**, to be mapped to the owner's
+contract; with the adapter disabled, nothing is sent.
+
+| Event | When (de-duplicated) | Fields |
+| --- | --- | --- |
+| `story_encounter_start` | The chapter hand's **first accepted command** (the opponent's included), once per dealt hand; never on the deal render or a restored hand | `scene`, `mode`, `replay` |
+| `story_chapter_complete` | The hand resolves (Prologue/Epilogue: the end card), once per case + chapter (a replay counts once per replay run) | `scene`, `outcome` (`win`/`loss`/`tie`/`none`), `replay` |
+| `story_case_complete` | The Epilogue's end card, once per case (never on replay) | — |
+| `story_resume` | Continue Case into an in-progress line or hand, or the automatic return after an update; once per position | `scene`, `part` (`dialogue`/`hand`), `via` (`continue`/`update`) |
+| `story_assist` | The player uses **Skip** (to the next decision point), once per case + scene part | `scene`, `kind` (`skip_scene`) |
+
+"Finish Hand with AI assistance" does not exist yet, so it has no event. Consent behaviour is unchanged:
+nothing is sent without `enabled`, a transport **and** granted consent, which matches the only integration
+that exists (none). Evidence: `src/app/analytics.test.ts` (allowlist, dedupe, separation, consent) and
+`npm run story:e2e` § H (real hand: one encounter on the first move, refresh mid-hand → one resume and no
+second start, one completion, no Quick Play events, enum-only fields).
 
 ## Evidence
 

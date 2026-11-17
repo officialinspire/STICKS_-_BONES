@@ -17,6 +17,7 @@ import type { HandSetup } from '../story/chapters';
 import { STAGING } from '../story/staging';
 import type { StoryCue } from '../audio/manager';
 import { renderStoryRun } from './story-player';
+import type { Outcome } from '../story/chapters';
 import { sceneAssets } from './story-assets';
 import { envKey } from '../assets/env';
 import { wordmarkHtml } from './brand';
@@ -139,6 +140,13 @@ export interface StoryDeps {
   offlineNote?(id: SceneId): string | null;
   /** A waiting app update (the case file shows "Update now"; the run's position is saved first). */
   readonly update?: { ready(): boolean; apply(): void };
+  /** Story analytics (separate from Quick Play; disabled adapter until the owner's contract). Keys are local only. */
+  readonly track?: {
+    chapterComplete(scene: SceneId, outcome: Outcome | 'none', replay: boolean, caseKey: string): void;
+    caseComplete(caseKey: string): void;
+    resume(scene: SceneId, part: 'dialogue' | 'hand', via: 'continue' | 'update', positionKey: string): void;
+    assist(scene: SceneId, key: string): void;
+  };
   /** True once, right after an update reload that interrupted a story: reopen the saved scene without a tap. */
   takeAutoContinue?(): boolean;
   /** Dev/test: fast AI timings. */
@@ -209,7 +217,7 @@ export async function renderStoryHome(d: StoryDeps, notice?: string): Promise<vo
   on('story-continue', () => void renderStoryRun(d, { replay: null }));
   on('update-now', () => d.update?.apply());
   // After an update reload in the middle of the case: straight back to the saved scene, line or hand (once).
-  if (p && d.takeAutoContinue?.()) void renderStoryRun(d, { replay: null });
+  if (p && d.takeAutoContinue?.()) void renderStoryRun(d, { replay: null, via: 'update' });
   root.querySelectorAll<HTMLElement>('[data-act="story-replay"]').forEach((b) => b.addEventListener('click', () => void renderStoryRun(d, { replay: b.dataset.scene as SceneId })));
   const newBtn = root.querySelector<HTMLButtonElement>('[data-act="story-new"]');
   newBtn?.addEventListener('click', () => {

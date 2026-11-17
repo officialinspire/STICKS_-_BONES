@@ -137,3 +137,52 @@ The build also fails if a PNG original is ever bundled; only the generated PWA i
 - Decode cost on hardware without fast WebP decoding.
 
 See the device list in `docs/QA.md`.
+
+## Story: measured with `npm run perf:story` (integration stage, 2026-11-17)
+
+Same conditions (production build, fast-4G emulation, 4× CPU). Single runs; numbers vary run to run.
+
+| Measurement | Portrait 390×844 @3x | Landscape 1366×768 @1x |
+| --- | --- | --- |
+| Start screen | 471 ms, 546 KB in 7 requests | 454 ms, 685 KB in 7 requests |
+| Start tap → menu | 915 ms | 855 ms |
+| **Essential bytes to the menu** (code, fonts, the viewport's patio variant, Cousin's portrait) | **546 KB** | **685 KB** |
+| Background warm-up by then (table art, offline core files) | 688 KB | 953 KB |
+
+At startup the gates prove **no** PNG source, story backdrop, cast sheet, ambience bed, table/story SFX or the
+gameplay track is fetched, and that the patio comes as the viewport's variant (the 90 KB crop on a phone vs
+the 229 KB full frame). The menu track streams once the menu plays it.
+
+| Story | Result |
+| --- | --- |
+| Chapter 1 entry (Continue → revealed, decoded before the curtain opens) | **643 ms** |
+| Story layer + chapter + next-chapter prefetch | 1522 KB in 14 requests; images: cast-rafa.webp, cast-marisol.webp, back-alley-portrait.webp, cast-vale.webp |
+| Image decode work (trace) | 96.1 ms total, largest 31.6 ms, 4 decodes |
+| Next taps (INP proxy, 4× CPU) | 12 taps, worst event **24 ms** |
+| **8 chapter visits** (open → 5 lines → case file), visit 2 → 8, after a forced GC | DOM nodes 301 → 301, JS listeners 57 → 57, heap 2.95 → 3.13 MB, live timers 1 → 1, intervals 1 → 1, workers 1 → 1, audio buffer sources 0 → 0, media elements 0 → 0, `<img>` 0 → 0 |
+
+**Memory pressure:** decoded story images are no longer pinned forever. Menu/table art stays pinned; story
+images (backdrops, crops, cast) are kept for the 4 most recent keys only (`src/assets/warm.ts`), so a long
+case can't hold every decoded chapter (a full-frame backdrop is ~6.3 MB decoded, a portrait crop ~2.7 MB).
+Short SFX are decoded per need (UI at the menu, table sounds at a table, story accents in Story) instead of
+all 30 at the first tap.
+
+**A measurement trap, recorded so nobody repeats it:** the first leak run showed DOM nodes +249 and listeners
++3 per visit. A heap snapshot showed the retained detached nodes were held by *DevTools global handles*:
+Playwright's `waitForSelector` returns an element handle that pins its detached subtree. With waits that hold
+no handles, the app shows no growth. A minimal page proved the metric itself is stable.
+
+### Budgets revisited (scripts/check-dist.mjs)
+
+The Story content is on-demand, so instead of raising the image budget, images are now split:
+
+| Budget | Limit | Measured | Why |
+| --- | --- | --- | --- |
+| core images | 3,300 KB (unchanged) | 3,050 KB | menu/table art + full-frame backdrops |
+| story images (on demand) | **1,600 KB (new)** | 1,474 KB | 7 portrait crops + 4 cleaned cast sheets |
+| largest chapter | **1,000 KB (new)** | 923 KB (Ch. 3) | what ONE chapter downloads: its backdrop + cast |
+| startup | 900 KB (unchanged) | 894 KB build-time (one patio variant + portrait + code + fonts); 546 / 685 KB measured essential | |
+| code | 300 KB (unchanged) | 295 KB | the manifest's documentation prose is now stripped from the bundle (−4 KB) |
+| story chunks | 130 KB (unchanged) | 113 KB | + the cast frame table |
+| service worker | **22 KB (was 16)** | 19 KB | per-file sizes for truncation checks and four groups |
+| total | **15,400 KB (was 13,900)** | 15,045 KB | + 1.46 MB of on-demand Story images, none at startup |

@@ -301,3 +301,83 @@ unchanged. Sizes, quality gates and the loading order are in
   Prologue's dream and warmed only when Story opens.
 - **Fonts** (DM Sans, Bricolage Grotesque; SIL OFL 1.1) and the **wordmark** vectors
   are described in [DESIGN.md](DESIGN.md).
+
+## Integration stage: remaining-asset re-audit, cast portraits, portrait crops (2026-11-17)
+
+### Re-audit: what was supplied since the last stage
+
+Nothing. `origin/main` is unchanged (`cb4ac97`, already merged into the branch), there are no uploads
+at the repository root, and `npm run assets:verify` finds no unregistered file. No new character sheets,
+expressions, story illustrations, props or audio exist to integrate. What this stage integrated is the
+art already in the repository that was not yet runtime: the four cast atlases.
+
+### Remaining-asset checklist (final assets still missing)
+
+| Asset | Status | What the game shows instead |
+| --- | --- | --- |
+| **Expression labels** for Vale, Luz, Marisol, Rafa (which frame means what) | **missing** | Each character's frame `e1` only; no expression changes are staged |
+| Portraits for Worker (Ch. 3), Representative (Ch. 7), the contractor speaker and the trail voice (Ch. 6) | **missing** | Name tag (and caption-only audio) |
+| Story illustrations / props / evidence-card art | **none supplied** | Typeset evidence card and notebook panels |
+| Opponent seat portraits for Quick Play | **missing** | Initial badges |
+| Edge-on tile art (boneyard, opponents' hands) | **missing** | Vector backs |
+| INSPIRE studio intro video | **missing** | Start screen fades to the menu |
+| Recorded domino foley, commissioned music, speaker recording | **missing** | CC0 stand-ins / silence + ambience / captions (`docs/AUDIO.md`) |
+| Cousin's large atlas and reference sheets | variant/reference | Not runtime (need cleaned cut-outs) |
+
+No temporary monogram, drawn fallback or synthesized sound has been relabelled as final art: the cast
+derivatives are cleaned copies of the owner's own sheets, and everything in the table above is listed as
+missing in `src/assets/manifest.ts` (`MISSING_ASSETS`).
+
+### Cast portraits (`npm run assets:cast` → `assets/generated/web/cast-*.webp`, `src/assets/cast.json`)
+
+The originals are only read. Each frame is searched inside its manifest cell, then:
+
+| Sheet | Size | Mean err / edge p99 / alpha | Repairs (derivative only) | Placement drift in the source | Runtime cell |
+| --- | --- | --- | --- | --- | --- |
+| `cast.vale.atlas` (Tomás Vale) | 1468 KB PNG → **180 KB** WebP (1528×836) | 1.96 / 11.9 / exact | 8 specks (8 px) · fringe 2364 → 0 px · bright orphans cleared 0 | baseline ±2 px, centre ±10.9 px, height ±5 px | 382×418, anchor x 190, baseline y 407 |
+| `cast.luz.atlas` (Luz Rivera) | 1424 KB PNG → **163 KB** WebP (1468×828) | 2.01 / 10.9 / exact | 18 specks (37 px) · fringe 193 → 0 px · bright orphans cleared 0 | baseline ±4 px, centre ±1.8 px, height ±2 px | 367×414, anchor x 183, baseline y 401 |
+| `cast.marisol.atlas` (Marisol Vélez) | 1742 KB PNG → **244 KB** WebP (1540×868) | 2.61 / 14.9 / exact | 42 specks (62 px) · fringe 8377 → 0 px · bright orphans cleared 7 | baseline ±2 px, centre ±7.7 px, height ±0 px | 385×434, anchor x 192, baseline y 423 |
+| `cast.rafa.atlas` (Tío Rafa) | 1739 KB PNG → **214 KB** WebP (1552×826) | 2.12 / 11.7 / exact | 23 specks (38 px) · fringe 6705 → 0 px · bright orphans cleared 0 | baseline ±7 px, centre ±1.6 px, height ±4 px | 388×413, anchor x 193, baseline y 402 |
+
+- **Identity consistency:** checked by eye against each sheet (same person, costume and framing in all eight
+  frames). Measured placement drift between frames is small (above); the repack aligns every frame's
+  baseline and bust centre, so a later expression swap cannot make a figure jump.
+- **Measured rectangles:** the source frame rects in `manifest.ts` are re-verified by `assets:verify`; the
+  derivative's uniform cells and anchors are recorded in `cast.json` and checked for bounds.
+- **Alpha edges:** stray specks (alpha islands outside the figure) were removed; semi-transparent edge pixels
+  whose colour clashed with the nearby opaque body by more than 64 (the red/yellow lines along Vale's,
+  Marisol's and Rafa's bottom crop edges) were recoloured from it. A first pass also cleared dark hair
+  wisps on Marisol; it was narrowed to bright saturated colour only and the result re-checked visually.
+- **Baseline anchors:** the baseline is the last row where the bust is ≥ 30 % opaque (the crop line that sits
+  on the dialogue panel); `anchorX` is the bust's centre at the baseline.
+- **Scene assignments** (from the script's speakers; `src/story/scene-images.ts`, tested against what the Story
+  layer loads): Ch. 1 Rafa, Marisol · Ch. 2 Marisol, Vale · Ch. 3 Vale, Marisol, Rafa · Ch. 4 Rafa, Marisol ·
+  Ch. 5 Luz, Marisol · Ch. 6 Marisol, Luz · Ch. 7 Vale, Marisol, Rafa · Epilogue Marisol.
+- **Runtime:** the speaker's portrait appears on their lines (decorative; the name tag stays the accessible
+  label), only once the sheet has decoded; otherwise the name tag stands alone.
+
+**Expression meanings are not labelled.** This build's reading of each frame, for the owner to confirm or
+correct (nothing at runtime depends on it):
+
+| Character | Frames (inspection only, unconfirmed) |
+| --- | --- |
+| Tomás Vale | e1 composed, level gaze · e2 pleasant smile · e3 appraising, slight frown · e4 self-satisfied smile, chin up · e5 cool, narrowed eyes · e6 hard stare, brows down · e7 startled, eyes wide · e8 tight smirk |
+| Luz Rivera | e1 calm, attentive · e2 warm smile · e3 serious, brows drawn · e4 speaking, open mouth · e5 concerned, brows raised · e6 firm, level · e7 gentle smile · e8 soft smile, eyes narrowed |
+| Marisol Vélez | e1 composed, slight smile · e2 wry half-smile · e3 worried, brows raised · e4 determined, set jaw · e5 pained, brows tilted · e6 warm smile · e7 suspicious frown · e8 broad smile |
+| Tío Rafa | e1 calm, looking off · e2 laughing · e3 sly grin · e4 looking up, wistful · e5 sad, brows tilted · e6 downcast, eyes lowered · e7 proud, chin up · e8 broad smile |
+
+### Portrait crops of the seven environments
+
+Each environment now has a 3:4 crop centred on its focal point (`src/assets/focal.ts`, the single source for
+the staging positions too — tested). Viewports no wider than 3:4 load the crop instead of the full frame:
+the same visible area under `background-size: cover`, far fewer bytes. Rotation re-picks (decoded first).
+
+| Environment | Full frame | Portrait crop | Crop | Mean err |
+| --- | --- | --- | --- | --- |
+| `env.neighborhood-patio` | 229 KB | 90 KB | x = 483 (focal 50.0% inside the crop) | 4.38 |
+| `env.cave-waterfall` | 285 KB | 93 KB | x = 483 (focal 50.0% inside the crop) | 4.9 |
+| `env.back-alley` | 236 KB | 96 KB | x = 399 (focal 50.1% inside the crop) | 4.84 |
+| `env.resort-patio` | 284 KB | 87 KB | x = 483 (focal 50.0% inside the crop) | 5.06 |
+| `env.moonlit-promenade` | 191 KB | 50 KB | x = 483 (focal 50.0% inside the crop) | 3.68 |
+| `env.jungle-camp` | 428 KB | 182 KB | x = 483 (focal 50.0% inside the crop) | 5.42 |
+| `env.executive-terrace` | 209 KB | 74 KB | x = 483 (focal 50.0% inside the crop) | 4.47 |

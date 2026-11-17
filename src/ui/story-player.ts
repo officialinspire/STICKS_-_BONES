@@ -231,12 +231,17 @@ class DomStage implements StageView<Beat> {
 export interface RunOptions {
   /** Replay a completed chapter (memory only — never changes case progress). */
   readonly replay: SceneId | null;
+  /** How this run was opened (analytics only): a tap on Continue, or the automatic return after an update. */
+  readonly via?: 'continue' | 'update';
 }
 
 export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void> {
   const { root } = d;
   const script = await loadScript();
   let p: StoryProgress = o.replay ? { ...newProgress(Date.now()), sceneId: o.replay, completed: [] } : (readStory(d.store).value ?? newProgress(Date.now()));
+  // Local analytics keys (never sent): this case, or this replay run.
+  const caseKey = o.replay ? `replay:${o.replay}:${Date.now()}` : `case:${p.startedAt}`;
+  let resumeTracked = false;
   const persist = (next: StoryProgress) => {
     p = next;
     if (!o.replay) save(d, p);
@@ -286,6 +291,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
         </div>
         <header class="story-bar">
           <button type="button" class="btn-ghost back" data-act="story-file">← Case file</button>
+          ${d.update ? `<button type="button" class="btn-ghost cine-btn story-update" data-region="update" data-act="update-now" ${d.update.ready() ? '' : 'hidden'} aria-label="Update the game now (your place is saved first)">Update</button>` : ''}
           <h1 class="story-bar-title"><span class="chapter-num">${esc(label(scene))}</span> ${esc(scene.title)}${o.replay ? ' <span class="replay-tag">Replay</span>' : ''}</h1>
         </header>
         <section class="story-main" aria-label="Scene">
@@ -355,6 +361,8 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
       (slot.querySelector('[data-act="story-onward"]') as HTMLElement).focus({ preventScroll: true });
       root.querySelector<HTMLElement>('[data-act="story-next"]')!.hidden = true;
       pos();
+      if (sceneId === 'prologue' || sceneId === 'epilogue') d.track?.chapterComplete(sceneId, 'none', !!o.replay, caseKey);
+      if (sceneId === 'epilogue' && !o.replay) d.track?.caseComplete(caseKey);
       if (!o.replay) persist({ ...p, sceneId, part: 'end', index: 0, hand: null, completed: sceneId === 'prologue' || sceneId === 'epilogue' ? [...new Set([...p.completed, sceneId])] : p.completed });
     };
 
@@ -422,6 +430,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
         onResolved: (winnerTeam, playerTeam) => {
           if (outcome !== null) return; // once
           outcome = outcomeFor(winnerTeam, playerTeam);
+          d.track?.chapterComplete(sceneId, outcome, !!o.replay, caseKey);
           // One write: outcome + completion + position. A reload can't replay the completion.
           persist({ ...p, sceneId, part: 'post', index: 0, outcome, hand: null, completed: [...new Set([...p.completed, sceneId])] });
         },
@@ -446,6 +455,10 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
     };
 
     // Enter at the saved position.
+    // Continue Case into an in-progress position (not a fresh scene start, not a replay): a resume.
+    const inProgress = !o.replay && p.sceneId === sceneId && (part === 'hand' || part === 'post' || part === 'insert' || p.index > 0);
+    if (inProgress && !resumeTracked) d.track?.resume(sceneId, part === 'hand' ? 'hand' : 'dialogue', o.via ?? 'continue', `${caseKey}:${sceneId}:${part}:${p.index}`);
+    resumeTracked = true;
     if (part === 'hand') {
       replayCues(preBeats.length);
       void dir.load(preBeats, preBeats.length, { handAlreadyDone: true });
@@ -470,6 +483,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
         // Skip lands on the next decision point (deal card or end card) — never past a hand.
         dir.settle();
         if (root.querySelector('.hand-card, .end-card')) return;
+        d.track?.assist(sceneId, `${caseKey}:${sceneId}:${beats === preBeats ? 'pre' : 'post'}`);
         dir.skipToEnd();
       } else if (act === 'story-deal') {
         if (dir.enterHand()) root.querySelector<HTMLElement>('.scene-card-slot')!.innerHTML = '';
@@ -484,6 +498,8 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
           dispose();
           void renderStoryHome(d);
         }
+      } else if (act === 'update-now') {
+        d.update?.apply();
       } else if (act === 'story-file') {
         dispose();
         void renderStoryHome(d);

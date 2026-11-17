@@ -382,7 +382,8 @@ export function consumeUpdatedFlag(): boolean {
 }
 
 /** Where to return after an update reload: written once before the reload, consumed once after. */
-export type ResumeTarget = { readonly to: 'story' } | { readonly to: 'quick' } | { readonly to: 'menu' };
+/** story: back to the case file, or (run) straight into the saved scene, line or hand. */
+export type ResumeTarget = { readonly to: 'story'; readonly run?: boolean } | { readonly to: 'quick' } | { readonly to: 'menu' };
 const RESUME_KEY = 'sticks-and-bones.update-resume';
 export function setUpdateResume(t: ResumeTarget, ss: Pick<Storage, 'setItem'> | null = safeSession()): void {
   try {

@@ -293,6 +293,53 @@ try {
     await page.context().close();
   }
   void STAGING;
+  // ---- H. Story analytics events (dev recorder; the transport is disabled) ------------------------------
+  {
+    const { page, errors } = await newPage();
+    await toMenu(page);
+    type Ev = { name: string; [k: string]: unknown };
+    const evs = async (): Promise<Ev[]> => JSON.parse((await page.evaluate(`JSON.stringify(window.__sbAnalytics || [])`)) as string) as Ev[];
+    const pre = segments(scene('chapter-1')).pre.length;
+    await seed(page, { sceneId: 'chapter-1', part: 'pre', index: pre - 1 });
+    await openStory(page);
+    await waitState(page, 'presenting');
+    await page.click('[data-act="story-next"]');
+    await page.waitForTimeout(300);
+    await page.click('[data-act="story-next"]').catch(() => undefined);
+    await page.locator('[data-act="story-deal"]').first().waitFor({ timeout: 10_000 });
+    await page.click('[data-act="story-deal"]');
+    await page.locator('.table-screen').first().waitFor({ timeout: 20_000 });
+    // (The opponent may move first: any first accepted command — the AI's included — is the real start.)
+    // One real move, then refresh mid-hand: the restored hand is a resume, never a second start.
+    const legal = page.locator('.hand-tile.is-legal');
+    if (await legal.count()) {
+      await legal.first().click();
+      await page.locator('.end-slot.is-legal').first().click();
+    } else await page.locator('[data-act="draw"]:not([disabled]), [data-act="pass"]:not([disabled])').first().click();
+    await page.waitForTimeout(600);
+    const afterMove = await evs();
+    await page.reload();
+    await page.click('.start-button');
+    await page.waitForSelector('[data-act="story"]');
+    await openStory(page);
+    await page.locator('.table-screen').first().waitFor({ timeout: 20_000 });
+    const resumed = await evs();
+    const done = await playHandAtTable(page);
+    await page.waitForTimeout(500);
+    const final = await evs();
+    const all = [...afterMove, ...final];
+    const enc = afterMove.filter((e) => e.name === 'story_encounter_start');
+    check(enc.length === 1 && enc[0]!.scene === 'chapter-1' && enc[0]!.mode === 'draw2' && enc[0]!.replay === false, `H: encounter start ${JSON.stringify(enc)}`);
+    check(resumed.some((e) => e.name === 'story_resume' && e.scene === 'chapter-1' && e.part === 'hand' && e.via === 'continue') && !resumed.some((e) => e.name === 'story_encounter_start'), `H: refresh mid-hand should report one resume and no new start: ${JSON.stringify(resumed)}`);
+    check(done && final.filter((e) => e.name === 'story_chapter_complete' && e.scene === 'chapter-1').length === 1, `H: chapter completion ${JSON.stringify(final)}`);
+    check(final.filter((e) => e.name === 'story_encounter_start').length === 0, `H: the restored hand reported another start: ${JSON.stringify(final)}`);
+    check(!all.some((e) => /^match_|^round_/.test(e.name)), `H: a story hand emitted Quick Play events: ${all.map((e) => e.name).join(', ')}`);
+    const allowed = new Set(['name', 'scene', 'mode', 'replay', 'outcome', 'part', 'via', 'kind', 'display', 'build']);
+    check(all.every((e) => Object.keys(e).every((k) => allowed.has(k))), `H: a Story event carried an unexpected field: ${JSON.stringify(all)}`);
+    check(errors.length === 0, `H: page errors ${errors.join(' | ')}`);
+    notes.push(`H: Story analytics — encounter start only on the first move (${enc.length}); refresh mid-hand → story_resume(hand) and no second start; chapter complete once (${final.filter((e) => e.name === 'story_chapter_complete').map((e) => e.outcome).join(',')}); no match_*/round_* from story hands; fields limited to enums`);
+    await page.context().close();
+  }
 } catch (e) {
   failures.push(`exception: ${(e as Error).stack ?? e}`);
 } finally {

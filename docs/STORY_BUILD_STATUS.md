@@ -71,7 +71,17 @@ v0.2, committed to `main` by the owner as 242ee60). The general project log stay
 | | Captions never duck music (no speech recordings exist) | ✅ |
 | | Intro: touch-to-start → video (Skip) → black → menu retained; no SFX or music during init/intro | ✅ (video **still missing**: the fallback runs) |
 | | Original music briefs: night-investigation bed, cave suspense bed, four stingers (`docs/MUSIC_BRIEFS.md`); no music generated | ✅ (briefs; music **missing**) |
-| **Next** | Cast portraits in dialogue (needs expression labels → derivatives) | ☐ |
+| **Integration stage: assets, loading, offline, analytics** | Re-audit: nothing new supplied on `main`; remaining final assets listed explicitly (`docs/ASSETS.md`), none relabelled as final | ✅ |
+| | Cast portraits (Vale, Luz, Marisol, Rafa) in dialogue: cleaned repacked derivatives (specks removed, colour fringes repaired, baselines/centres aligned), identity checked, scene assignments tested; frame e1 only | ✅ (expression labels **missing**) |
+| | Portrait 3:4 crops for all seven environments from one focal table; chosen by viewport, re-picked on rotation; next chapter prefetched (bounded queue), decoded before reveal | ✅ |
+| | Measured startup, chapter entry, decode cost, tap latency and memory; 8 repeated chapter visits: no growth in nodes, listeners, timers, workers, audio sources, media (`npm run perf:story`) | ✅ |
+| | Budgets revisited: core vs on-demand Story images, per-chapter limit; startup/code limits unchanged (manifest prose stripped from the bundle) | ✅ |
+| | Offline groups: shell + core at install; story per chapter or by explicit download (3.2 MB, progress, retry); optional audio (9.1 MB, disclosed, removable, byte ranges); quota/interruption/missing media/unavailable storage handled | ✅ |
+| | Accurate readiness lines (Quick Play / n of 9 scenes / whole story / audio) and a per-scene note on the case file | ✅ |
+| | Repair re-downloads only this app's caches plus the groups the player chose; both save slots kept | ✅ |
+| | Update mid-case: Update now on the case file, scene bar and story table; stable state written and checked; honest failed-save choice; no hand visible; returns once to the same line or hand | ✅ |
+| | Story analytics events separate from Quick Play (encounter start on first move, chapter/case completion, resume, assist), deduplicated, enum-only | ✅ (adapter still **disabled**; contract not inspected) |
+| **Next** | Cast expressions in dialogue (needs the owner's expression labels) | ☐ |
 | | Owner listening pass: SFX choices, bed seams (`/dev/audio-audition.html`), levels on headphones and speakers; mark `auditioned` / `final` | ☐ |
 | | Commissioned music (night bed, cave bed, stingers) and recorded domino foley | ☐ |
 | | Finish Hand with AI assistance, skip with recap, optional table banter in safe gaps | ☐ |
@@ -97,8 +107,10 @@ stage entry of `docs/BUILD_STATUS.md` and `docs/AUDIO.md` § Verification.
 
 | Input | Needed for |
 | --- | --- |
-| **Expression labels** for the four cast atlases (which frame is neutral, angry, smiling…) | Portraits in dialogue. Frames are currently named e1–e8 by position. |
+| **Expression labels** for the four cast atlases (which frame is neutral, angry, smiling…) | Expression changes in dialogue. Portraits now show frame e1; inspection notes for the owner to confirm are in `docs/ASSETS.md`. |
 | Owner's listening approval of the selected sounds and bed seams | Marking any sound `final` / any seam `auditioned` |
+| Permission to read `officialinspire/SPIRITBALL` (`js/analytics.js`, `js/attribution.js`), or the analytics contract itself (service + key for this game, consent, event mapping, attribution) | Turning analytics on (the session's attempt to attach SPIRITBALL was refused) |
+| Portraits for Worker, Representative, the contractor speaker | Those speakers (name tags today) |
 | Recorded domino foley (real double-six tiles on wood) | Replacing the casino-chip stand-ins |
 | Commissioned original music: night-investigation bed, cave suspense bed, round/case stingers (`docs/MUSIC_BRIEFS.md`) | Chapter 4 and 6 music, results and case-complete cues |
 | The contractor speaker recording (voice + repeating cough), if the owner wants it voiced | Chapter 6 (caption-only until then; never impersonated) |

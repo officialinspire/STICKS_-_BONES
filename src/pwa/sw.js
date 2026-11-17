@@ -47,6 +47,11 @@ const SCOPE = self.registration.scope;
 const lastError = { shell: null, core: null, story: null, audio: null };
 const jobs = { core: null, story: null, audio: null };
 
+/** Read from one of our caches without creating it. */
+async function matchIn(name, url, opts) {
+  return (await caches.has(name)) ? (await caches.open(name)).match(url, opts) : undefined;
+}
+
 const isQuota = (e) => !!e && (e.name === 'QuotaExceededError' || /quota/i.test(String(e.message || e)));
 
 async function broadcast(msg) {
@@ -202,7 +207,7 @@ self.addEventListener('fetch', (event) => {
     // Optional offline audio: served from its cache only if the player downloaded it; never cached here.
     event.respondWith(
       (async () => {
-        const hit = await (await caches.open(CACHE.audio)).match(f.url);
+        const hit = await matchIn(CACHE.audio, f.url);
         return hit ? ranged(hit, req.headers.get('range')) : fetch(req);
       })(),
     );
@@ -210,7 +215,7 @@ self.addEventListener('fetch', (event) => {
   }
   event.respondWith(
     (async () => {
-      const hit = await (await caches.open(CACHE[f.group])).match(f.url, { ignoreSearch: true });
+      const hit = await matchIn(CACHE[f.group], f.url, { ignoreSearch: true });
       if (hit) return hit;
       const res = await fetch(req);
       if (res.ok && f.group !== 'shell') {

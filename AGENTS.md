@@ -25,12 +25,18 @@ before you change anything.
   `assets/art/`. Derivatives are new files with their own manifest entries.
   `npm run assets:verify` must pass.
 - **Runtime images are derivatives:** `urls.ts` serves the WebP files from `npm run assets:derive`
-  (same dimensions as the source, recorded in `src/assets/derivatives.json`). Rebuild them after
-  `atlas:build` or any source change. Never bundle a PNG original; keep `npm run build` inside its
+  (same dimensions as the source, recorded in `src/assets/derivatives.json`), the environments' 3:4
+  portrait crops (`PORTRAIT_URLS`, centred on `src/assets/focal.ts`), and the cast sheets from
+  `npm run assets:cast` (cleaned, baseline-aligned repacks; their frames come from `src/assets/cast.json`,
+  never the source rects). Cast expression meanings are unlabelled: use frame `e1` only until the owner
+  labels them. Rebuild derivatives after `atlas:build` or any source change. Never bundle a PNG original; keep `npm run build` inside its
   byte budget (`docs/PERFORMANCE.md`). Load images through `src/assets/warm.ts`, not ad-hoc `new Image()`.
 - **PWA isolation:** the service worker (`src/pwa/sw.js`) is scoped to the app directory and may only
   open/delete `inspire:sticks-and-bones:*` caches; never `unregister()` or `skipWaiting()` without the
-  player's "Update now", never cache PNG source sheets, music or video. Local data keys are
+  player's "Update now", never cache PNG source sheets or video. Groups: shell + core at install; story
+  per chapter or on the player's explicit "Download the whole story"; music/ambience **only** in the
+  optional `audio:v1` group after the player opts in (size disclosed). Never store a truncated download.
+  Updates write the stable state first, say so honestly if the write fails, and return once. Local data keys are
   `sticks-and-bones.*`; repair must not touch them. Run `npm run pwa` for any PWA or caching change.
 - **Analytics:** only through `src/app/analytics.ts` (per-event allowlist, sanitised errors, de-duplicated
   from applied engine events, never from renders). It stays disabled until the owner supplies the contract
