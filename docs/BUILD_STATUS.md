@@ -1218,12 +1218,12 @@ audio manager. No new manager.
 
 | Command | Result |
 | --- | --- |
-| `npm run check` | running at commit time; result recorded in the next commit |
-| `npm run e2e` | STARTUP_E2E |
-| `npm run qa` / `npm run a11y` | running at commit time; result recorded in the next commit |
-| `npm run pwa` | running at commit time; result recorded in the next commit |
-| `npm run audio` / `npm run story:e2e` | running at commit time; result recorded in the next commit |
-| `npm run matches` / `npm run smoke` | running at commit time; result recorded in the next commit |
+| `npm run check` | pass: 343 tests (+3), lint, assets, budgets (code 310/320 KB, startup 936/960 KB) |
+| `npm run e2e` | pass. § 7g: portrait loaded on attempt 3, tiles → named fallback → Try again → Ready; cold ready 1.5 s (incl. backoff), warm reload 266 ms. § 7h–7j as listed. **Found and fixed:** at 844×390 the credit video took its own 16:9 height (475 px) and ran off screen; it now letterboxes in every orientation |
+| `npm run qa` / `npm run a11y` | 0 failures, 1 documented comfort warning / 0 failures (the menu is scanned after the reveal settles; mid-fade elements are transparent) |
+| `npm run pwa` | pass: offline startup → "Ready."; offline with missing art → named fallback + Try again, start enabled; the video is still never cached |
+| `npm run audio` / `npm run story:e2e` | pass / pass |
+| `npm run matches` / `npm run smoke` | pass / pass |
 
 ### Known issues
 - The intro video `assets/video/inspiresoftwareintro.mp4` is still **missing**. The text card stands in.
