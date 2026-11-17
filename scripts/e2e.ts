@@ -1323,8 +1323,8 @@ try {
   }
 
   // 8c. Menu navigation: browser Back, Escape and ← Menu all return home with focus on the opener;
-  //     the setup heading follows the chosen players; sub-pages never scroll sideways; Achievements is
-  //     a labelled placeholder; Story shows Continue Case once a case exists.
+  //     the setup heading follows the chosen players; sub-pages never scroll sideways; Achievements lists
+  //     all 100; Story shows Continue Case once a case exists.
   {
     const page = await newPage({ width: 360, height: 800 });
     await enterMenu(page);
@@ -1355,7 +1355,8 @@ try {
     check((await page.textContent('#modes-heading'))?.trim() === 'Two Players', 'setup: heading did not follow "Two players, one device"');
     await page.goBack();
     await page.click('[data-go="achievements"]');
-    check(/later update/i.test((await page.textContent('.soon-banner')) ?? '') && (await page.locator('.scene.is-sub button:not([data-act="home"])').count()) === 0, 'achievements: should be a labelled placeholder with no dead controls');
+    await page.locator('.ach-card').first().waitFor();
+    check(/of 100 unlocked/.test((await page.textContent('.ach-summary')) ?? '') && (await page.locator('.ach-card').count()) === 100, 'achievements: the page should list all 100');
     await page.click('[data-act="home"]');
     check(/New Case/.test((await page.textContent('.dest-story')) ?? ''), 'story card: New Case without progress');
     await page.evaluate(() => localStorage.setItem('sticks-and-bones.story', JSON.stringify({ format: 'sticks-and-bones/story', version: 2, data: { sceneId: 'chapter-3', part: 'pre', index: 0, outcome: null, completed: ['prologue', 'chapter-1', 'chapter-2'], textScale: 1, startedAt: 1, hand: null } })));
