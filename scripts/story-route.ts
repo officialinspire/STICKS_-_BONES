@@ -20,7 +20,6 @@ import { insertLines, segments, type Outcome } from '../src/story/chapters.ts';
 import { playerCaption } from '../src/story/captions.ts';
 import type { Scene } from '../src/story/parse.ts';
 
-type Page = import('playwright').Page;
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright') as typeof import('playwright');
 const root = fileURLToPath(new URL('..', import.meta.url));
