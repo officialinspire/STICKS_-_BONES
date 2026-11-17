@@ -387,7 +387,7 @@ function openStory(): void {
         settings: storySettingsApi,
         audio: audioApi,
         update: tableUpdate,
-        story: { onContinue: () => req.onContinue() },
+        story: { onContinue: () => req.onContinue(), faces: req.faces },
       });
       const playerTeam = session.rules.teams.findIndex((t) => t.includes(0));
       root.classList.add('is-table');

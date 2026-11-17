@@ -39,7 +39,7 @@ export interface TableCallbacks {
   /** A new app version is waiting (PWA). `apply` saves, hides every hand and reloads. */
   readonly update?: { ready(): boolean; apply(): void };
   /** Story hand (NO REST FOR COUSIN): one hand only; the results sheet continues the case instead of dealing again. */
-  readonly story?: { onContinue(): void };
+  readonly story?: { onContinue(): void; faces?: Readonly<Partial<Record<number, string>>> };
 }
 
 export interface TableAudio {
@@ -308,7 +308,7 @@ export class TableScreen {
         }
         const turn = v.phase === 'playing' && v.turn === seat;
         return `<div class="seat-chip seat-${pos}${turn ? ' is-turn' : ''}${role === 'Partner' ? ' is-partner' : ''}" data-seat-pos="${pos}" data-seat="${seat}">
-          <div class="opp-head"><strong>${esc(this.#name(seat))}</strong> <span class="role">${role}</span></div>
+          <div class="opp-head">${this.#cb.story?.faces?.[seat] ? `<span class="seat-face" aria-hidden="true" style="${esc(this.#cb.story.faces[seat]!)}"></span>` : ''}<strong>${esc(this.#name(seat))}</strong> <span class="role">${role}</span></div>
           <div class="opp-meta"><span>${n} tile${n === 1 ? '' : 's'}</span>${last ? `<span class="badge">${last}</span>` : ''}${turn && this.#s.aiThinking ? '<span class="badge think">thinking…</span>' : ''}</div>
           <div class="opp-backs" aria-hidden="true">${backs}</div>
         </div>`;

@@ -62,3 +62,22 @@ describe('manifest prose is stripped from the bundle (vite stripManifestProse)',
     expect(users).toEqual([]);
   });
 });
+
+import { castFace, castFrame } from '../ui/story-assets';
+describe('cast dialogue crops (visible bounds)', () => {
+  it('every sheet crops to its visible figure: same crop for every frame, inside the cell, upright aspect', () => {
+    for (const c of cast.cast) {
+      const f = castFrame(c.of as 'cast.vale.atlas')!;
+      const cell = c.frames[0]!;
+      expect(f.w).toBeLessThanOrEqual(cell.w);
+      expect(f.h).toBeLessThanOrEqual(cell.h);
+      expect(f.h).toBeGreaterThan(f.w * 0.95); // head-and-shoulders, not a sliver
+      // The visible crop trims the padding: it starts at the head top (minus a hair margin) and ends at the baseline.
+      expect(f.y - cell.y).toBe(Math.max(0, cell.headTopY - 6));
+      const face = castFace(c.of as 'cast.vale.atlas')!;
+      expect(face.w).toBe(face.h);
+      expect(face.x).toBeGreaterThanOrEqual(cell.x);
+      expect(face.x + face.w).toBeLessThanOrEqual(cell.x + cell.w);
+    }
+  });
+});

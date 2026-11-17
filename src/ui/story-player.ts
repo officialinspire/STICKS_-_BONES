@@ -24,10 +24,10 @@ import { cuesFor, STAGING, type Cue, type Light } from '../story/staging';
 import { STATE_CUES } from '../audio/manager';
 import { phaseEnd, phaseStart } from '../story/timing';
 import { wrapTab } from './focus-trap';
-import { HostView } from './host';
+import { dialogueSourceSize, HostView } from './host';
 import { captionPanelHtml, captionText, chapterCardHtml, loadScript, renderStoryHome, save, speakerLabelHtml, speakerOf, type StoryDeps } from './story-ui';
 import { esc } from './svg';
-import { castFrame, sceneAssets, sceneCast, speakerKey } from './story-assets';
+import { castFace, castFrame, CAST_BY_SEAT_NAME, regionStyle, sceneAssets, sceneCast, speakerKey } from './story-assets';
 
 interface Beat {
   readonly block: Block;
@@ -36,6 +36,19 @@ interface Beat {
 
 const SCENES_IN_ORDER: SceneId[] = ['prologue', 'chapter-1', 'chapter-2', 'chapter-3', 'chapter-4', 'chapter-5', 'chapter-6', 'chapter-7', 'epilogue'];
 const label = (s: Scene) => (s.number === null ? s.heading.split(' — ')[0]! : `Chapter ${s.number}`);
+
+/** Compact cast portraits for the table's seats during a story hand. */
+function tableFaces(names: Readonly<Partial<Record<number, string>>>): Partial<Record<number, string>> {
+  const out: Partial<Record<number, string>> = {};
+  for (const [seat, name] of Object.entries(names)) {
+    const id = name ? CAST_BY_SEAT_NAME[name] : undefined;
+    const f = id ? castFace(id) : null;
+    if (id && f) out[Number(seat)] = regionStyle(urlFor(id)!, f);
+  }
+  // Usually decoded already (the scene's cast is warmed on entry); a small chip may otherwise appear a moment later.
+  void warm(Object.values(names).flatMap((n) => (n && CAST_BY_SEAT_NAME[n] ? [CAST_BY_SEAT_NAME[n]!] : [])));
+  return out;
+}
 
 // ---- the DOM stage ------------------------------------------------------------------
 class DomStage implements StageView<Beat> {
@@ -49,7 +62,10 @@ class DomStage implements StageView<Beat> {
   #intent: { env: RuntimeAssetId | null; focus: string } | null = null;
   #unshape: (() => void) | null = null;
   #speaker: RuntimeAssetId | null = null;
+  /** The cast member on stage (stays as the listener across Cousin's lines and captions). */
+  #castOn: RuntimeAssetId | null = null;
   #disposed = false;
+  #onResize = () => this.#layoutFigures();
   constructor(
     root: HTMLElement,
     private readonly sceneId: SceneId,
@@ -91,6 +107,32 @@ class DomStage implements StageView<Beat> {
     this.#disposed = true;
     this.#unshape?.();
     this.#unshape = null;
+    window.removeEventListener('resize', this.#onResize);
+  }
+  /**
+   * Figure sizing: CSS picks the layout height (generous during dialogue); this sets each figure's
+   * RESOLUTION CAP — the height at which its visible source pixels would be upscaled 1.6× on this
+   * screen (devicePixelRatio) — so art is never blurred, and a LIFT that stands the figure on the dialogue
+   * panel's top edge with only its lowest 22 % tucked behind (faces, hats and upper bodies stay clear).
+   * Position only: never a scale change.
+   */
+  #layoutFigures(): void {
+    if (this.#disposed) return;
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const actor = dialogueSourceSize();
+    this.#root.style.setProperty('--actor-ar', String(actor.w / actor.h));
+    this.#root.style.setProperty('--actor-cap-h', `${Math.round((actor.h * 1.6) / dpr)}px`);
+    const cast = this.#castOn ? castFrame(this.#castOn) : null;
+    if (cast) this.q<HTMLElement>('.st-cast')?.style.setProperty('--cast-cap-h', `${Math.round((cast.h * 1.6) / dpr)}px`);
+    const panel = this.q<HTMLElement>('.dialogue-slot');
+    const main = this.q<HTMLElement>('.story-main');
+    const panelH = panel?.offsetHeight ?? 0;
+    for (const el of this.#root.querySelectorAll<HTMLElement>('.st-actor, .st-cast')) {
+      const h = el.offsetHeight;
+      const room = Math.max(0, (main?.clientHeight ?? 0) - h);
+      // Stand on the panel's top edge with only the lowest 22 % tucked behind it (faces and upper bodies clear).
+      el.style.setProperty('--fig-lift', `${Math.round(Math.min(room, Math.max(0, panelH - 0.22 * h)))}px`);
+    }
   }
   #setBackdrop(env: RuntimeAssetId | null, focus: string, instant: boolean): void {
     const next = this.#front === 'a' ? 'b' : 'a';
@@ -149,30 +191,42 @@ class DomStage implements StageView<Beat> {
     panel.style.setProperty('--reveal-ms', `${revealMs}ms`);
     panel.classList.toggle('is-revealing', revealMs > 0);
     const own = blk.kind === 'line' && speakerOf(blk.speaker!).label === 'Cousin';
-    this.#showCast(blk.kind === 'line' ? speakerKey(blk.speaker!) : null);
+    const castId = blk.kind === 'line' ? speakerKey(blk.speaker!) : null;
+    // A cast speaker comes (or stays) on the right; the last one remains as the listener otherwise.
+    if (castId) this.#showCast(castId);
     const reaction = blk.kind === 'direction' && b.cues.some((c) => c.kind === 'expr');
-    this.#root.toggleAttribute('data-actor-visible', this.#cousinIn && (own || reaction));
-    if (own && !this.#cousinIn) {
-      this.apply({ kind: 'cousin', to: 'in' });
-      this.#root.toggleAttribute('data-actor-visible', true);
-    }
+    if (own && !this.#cousinIn) this.apply({ kind: 'cousin', to: 'in' });
+    // Two-character framing: Cousin on the left whenever he's on stage, the cast member on the right. The
+    // one speaking is bright; the listener is dimmed (never rescaled). Captions dim nobody.
+    this.#root.toggleAttribute('data-actor-visible', this.#cousinIn);
+    this.#root.dataset.speaking = own || reaction ? 'cousin' : castId ? 'cast' : blk.kind === 'line' ? 'other' : 'none';
+    if (blk.kind === 'line') panel.dataset.side = castId ? 'right' : 'left';
+    this.#layoutFigures();
+  }
+  /** Resume mid-scene: put the most recent cast speaker before this point on stage as the listener. */
+  primeListener(id: RuntimeAssetId | null): void {
+    if (id) this.#showCast(id);
   }
   /** The speaker's portrait (default frame), only once its sheet is decoded; otherwise the name tag stands alone. */
   #showCast(id: RuntimeAssetId | null): void {
     this.#speaker = id;
     const box = this.q<HTMLElement>('.st-cast-art');
+    const fig = this.q<HTMLElement>('.st-cast');
     const f = id ? castFrame(id) : null;
-    if (!id || !f || !box) return void this.#root.removeAttribute('data-cast-visible');
+    if (!id || !f || !box || !fig) return;
     if (warmState(id) !== 'ready') {
-      this.#root.removeAttribute('data-cast-visible');
+      // Keep whoever is on stage until the new sheet has decoded (no blank swap, no late pop-in).
       void warm([id], { front: true }).then(([ok]) => ok && this.#speaker === id && !this.#disposed && this.#showCast(id));
       return;
     }
-    box.style.backgroundImage = `url("${urlFor(id)}")`;
-    box.style.backgroundSize = `${(f.sheetW / f.w) * 100}% ${(f.sheetH / f.h) * 100}%`;
-    box.style.backgroundPosition = `${(f.x / (f.sheetW - f.w)) * 100}% ${(f.y / (f.sheetH - f.h)) * 100}%`;
-    box.style.aspectRatio = `${f.w} / ${f.h}`;
-    box.dataset.cast = id;
+    if (this.#castOn !== id) {
+      box.style.cssText = regionStyle(urlFor(id)!, f);
+      // The figure box takes the visible region's exact aspect: scaled from visible bounds, never stretched.
+      fig.style.setProperty('--ar', String(f.w / f.h));
+      fig.style.setProperty('--cast-cap-h', `${Math.round((f.h * 1.6) / Math.max(1, window.devicePixelRatio || 1))}px`);
+      box.dataset.cast = id;
+      this.#castOn = id;
+    }
     this.#root.setAttribute('data-cast-visible', '');
   }
   finishReveal(): void {
@@ -221,7 +275,11 @@ class DomStage implements StageView<Beat> {
     }
   }
   mountActor(): void {
-    this.#host = new HostView(this.q<HTMLElement>('.st-actor-art'), 'bust', { reduceMotion: this.reduce, animations: () => false });
+    this.#host = new HostView(this.q<HTMLElement>('.st-actor-art'), 'dialogue', { reduceMotion: this.reduce, animations: () => false });
+    // The game's own reduced-motion setting (not only the OS preference) turns figure transitions off.
+    this.#root.classList.toggle('reduce-motion', this.reduce());
+    window.addEventListener('resize', this.#onResize);
+    this.#layoutFigures();
   }
   cousinPresent(on: boolean): void {
     this.apply({ kind: 'cousin', to: on ? 'in' : 'out' });
@@ -428,6 +486,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
         restore,
         replay: !!o.replay,
         host,
+        faces: tableFaces(HANDS[sceneId]!.seatNames),
         onSnapshot: (h) => {
           if (!o.replay && outcome === null) persist({ ...p, sceneId, part: 'hand', index: 0, hand: h });
         },
@@ -480,6 +539,10 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
       const at = Math.min(p.sceneId === sceneId ? p.index : 0, Math.max(0, beats.length - 1));
       quietOnce = p.sceneId === sceneId && (at > 0 || part === 'post');
       replayCues(at);
+      // Two-character framing on resume: whoever was last talking with Cousin stays on stage as the listener.
+      const before = (part === 'pre' ? preBeats : [...preBeats, ...beats]).slice(0, part === 'pre' ? at : preBeats.length + at);
+      const lastCast = [...before].reverse().find((b) => b.block.kind === 'line' && speakerKey(b.block.speaker!));
+      s.primeListener(lastCast ? speakerKey(lastCast.block.speaker!) : null);
       void dir.load(beats, at);
     }
 

@@ -21,11 +21,13 @@ import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { ENV_FOCUS, ENV_IDS, portraitCrop } from '../src/assets/focal.ts';
 import { IMAGE_ASSETS } from '../src/assets/manifest.ts';
+import type { ImageAsset } from '../src/assets/types.ts';
+import { cleanCell, type CleanStats } from './lib/clean.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
 /** Encoder settings per runtime asset. Lossless for the tile atlas: pip geometry must be exact. */
-export const DERIVE: Record<string, { file: string; lossless?: boolean; quality?: number; maxMeanErr?: number }> = {
+export const DERIVE: Record<string, { file: string; lossless?: boolean; quality?: number; maxMeanErr?: number; clean?: boolean }> = {
   // Opaque backdrops, always shown under a darkening gradient: a slightly looser mean-error gate.
   'env.neighborhood-patio': { file: 'neighborhood-patio.webp', quality: 82, maxMeanErr: 6 },
   // Story: the Prologue's dream (always shown dimmed under a night scrim), loaded only when Story opens.
@@ -37,7 +39,9 @@ export const DERIVE: Record<string, { file: string; lossless?: boolean; quality?
   'env.jungle-camp': { file: 'jungle-camp.webp', quality: 84, maxMeanErr: 6 }, // dense foliage: q80 measured 6.05 mean error
   'env.executive-terrace': { file: 'executive-terrace.webp', quality: 80, maxMeanErr: 6 },
   'table.weathered': { file: 'weathered-tabletop.webp', quality: 82, maxMeanErr: 6 },
-  'cousin.atlas.portrait': { file: 'cousin-portrait-atlas.webp', quality: 88 },
+  // Cleaned (scripts/lib/clean.ts): stray specks and red/yellow edge fringes removed per frame cell, same size, so
+  // every frame rect and stage box still applies. Gated against the CLEANED pixels. Needed now that dialogue shows him large.
+  'cousin.atlas.portrait': { file: 'cousin-portrait-atlas.webp', quality: 88, clean: true },
   'cousin.anim.slam': { file: 'cousin-slam-strip.webp', quality: 86 },
   'fx.sheet': { file: 'effects-sheet.webp', quality: 88 },
   'tile.atlas': { file: 'double-six-atlas.webp', lossless: true },
@@ -58,13 +62,29 @@ for (const [id, cfg] of Object.entries(DERIVE)) {
   const input = readFileSync(join(root, src.path));
   const path = `assets/generated/web/${cfg.file}`;
   mkdirSync(dirname(join(root, path)), { recursive: true });
+  // Optional edge cleaning: each frame's cell is cleaned in place on a copy of the decoded pixels.
+  let reference = input;
+  let repairs: CleanStats | null = null;
+  if (cfg.clean) {
+    const { data, info } = await sharp(input).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    repairs = { specks: 0, speckPixels: 0, fringeBefore: 0, fringeAfter: 0, orphanCleared: 0 };
+    for (const f of (src as unknown as ImageAsset).frames ?? []) {
+      const { x, y, w, h } = f.cell;
+      const cell = Buffer.alloc(w * h * 4);
+      for (let r = 0; r < h; r++) data.copy(cell, r * w * 4, ((y + r) * info.width + x) * 4, ((y + r) * info.width + x + w) * 4);
+      const st = cleanCell(cell, w, h);
+      for (const k of Object.keys(repairs) as (keyof CleanStats)[]) repairs[k] += st[k];
+      for (let r = 0; r < h; r++) cell.copy(data, ((y + r) * info.width + x) * 4, r * w * 4, (r + 1) * w * 4);
+    }
+    reference = await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer();
+  }
   const enc = cfg.lossless
-    ? sharp(input).webp({ lossless: true, effort: 6, exact: true })
-    : sharp(input).webp({ quality: cfg.quality, alphaQuality: 100, effort: 6, smartSubsample: true });
+    ? sharp(reference).webp({ lossless: true, effort: 6, exact: true })
+    : sharp(reference).webp({ quality: cfg.quality, alphaQuality: 100, effort: 6, smartSubsample: true });
   const webp = await enc.toBuffer();
   writeFileSync(join(root, path), webp);
 
-  const a = await rgba(input);
+  const a = await rgba(reference);
   const b = await rgba(webp);
   if (a.w !== b.w || a.h !== b.h) throw new Error(`${id}: derivative changed dimensions`);
   let sum = 0;
@@ -101,6 +121,7 @@ for (const [id, cfg] of Object.entries(DERIVE)) {
     edgeP99: +edgeP99.toFixed(1),
     edgePixels: edge.length,
     alphaExact: alphaDiff === 0,
+    ...(repairs ? { cleaned: 'scripts/lib/clean.ts (gated against the cleaned pixels)', repairs } : {}),
   });
   console.log(`${ok ? '✓' : '✗'} ${id}: ${(input.length / 1024).toFixed(0)} KB → ${(webp.length / 1024).toFixed(0)} KB, mean err ${meanErr.toFixed(2)}, edge p99 ${edgeP99.toFixed(1)}, alpha ${alphaDiff === 0 ? 'exact' : `${alphaDiff} px differ`}`);
 }

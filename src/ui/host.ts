@@ -13,7 +13,10 @@ import { bustBox, stageFor } from '../render/stage';
 import { esc } from './svg';
 
 export type Mood = 'neutral' | 'smirk' | 'thinking' | 'explaining' | 'laughing' | 'surprised' | 'delighted' | 'pumped';
-export type HostVariant = 'bust' | 'full';
+/** bust: head and shoulders (menus, table) · dialogue: generous upper body to the waist (story) · full: whole figure. */
+export type HostVariant = 'bust' | 'dialogue' | 'full';
+/** Height / width of the dialogue crop: upper body, hat included, the same box for every expression. */
+export const DIALOGUE_ASPECT = 1.32;
 
 const PORTRAIT = 'cousin.atlas.portrait' as const;
 const SLAM = 'cousin.anim.slam' as const;
@@ -33,10 +36,18 @@ function loadSlam(): Promise<boolean> {
 
 function frameView(variant: HostVariant, sheetId: typeof PORTRAIT | typeof SLAM, frame: string): Rect {
   const stage = stageFor(getAsset(sheetId));
-  return variant === 'bust' && sheetId === PORTRAIT ? bustBox(stage, frame) : stage.boxes[frame]!;
+  if (sheetId === PORTRAIT && variant === 'bust') return bustBox(stage, frame);
+  if (sheetId === PORTRAIT && variant === 'dialogue') return bustBox(stage, frame, DIALOGUE_ASPECT);
+  return stage.boxes[frame]!;
 }
 
 /** Static markup for a host figure (menus, results). */
+/** Source pixels of the dialogue crop (same for every expression): the visible bounds the stage scales from. */
+export function dialogueSourceSize(): { w: number; h: number } {
+  const b = bustBox(stageFor(getAsset(PORTRAIT)), 'neutral', DIALOGUE_ASPECT);
+  return { w: b.w, h: b.h };
+}
+
 export function hostFigureHtml(mood: Mood, variant: HostVariant, className = ''): string {
   const sheet = getAsset(PORTRAIT);
   const v = frameView(variant, PORTRAIT, mood);

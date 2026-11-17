@@ -159,15 +159,23 @@
    "encoder": "q88 alphaQuality100 smartSubsample",
    "width": 1254,
    "height": 1254,
-   "bytes": 297976,
-   "sha256": "c7366042c266693ebdd29af19346313ed35b078aeec7561c15d3b6e661e9b362",
+   "bytes": 206352,
+   "sha256": "841076fe2844af86e4b0c505db01e287a175c8ed7145ddd231290fcbef5f0efe",
    "sourceBytes": 1532373,
    "sourceSha256": "9d557d503e10d74747d496ad3a02d6607624f5d1ad47b9169bf9a4046b1ed291",
    "maxMeanErr": 3,
-   "meanErr": 1.46,
-   "edgeP99": 10.9,
-   "edgePixels": 776002,
-   "alphaExact": true
+   "meanErr": 1.5,
+   "edgeP99": 12.9,
+   "edgePixels": 632784,
+   "alphaExact": true,
+   "cleaned": "scripts/lib/clean.ts (gated against the cleaned pixels)",
+   "repairs": {
+    "specks": 175,
+    "speckPixels": 842,
+    "fringeBefore": 426,
+    "fringeAfter": 0,
+    "orphanCleared": 0
+   }
   },
   {
    "id": "cousin.anim.slam",

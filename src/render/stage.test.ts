@@ -38,6 +38,19 @@ describe('character stages: stable anchors, no cropping, no neighbours', () => {
     }
   });
 
+  it('the dialogue crop (upper body) is one box for every expression: hat inside, in the cell, no scale jumps', () => {
+    const frames = sheet('cousin.atlas.portrait').frames;
+    const st = sheetStage(frames);
+    const sizes = new Set<string>();
+    for (const f of frames) {
+      const b = bustBox(st, f.id, 1.32);
+      expect(b.y).toBeLessThanOrEqual(f.rect.y);
+      expect(contains(f.cell, b)).toBe(true);
+      sizes.add(`${b.w}x${b.h}`);
+    }
+    expect(sizes.size).toBe(1);
+  });
+
   it('effect boxes contain the effect and stay inside their cells', () => {
     for (const f of sheet('fx.sheet').frames) {
       const b = effectBox(f);

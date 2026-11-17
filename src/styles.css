@@ -2465,19 +2465,50 @@ h1, h2, h3, .title, .chapter-title, .section-h, .score-val, .dest-title, .points
 [data-warmth] .st-warmth { opacity: 1; }
 /* Roberto's bust: one fixed stage box for every expression, in the layout flow directly above the dialogue
    (never covered by it). Shown on his own lines and reaction beats only; space is kept so nothing jumps. */
-.st-actor { position: relative; justify-self: start; width: clamp(96px, 20vh, 170px); aspect-ratio: 1 / 1.05; margin: 0 0 -26px 6px; pointer-events: none; opacity: 0; transform: translateY(8px); transition: opacity 260ms ease, transform 260ms ease; }
 [data-cousin][data-actor-visible] .st-actor { opacity: 1; transform: none; }
 .st-actor-art { width: 100%; height: 100%; }
-/* The speaking cast member's portrait shares the actor's grid cell (only one figure at a time). Decorative:
-   the name tag in the dialogue panel is the accessible label. */
-.story-main > .scene-card-slot { grid-row: 1; grid-column: 1; }
-.story-main > .st-actor, .story-main > .st-cast { grid-row: 2; grid-column: 1; }
-.story-main > .dialogue-slot { grid-row: 3; grid-column: 1; }
-.st-cast { position: relative; justify-self: start; width: clamp(96px, 20vh, 170px); margin: 0 0 -26px 6px; pointer-events: none; opacity: 0; transform: translateY(8px); transition: opacity 260ms ease, transform 260ms ease; }
+/* Dialogue figures (decorative; the name tag is the accessible label). Cousin stands on the left, the cast member
+   on the right; both stand at the bottom of the scene area BEHIND the dialogue panel, which overlays the lower
+   torso. Height = the smallest of: the layout target (--fig-h), the figure's resolution cap (≤ 1.6× upscale,
+   set from devicePixelRatio by the stage), the free height, and 47 % of the width (two side by side). The box
+   always has the visible region's own aspect, so art is never stretched, and every expression of a character
+   shares one box (no scale jumps). --fig-lift keeps the face and hat clear of an unusually tall panel. */
+.story-main { position: relative; container-type: inline-size; --fig-h: min(40dvh, 360px); }
+.story-main > .scene-card-slot, .story-main > .dialogue-slot { position: relative; z-index: 2; }
+.story-main > .st-actor, .story-main > .st-cast {
+  position: absolute;
+  bottom: var(--fig-lift, 0px);
+  aspect-ratio: var(--ar);
+  width: auto;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 260ms ease, transform 260ms ease, filter 220ms ease, bottom 200ms ease;
+}
+/* Head-matched scale: Cousin's head (hat to chin) is 38 % of his dialogue crop, the cast heads ~43 % of theirs
+   (measured), so his box is 1.146× taller to give equal heads — still capped by his own resolution. */
+.story-main > .st-actor { left: 1%; --ar: var(--actor-ar, 0.7576); height: min(calc(var(--fig-h) * 1.146), var(--actor-cap-h, 999px), calc(100% - 8px), calc(56cqi / var(--ar))); }
+.story-main > .st-cast { right: 1%; --ar: 0.9; height: min(var(--fig-h), var(--cast-cap-h, 999px), calc(100% - 8px), calc(56cqi / var(--ar))); }
+/* On narrow screens the two may overlap a little in the middle: the speaker stands in front. */
+[data-speaking='cousin'] .story-main > .st-actor, [data-speaking='cast'] .story-main > .st-cast { z-index: 1; }
 [data-cast-visible] .st-cast { opacity: 1; transform: none; }
+/* The listener is dimmed, never rescaled; captions dim nobody. */
+[data-speaking='cast'] .st-actor, [data-speaking='cousin'] .st-cast, [data-speaking='other'] .st-actor, [data-speaking='other'] .st-cast { filter: brightness(0.6) saturate(0.85); }
+.dialogue-panel[data-side='right'] .speaker { justify-content: flex-end; margin-left: 0; margin-right: -4px; }
+.reduce-motion .st-actor, .reduce-motion .st-cast { transition: none; }
+@media (min-width: 700px) and (min-height: 700px) {
+  .story-main { --fig-h: min(46dvh, 460px); }
+}
+/* Portrait phones: a steady panel height for one- and two-line lines, so figures standing on it don't bob. */
+@media (orientation: portrait) and (max-width: 699px) {
+  .story-main .dialogue-panel { min-height: 6em; }
+}
+@media (min-width: 1200px) and (min-height: 700px) {
+  .story-main { --fig-h: min(50dvh, 520px); }
+}
 /* A silent character beat: keeps the panel's space (controls never jump) but draws nothing. */
 .dialogue-panel.is-silent { background: transparent; border-color: transparent; box-shadow: none; min-height: 3.2em; }
-.st-cast-art { width: 100%; aspect-ratio: 0.9; background-repeat: no-repeat; filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.55)); }
+.st-cast-art { width: 100%; height: 100%; background-repeat: no-repeat; filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.55)); }
 .st-actor .host-svg { filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.55)); }
 .st-curtain { z-index: 30; background: var(--sb-ink); opacity: 0; transition-property: opacity; transition-timing-function: ease; }
 .st-curtain.is-closed { opacity: 1; }
@@ -2489,7 +2520,15 @@ h1, h2, h3, .title, .chapter-title, .section-h, .score-val, .dest-title, .points
 .notebook.is-inline { padding: 10px 14px 10px 26px; }
 .case-complete { margin: 0; font: 800 1.6rem / 1.1 var(--display); color: var(--sb-gold); }
 .replay-tag { font: 800 0.7rem / 1 var(--body); text-transform: uppercase; letter-spacing: 0.1em; background: var(--sb-gold); color: var(--sb-ink); padding: 3px 6px; border-radius: 4px; vertical-align: middle; }
+/* The stage's own display: grid would override the hidden attribute: while a hand is played the scene must be
+   truly gone (not drawn under the table, not read by screen readers). */
+.story-stage[hidden] { display: none; }
 .story-table-host:not([hidden]) { position: fixed; inset: 0; z-index: 5; }
+/* Compact cast portraits at the story table: a small head-and-shoulders crop beside the seat name (decorative;
+   the name stays the label). Well below the source resolution, so always crisp. */
+.seat-face { display: inline-block; width: 30px; height: 30px; border-radius: 8px; border: 2px solid rgba(255, 242, 216, 0.55); background-color: rgba(20, 37, 43, 0.6); background-repeat: no-repeat; vertical-align: middle; margin-right: 6px; flex: 0 0 auto; }
+.seats-2 .seat-face { width: 44px; height: 44px; border-radius: 10px; }
+.opp-head:has(.seat-face) { display: flex; align-items: center; flex-wrap: wrap; gap: 0 4px; }
 #app.is-story.is-table { background: linear-gradient(180deg, rgba(8, 63, 67, 0.55), rgba(20, 37, 43, 0.85)), var(--env-image) center / cover no-repeat, var(--sb-ink); }
 @media (prefers-reduced-motion: reduce) {
   .st-backdrop[data-move] { animation: none; }
@@ -2499,7 +2538,7 @@ h1, h2, h3, .title, .chapter-title, .section-h, .score-val, .dest-title, .points
 }
 .reduce-motion .st-backdrop[data-move], .reduce-motion .st-threshold.is-pulse { animation: none; }
 @media (orientation: landscape) and (max-height: 560px) {
-  .st-actor, .st-cast { width: clamp(72px, 22vh, 104px); margin-bottom: -18px; }
+  .story-main { --fig-h: max(120px, calc(100dvh - 210px)); }
   .st-threshold { top: 30%; }
 }
 /* Scene bar stays legible over bright skies (gold 8.6:1 and ivory 14:1 on the ink scrim). */

@@ -381,3 +381,12 @@ the same visible area under `background-size: cover`, far fewer bytes. Rotation 
 | `env.moonlit-promenade` | 191 KB | 50 KB | x = 483 (focal 50.0% inside the crop) | 3.68 |
 | `env.jungle-camp` | 428 KB | 182 KB | x = 483 (focal 50.0% inside the crop) | 5.42 |
 | `env.executive-terrace` | 209 KB | 74 KB | x = 483 (focal 50.0% inside the crop) | 4.47 |
+
+### Cousin's portrait sheet: cleaned derivative (character framing stage)
+
+Dialogue now shows Cousin much larger, which made the source sheet's stray specks and red/yellow edge
+fringes visible. `cousin.atlas.portrait`'s WebP derivative is now cleaned with the same code as the cast
+sheets (`scripts/lib/clean.ts`). It stays the **same size**, so every frame rect and stage box still applies,
+and it is gated against the cleaned pixels: **175 specks (842 px) removed, fringe pixels 426 → 0**, mean
+error 1.50, alpha exact (297 KB → 202 KB, since the faint haze no longer needs encoding). The original is
+unchanged. The slam strip (`cousin.anim.slam`) is only shown small on wide tables and is not cleaned yet.

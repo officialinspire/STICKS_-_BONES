@@ -117,6 +117,8 @@ export interface StoryHandRequest {
   readonly replay: boolean;
   /** The table's own container (the story stage stays mounted beside it, hidden). */
   readonly host: HTMLElement;
+  /** Compact cast portraits by seat (CSS background for a square face crop); seats without art keep their badges. */
+  readonly faces?: Readonly<Partial<Record<number, string>>>;
   onSnapshot(h: StoryHand): void;
   /** The hand resolved (any result advances the story). */
   onResolved(winnerTeam: number | null, playerTeam: number): void;

@@ -72,7 +72,8 @@ async function openStory(page: Page, opts: { fresh?: boolean } = {}) {
     await page.click('[data-act="story-new"]');
     if (await page.locator('[data-act="story-new"][data-armed="1"]').count()) await page.click('[data-act="story-new"]');
   } else await page.click('[data-act="story-continue"], [data-act="story-new"]');
-  await page.waitForSelector('.story-stage');
+  // A scene, or (resuming a hand) the table — the scene is truly hidden while a hand is played.
+  await page.locator('.story-stage:not([hidden]), .table-screen').first().waitFor({ timeout: 30_000 });
 }
 /** Seed progress directly (a valid v2 record) for composition captures. */
 async function seed(page: Page, p: Record<string, unknown>) {
@@ -271,17 +272,31 @@ try {
       await page.waitForTimeout(1300); // let light/water transitions finish for the still
       const m = await page.evaluate(`(() => {
         const r = (s) => { const e = document.querySelector(s); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height, b: b.bottom }; };
-        const actor = r('.st-actor'), panel = r('.dialogue-panel'), controls = r('.cine-controls');
-        const actorVisible = document.querySelector('.story-stage').hasAttribute('data-actor-visible');
+        const actor = r('.st-actor'), cast = r('.st-cast'), panel = r('.dialogue-panel'), controls = r('.cine-controls'), bar = r('.story-bar');
+        const stage = document.querySelector('.story-stage');
+        const actorVisible = stage.hasAttribute('data-actor-visible') && stage.hasAttribute('data-cousin');
+        const castVisible = stage.hasAttribute('data-cast-visible');
         const art = document.querySelector('.st-actor svg');
         const vb = art ? art.viewBox.baseVal : null;
         const up = art && vb ? (art.getBoundingClientRect().height / vb.height) * devicePixelRatio : 0;
-        return { actorVisible, overlap: actor && panel ? Math.max(0, actor.b - 26 - panel.y) : 0, overflowX: document.documentElement.scrollWidth - innerWidth, overflowY: document.documentElement.scrollHeight - innerHeight, actor, panel, controls, cousin: document.querySelector('.story-stage').hasAttribute('data-cousin'), up: +up.toFixed(2), env: document.querySelector('.st-bg.is-front')?.dataset.env || null };
-      })()`) as { actorVisible: boolean; overlap: number; overflowX: number; overflowY: number; actor: { y: number; b: number; x: number; w: number } | null; panel: { y: number; b: number } | null; controls: { y: number } | null; cousin: boolean; up: number; env: string | null };
+        // Cast upscale: box height vs the visible source region (background-size % encodes sheet/region).
+        const cb = document.querySelector('.st-cast-art');
+        const bs = cb ? getComputedStyle(cb).backgroundSize.split(' ').map(parseFloat) : null;
+        const castSrcH = cb && cb.dataset.cast ? ({ 'cast.vale.atlas': 836, 'cast.luz.atlas': 828, 'cast.marisol.atlas': 868, 'cast.rafa.atlas': 826 })[cb.dataset.cast] : 0;
+        const castUp = cast && bs && castSrcH ? ((cast.h * devicePixelRatio) / (castSrcH / (bs[1] / 100))) : 0;
+        // FACES: Cousin's head (hat to chin) is the top 38 % of his crop, the cast heads ~43 % of theirs.
+        const actorFaceCover = actorVisible && actor && panel ? Math.max(0, actor.y + actor.h * 0.4 - panel.y) : 0;
+        const castFaceCover = castVisible && cast && panel ? Math.max(0, cast.y + cast.h * 0.47 - panel.y) : 0;
+        const underBar = Math.max(actorVisible && actor && bar ? bar.b - actor.y : 0, castVisible && cast && bar ? bar.b - cast.y : 0);
+        return { actorVisible, castVisible, actorFaceCover, castFaceCover, underBar, overflowX: document.documentElement.scrollWidth - innerWidth, overflowY: document.documentElement.scrollHeight - innerHeight, actor, panel, controls, cousin: stage.hasAttribute('data-cousin'), up: +up.toFixed(2), castUp: +castUp.toFixed(2), env: document.querySelector('.st-bg.is-front')?.dataset.env || null };
+      })()`) as { actorVisible: boolean; castVisible: boolean; actorFaceCover: number; castFaceCover: number; underBar: number; overflowX: number; overflowY: number; actor: { y: number; b: number; x: number; w: number } | null; panel: { y: number; b: number } | null; controls: { y: number } | null; cousin: boolean; up: number; castUp: number; env: string | null };
       check(m.overflowX <= 0 && m.overflowY <= 0, `G ${vp.name} ${name}: page overflow ${m.overflowX}/${m.overflowY}`);
       check(!!m.panel && !!m.controls && m.panel.b <= m.controls.y + 1, `G ${vp.name} ${name}: dialogue overlaps the controls`);
       if (m.cousin) check(m.up <= 1.6, `G ${vp.name} ${name}: Roberto upscaled ×${m.up} (blurry)`);
-      check(m.overlap <= 1, `G ${vp.name} ${name}: the dialogue panel covers Roberto's face by ${m.overlap}px`);
+      if (m.castVisible) check(m.castUp <= 1.6, `G ${vp.name} ${name}: cast portrait upscaled ×${m.castUp} (blurry)`);
+      check(m.actorFaceCover <= 1, `G ${vp.name} ${name}: the dialogue panel covers Roberto's face by ${m.actorFaceCover}px`);
+      check(m.castFaceCover <= 1, `G ${vp.name} ${name}: the dialogue panel covers the cast member's face by ${m.castFaceCover}px`);
+      check(m.underBar <= 1, `G ${vp.name} ${name}: a figure's head is under the scene bar by ${m.underBar}px`);
       if (id === 'chapter-6' && name === 'cave-accepted-hand') check(m.env !== 'env.cave-waterfall', `G: chapter 6 rest-area beat still shows the ancient platform (${m.env})`);
       await page.screenshot({ path: join(out, `${vp.name}-${name}.png`) });
       await page.click('[data-act="story-file"]');
@@ -289,7 +304,7 @@ try {
       await page.waitForSelector('[data-act="story"]');
     }
     check(errors.length === 0, `G ${vp.name}: errors ${errors.slice(0, 3).join(' | ')}`);
-    notes.push(`G: ${MOMENTS.length} staged moments captured in ${vp.name} — no overflow, dialogue clear of controls, Roberto ≤ 1.6× upscale`);
+    notes.push(`G: ${MOMENTS.length} staged moments captured in ${vp.name} — no overflow, dialogue clear of controls, every visible face clear of the panel and the scene bar, Roberto and cast ≤ 1.6× upscale`);
     await page.context().close();
   }
   void STAGING;
@@ -349,6 +364,9 @@ try {
     await openStory(page);
     await page.locator('.table-screen').first().waitFor({ timeout: 20_000 });
     await page.waitForTimeout(300);
+    // Regression: the scene must be truly gone under the table (it once stayed drawn and readable behind it).
+    const stageGone = await page.evaluate(() => { const st = document.querySelector('.story-stage') as HTMLElement | null; return !st || getComputedStyle(st).display === 'none'; });
+    check(stageGone, 'I: the story stage is still rendered under the table');
     // Make a move so the opponent thinks next, then reload inside that window.
     const legal = page.locator('.hand-tile.is-legal');
     if (await legal.count()) {
@@ -385,8 +403,11 @@ try {
     await page.waitForSelector('[data-act="story"]');
     await openStory(page);
     await waitState(page, 'presenting');
-    await page.click('[data-act="story-next"]');
-    await page.click('[data-act="story-next"]').catch(() => undefined);
+    // Tap on through the last line (a tap may first finish its reveal) until the end card shows.
+    for (let k = 0; k < 6 && !(await page.locator('.end-card').count()); k++) {
+      await page.click('[data-act="story-next"]').catch(() => undefined);
+      await page.waitForTimeout(350);
+    }
     await page.locator('.end-card').first().waitFor({ timeout: 10_000 });
     await page.reload();
     await page.click('.start-button');

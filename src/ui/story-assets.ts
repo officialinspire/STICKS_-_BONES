@@ -21,17 +21,51 @@ export const CAST_BY_SPEAKER: Readonly<Record<string, RuntimeAssetId>> = {
 export interface CastFrame {
   readonly sheetW: number;
   readonly sheetH: number;
+  /** The VISIBLE bounds inside the uniform cell (head top to baseline, padding trimmed): what the stage scales. */
   readonly x: number;
   readonly y: number;
   readonly w: number;
   readonly h: number;
 }
-/** The frame shown on a character's lines: e1, each sheet's composed default (expression labels are not supplied). */
+/**
+ * The frame shown on a character's lines: e1, each sheet's composed default (expression labels are not
+ * supplied). Cropped to the visible figure — the head top (a few px of hair margin) to just below the
+ * baseline, side padding trimmed — and identical for every frame of a sheet (cells are baseline-aligned),
+ * so an expression change can never alter scale or footing.
+ */
 export function castFrame(id: RuntimeAssetId): CastFrame | null {
   const c = castJson.cast.find((x) => x.of === id);
   const f = c?.frames.find((x) => x.id === c.defaultFrame);
-  return c && f ? { sheetW: c.width, sheetH: c.height, x: f.x, y: f.y, w: f.w, h: f.h } : null;
+  if (!c || !f) return null;
+  const top = Math.max(0, f.headTopY - 6);
+  const bottom = Math.min(f.h, f.baselineY + 3);
+  const inset = 4;
+  return { sheetW: c.width, sheetH: c.height, x: f.x + inset, y: f.y + top, w: f.w - 2 * inset, h: bottom - top };
 }
+
+/** CSS background for a sprite region scaled to fill its box exactly (the box must share the region's aspect). */
+export function regionStyle(url: string, f: CastFrame): string {
+  return `background-image:url("${url}");background-size:${(f.sheetW / f.w) * 100}% ${(f.sheetH / f.h) * 100}%;background-position:${(f.x / (f.sheetW - f.w)) * 100}% ${(f.y / (f.sheetH - f.h)) * 100}%`;
+}
+
+/** A square head-and-shoulders crop for compact portraits at the table (well under the source resolution). */
+export function castFace(id: RuntimeAssetId): CastFrame | null {
+  const c = castJson.cast.find((x) => x.of === id);
+  const f = c?.frames.find((x) => x.id === c.defaultFrame);
+  if (!c || !f) return null;
+  const side = Math.round((f.baselineY - f.headTopY) * 0.62);
+  const x = Math.max(0, Math.min(f.w - side, Math.round(f.anchorX - side / 2)));
+  return { sheetW: c.width, sheetH: c.height, x: f.x + x, y: f.y + Math.max(0, f.headTopY - 6), w: side, h: side };
+}
+
+/** Seat display names in the story hands → cast sheets (for compact table portraits). */
+export const CAST_BY_SEAT_NAME: Readonly<Record<string, RuntimeAssetId>> = {
+  'Tío Rafa': 'cast.rafa.atlas',
+  Rafa: 'cast.rafa.atlas',
+  Marisol: 'cast.marisol.atlas',
+  Vale: 'cast.vale.atlas',
+  Luz: 'cast.luz.atlas',
+};
 
 export const speakerKey = (tag: string): RuntimeAssetId | null => CAST_BY_SPEAKER[tag.split(',')[0]!.trim()] ?? null;
 
