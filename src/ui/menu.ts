@@ -16,6 +16,7 @@ import { totals, type Stats } from '../app/stats';
 import { bindSettingsPanel, settingsPanelHtml, type SettingsApi } from './settings-panel';
 import { esc } from './svg';
 import { MENU_PROMISE, STORY_SUBTITLE, wordmarkHtml } from './brand';
+import { confirmSheet } from './confirm';
 
 export interface MenuChoice {
   mode: ModeId;
@@ -38,13 +39,22 @@ export interface ResumeOffer {
   readonly twoHumans: boolean;
 }
 
-export type MenuScreen = 'home' | 'setup' | 'setup-local' | 'rules' | 'settings' | 'stats';
+export type MenuScreen = 'home' | 'setup' | 'setup-local' | 'rules' | 'settings' | 'stats' | 'achievements';
+
+/** Where the Story stands, for the home card (null: no case started). */
+export interface StoryOffer {
+  readonly label: string;
+  readonly closed: boolean;
+}
 
 export interface MenuHandlers {
   readonly dev: boolean;
   readonly resume: ResumeOffer | null;
+  readonly story?: StoryOffer | null;
   readonly settings: SettingsApi;
   readonly screen?: MenuScreen;
+  /** The screen this one was opened from (focus returns to its button). */
+  readonly from?: MenuScreen;
   /** Messages about recovered / set-aside data, shown once on the home screen. */
   readonly notices?: readonly string[];
   stats(): Stats;
@@ -85,12 +95,13 @@ function updateBanner(p: MenuPwa | undefined): string {
 
 const PLAYABLE: ModeId[] = ['draw2', 'block2', 'partnership4'];
 
-function shell(inner: string, speech: string, mood: Parameters<typeof hostFigureHtml>[0] = 'explaining'): string {
+function shell(inner: string, speech: string, mood: Parameters<typeof hostFigureHtml>[0] = 'explaining', sub = false): string {
+  // Sub-pages keep the brand but use the one-line mark, so their content starts near the top.
   return `
-    <div class="scene">
+    <div class="scene${sub ? ' is-sub' : ''}">
       <header class="brand">
         ${wordmarkHtml({ level: 'h1' })}
-        <p class="tagline">${esc(MENU_PROMISE)}</p>
+        ${sub ? '' : `<p class="tagline">${esc(MENU_PROMISE)}</p>`}
       </header>
       <section class="host" aria-label="Your host">
         <div class="host-figure">${hostFigureHtml(mood, 'full')}</div>
@@ -103,33 +114,83 @@ function shell(inner: string, speech: string, mood: Parameters<typeof hostFigure
 
 const SAMPLE_LINE = `<section class="table" aria-hidden="true"><div class="line">${dominoSvg(6, 6, { className: 'is-double' })}${dominoSvg(6, 4, { orientation: 'horizontal' })}${dominoSvg(4, 1, { orientation: 'horizontal' })}${dominoSvg(1, 1, { className: 'is-double' })}${dominoSvg(1, 0, { orientation: 'horizontal' })}</div></section>`;
 
+/**
+ * Browser/OS Back on a menu sub-page returns to the home menu. Each sub-page pushes one history entry
+ * (no URL change, nothing secret in it). Back only acts while that sub-page is still on screen: once
+ * a table or Story is open, it does nothing.
+ */
+let onPop: (() => void) | null = null;
+let popInstalled = false;
+/** A sub-page entry of ours is on top of the history stack. */
+let pushed = false;
+
 export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: MenuHandlers): void {
   const env = urlFor(envKey('env.neighborhood-patio')); // the 3:4 crop on portrait screens
   if (env) root.style.setProperty('--env-image', `url("${env}")`);
-  const go = (screen: MenuScreen) => renderMenu(root, initial, { ...h, screen, notices: [] });
   const screen = h.screen ?? 'home';
+  const from = h.from;
+  const go = (to: MenuScreen) => {
+    if (to !== 'home' && screen === 'home' && !pushed) {
+      history.pushState({ sbMenu: to }, '');
+      pushed = true;
+    }
+    renderMenu(root, initial, { ...h, screen: to, from: screen, notices: [] });
+  };
+  // Back control, Escape and the browser's Back all land on the same place.
+  const goHome = () => (pushed ? history.back() : go('home'));
+  if (!popInstalled) {
+    popInstalled = true;
+    addEventListener('popstate', () => {
+      pushed = false;
+      onPop?.();
+    });
+  }
+  // Home reached another way (a game or Story in between): drop our stale entry quietly.
+  if (screen === 'home' && pushed) {
+    pushed = false;
+    history.back();
+  }
+  onPop = screen === 'home' ? null : () => {
+    if (root.querySelector('.scene.is-sub')) renderMenu(root, initial, { ...h, screen: 'home', from: screen, notices: [] });
+  };
   const preset = DEFAULT_RULES_PRESET;
-  const back = `<button type="button" class="btn-ghost dark back" data-act="home">← Back</button>`;
+  const back = `<button type="button" class="btn-ghost dark back" data-act="home">← Menu</button>`;
   const wire = () => {
-    root.querySelectorAll<HTMLElement>('[data-act="home"]').forEach((b) => b.addEventListener('click', () => go('home')));
+    root.querySelectorAll<HTMLElement>('[data-act="home"]').forEach((b) => b.addEventListener('click', goHome));
     root.querySelectorAll<HTMLElement>('[data-go]').forEach((b) => b.addEventListener('click', () => go(b.dataset.go as MenuScreen)));
+    const scene = root.querySelector<HTMLElement>('.scene');
+    if (screen !== 'home') {
+      scene?.addEventListener('keydown', (e) => {
+        const t = e.target as HTMLElement;
+        if (e.key !== 'Escape' || e.defaultPrevented || t.closest('dialog, input, select, textarea, details[open]')) return;
+        e.preventDefault();
+        goHome();
+      });
+      // Keyboard and screen-reader users land on the new page's heading.
+      root.querySelector<HTMLElement>('.scene h2')?.setAttribute('tabindex', '-1');
+      root.querySelector<HTMLElement>('.scene h2')?.focus({ preventScroll: true });
+      scrollTo(0, 0);
+    } else if (from && from !== 'home') {
+      root.querySelector<HTMLElement>(`[data-go="${from}"]`)?.focus({ preventScroll: true });
+    }
   };
   if (screen === 'home') {
     root.innerHTML = shell(
       `${SAMPLE_LINE}
       <nav class="panel home-nav" aria-label="Main menu">
         ${(h.notices ?? []).length ? `<div class="notice" role="status">${(h.notices ?? []).map((n) => `<p>${esc(n)}</p>`).join('')}</div>` : ''}
-        ${h.resume ? `<div class="resume"><h2>Game in progress</h2><p>${esc(h.resume.summary)}</p>${h.resume.twoHumans ? '<p class="note">Hands stay hidden until the right player reveals them.</p>' : ''}<div class="row"><button type="button" class="btn" data-act="resume">Resume</button><button type="button" class="btn-ghost dark" data-act="discard">Discard</button></div></div>` : ''}
+        ${h.resume ? `<div class="resume"><h2>Game in progress</h2><p>${esc(h.resume.summary)}</p>${h.resume.twoHumans ? '<p class="note">Hands stay hidden until the right player reveals them.</p>' : ''}<div class="row"><button type="button" class="btn" data-act="resume">Resume</button><button type="button" class="btn-ghost dark" data-act="discard">Discard…</button></div></div>` : ''}
         ${updateBanner(h.pwa)}
         <ul class="destinations" role="list">
-          <li><button type="button" class="dest dest-story" data-act="story"><span class="dest-title">Story</span><span class="dest-sub">${esc(STORY_SUBTITLE)} · seven chapters, seven hands</span></button></li>
+          <li><button type="button" class="dest dest-story" data-act="story"><span class="dest-kicker">Story · ${esc(STORY_SUBTITLE)}</span><span class="dest-title">${h.story ? (h.story.closed ? 'Case Closed' : 'Continue Case') : 'New Case'}</span><span class="dest-sub">${esc(h.story ? h.story.label : 'Seven chapters, seven hands')}</span></button></li>
           <li><button type="button" class="dest dest-quick btn-start" data-go="setup"><span class="dest-title">Quick Play</span><span class="dest-sub">You against Cousin: Draw, Block or Partnership</span></button></li>
           <li><button type="button" class="dest dest-two" data-go="setup-local"><span class="dest-title">Two Players</span><span class="dest-sub">Share one device, hands kept private</span></button></li>
         </ul>
-        <div class="row home-row">
+        <div class="home-row">
           <button type="button" class="btn-ghost dark" data-go="rules">How to Play</button>
           <button type="button" class="btn-ghost dark" data-go="settings">Settings</button>
           <button type="button" class="btn-ghost dark" data-go="stats">Statistics</button>
+          <button type="button" class="btn-ghost dark" data-go="achievements">Achievements <span class="soon-tag">Soon</span></button>
         </div>
         ${offlineLine(h.pwa)}
       </nav>`,
@@ -137,7 +198,9 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
     );
     wire();
     root.querySelector('[data-act="resume"]')?.addEventListener('click', () => h.onResume());
-    root.querySelector('[data-act="discard"]')?.addEventListener('click', () => h.onDiscard());
+    root.querySelector('[data-act="discard"]')?.addEventListener('click', () => {
+      void confirmSheet(root, { title: 'Discard the game in progress?', body: 'It can’t be resumed afterwards and counts as abandoned in Statistics (never as a loss).', yes: 'Discard game', no: 'Keep it' }).then((yes) => yes && h.onDiscard());
+    });
     root.querySelector('[data-act="update-now"]')?.addEventListener('click', () => h.pwa?.onUpdate());
     root.querySelector('[data-act="story"]')?.addEventListener('click', () => h.onStory());
     return;
@@ -147,6 +210,7 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
       `<section class="panel" aria-labelledby="rules-heading">${back}<h2 id="rules-heading">How to play</h2>${helpHtml()}</section>`,
       'Same bones, three ways to play. Here’s how my table runs.',
       'thinking',
+      true,
     );
     wire();
     return;
@@ -159,42 +223,50 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
       ['block2', 'Block'],
       ['partnership4', 'Partnership'],
     ];
-    const rows = modes
+    // One card per mode (no wide table, so no sideways scrolling on phones).
+    const cards = modes
       .map(([m, label]) => {
-        const cells = (['easy', 'normal', 'hard'] as Difficulty[]).map((d) => `<td>${st.solo[m][d].wins}–${st.solo[m][d].losses}</td>`).join('');
-        return `<tr><th scope="row">${label}</th>${cells}<td>${st.local[m].completed}</td><td>${st.abandoned[m]}</td></tr>`;
+        const vs = (['easy', 'normal', 'hard'] as Difficulty[]).map((d) => `<li><span>${d === 'easy' ? 'Easy' : d === 'normal' ? 'Normal' : 'Hard'}</span> <strong>${st.solo[m][d].wins}–${st.solo[m][d].losses}</strong></li>`).join('');
+        return `<section class="stat-card" aria-labelledby="stat-${m}"><h3 id="stat-${m}">${label}</h3><p class="stat-k">Against the computer (won–lost)</p><ul class="stat-skill">${vs}</ul><p class="stat-k">Two players: <strong>${st.local[m].completed}</strong> completed · Abandoned: <strong>${st.abandoned[m]}</strong></p></section>`;
       })
       .join('');
     root.innerHTML = shell(
       `<section class="panel" aria-labelledby="stats-heading">${back}<h2 id="stats-heading">Statistics</h2>
         <p class="note">Kept on this device only. Games you leave unfinished and later discard or restart count as abandoned — never as losses.</p>
         <p class="stat-line"><strong>${t.completed}</strong> completed · <strong>${t.wins}</strong> won · <strong>${t.losses}</strong> lost vs the computer · <strong>${t.abandoned}</strong> abandoned</p>
-        <div class="table-scroll" tabindex="0" role="region" aria-label="Statistics table"><table class="stats-table">
-          <caption>Against the computer: wins–losses by difficulty; two-player and abandoned counts</caption>
-          <thead><tr><th scope="col">Mode</th><th scope="col">Easy</th><th scope="col">Normal</th><th scope="col">Hard</th><th scope="col">Two players</th><th scope="col">Abandoned</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table></div>
+        <div class="stat-cards">${cards}</div>
         <p>Two players as partners (vs the computers): <strong>${st.localPartners.wins}–${st.localPartners.losses}</strong></p>
-        <button type="button" class="btn-ghost dark" data-act="reset-stats">Reset statistics</button>
+        ${t.completed + t.abandoned + st.localPartners.wins + st.localPartners.losses ? '<button type="button" class="btn-ghost dark danger-ghost" data-act="reset-stats">Reset statistics…</button>' : ''}
         <p class="status" role="status" data-stats-status></p>
       </section>`,
       t.completed ? 'Numbers don’t lie. Mostly.' : 'No games on the books yet. Let’s fix that.',
       'smirk',
+      true,
     );
     wire();
-    const btn = root.querySelector('[data-act="reset-stats"]') as HTMLButtonElement;
-    btn.addEventListener('click', () => {
-      // Two-step confirmation without a modal: the first tap arms, the second resets.
-      if (btn.dataset.armed !== '1') {
-        btn.dataset.armed = '1';
-        btn.textContent = 'Tap again to reset all statistics';
-        (root.querySelector('[data-stats-status]') as HTMLElement).textContent = 'This can’t be undone.';
-        return;
-      }
-      h.onResetStats();
-      renderMenu(root, initial, { ...h, screen: 'stats', notices: [] });
-      (root.querySelector('[data-stats-status]') as HTMLElement).textContent = 'Statistics reset.';
+    root.querySelector('[data-act="reset-stats"]')?.addEventListener('click', () => {
+      void confirmSheet(root, { title: 'Reset all statistics?', body: 'Every win, loss and abandoned count on this device goes back to zero. Saved games and Story progress are kept. This can’t be undone.', yes: 'Reset statistics' }).then((yes) => {
+        if (!yes) return;
+        h.onResetStats();
+        renderMenu(root, initial, { ...h, screen: 'stats', notices: [] });
+        (root.querySelector('[data-stats-status]') as HTMLElement).textContent = 'Statistics reset.';
+      });
     });
+    return;
+  }
+  if (screen === 'achievements') {
+    // Reserved destination: clearly labelled, no invented data, nothing tracked yet.
+    root.innerHTML = shell(
+      `<section class="panel" aria-labelledby="ach-heading">${back}<h2 id="ach-heading">Achievements</h2>
+        <p class="soon-banner">Coming in a later update</p>
+        <p>This is where milestones from Story and Quick Play will live. None are tracked yet, so there is nothing to unlock or lose today.</p>
+        <p class="note">Your saved games, Story progress and statistics are not affected by this page.</p>
+      </section>`,
+      'Trophies? Let me finish this case first.',
+      'smirk',
+      true,
+    );
+    wire();
     return;
   }
   if (screen === 'settings') {
@@ -214,10 +286,10 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
           <p class="note">The studio intro always needs a connection.</p>
           <div class="row"><button type="button" class="btn-ghost dark" data-act="repair">Repair offline files</button></div>
           <p class="note">Repair re-downloads only this game’s offline files (and the story or audio you chose to keep). Your saved game, story progress, settings and statistics are kept.</p>
-          <div class="row"><button type="button" class="btn-ghost dark" data-act="erase">Erase saved game, settings &amp; statistics…</button></div>
+          <div class="row"><button type="button" class="btn-ghost dark danger-ghost" data-act="erase">Erase saved game, settings &amp; statistics…</button></div>
         </section>`
       : '';
-    root.innerHTML = shell(`<section class="panel" aria-labelledby="settings-heading">${back}<h2 id="settings-heading">Settings</h2>${settingsPanelHtml(h.settings.get())}${offline}</section>`, 'Set the table how you like it.', 'smirk');
+    root.innerHTML = shell(`<section class="panel" aria-labelledby="settings-heading">${back}<h2 id="settings-heading">Settings</h2><p class="note">Changes save as you make them.</p>${settingsPanelHtml(h.settings.get())}${offline}</section>`, 'Set the table how you like it.', 'smirk', true);
     wire();
     bindSettingsPanel(root.querySelector('.settings-panel') as HTMLElement, h.settings);
     root.querySelector('[data-act="repair"]')?.addEventListener('click', () => h.pwa?.onRepair());
@@ -225,14 +297,7 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
     root.querySelector('[data-act="offline-audio"]')?.addEventListener('click', () => h.pwa?.onOffline('audio'));
     const erase = root.querySelector<HTMLButtonElement>('[data-act="erase"]');
     erase?.addEventListener('click', () => {
-      // Two taps: the first only arms the button (nothing is deleted by a stray tap).
-      if (erase.dataset.armed !== '1') {
-        erase.dataset.armed = '1';
-        erase.textContent = 'Tap again to erase your saved game, settings and statistics';
-        erase.classList.add('is-armed');
-        return;
-      }
-      h.pwa?.onErase();
+      void confirmSheet(root, { title: 'Erase this game’s data?', body: 'Your saved game, settings, statistics and Story progress on this device are deleted. Offline files stay. This can’t be undone.', yes: 'Erase everything' }).then((yes) => yes && h.pwa?.onErase());
     });
     return;
   }
@@ -271,7 +336,7 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
         ${back}
         <h2 id="modes-heading">${screen === 'setup-local' ? 'Two Players' : 'Quick Play'}</h2>
         <fieldset><legend>Game</legend><div class="choice-grid">${modeCards}</div></fieldset>
-        <fieldset><legend>Opponent</legend><div class="row">
+        <fieldset><legend>Players</legend><div class="row">
           <label class="check"><input type="radio" name="opponent" value="ai" ${init.opponent !== 'local' ? 'checked' : ''}> Play the computer</label>
           <label class="check" data-local><input type="radio" name="opponent" value="local" ${init.opponent === 'local' ? 'checked' : ''}> Two players, one device</label>
         </div><p class="note" data-p4-note hidden>Partnership: you and Luz (computer) against Cousin and Tío Rafa (computer).</p>
@@ -306,6 +371,8 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
         ${devPanel}
       </form>`,
     'Choose your game. The rules for it are right there before we deal.',
+    'explaining',
+    true,
   );
   wire();
   const form = root.querySelector('form') as HTMLFormElement;
@@ -333,6 +400,8 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
     (form.querySelector('[data-two]') as HTMLElement).hidden = !two;
     (form.querySelector('[data-seating]') as HTMLElement).hidden = !(p4 && two);
     (form.querySelector('[data-skill]') as HTMLElement).hidden = two && !p4;
+    // The heading follows the choice, so switching here never leaves a stale title.
+    (form.querySelector('#modes-heading') as HTMLElement).textContent = two ? 'Two Players' : 'Quick Play';
   };
   const syncRules = () => {
     const m = ((form.querySelector('input[name="mode"]:checked') as HTMLInputElement | null)?.value ?? 'draw2') as ModeId;

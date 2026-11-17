@@ -283,7 +283,7 @@ function judge(where: string, m: Measure, opts: { pageMayScroll?: boolean }) {
   if (m.uncomfortable.length) warnings.push(`${where}: under ${LIMITS.targetComfortable}px: ${m.uncomfortable.join(' | ')}`);
 }
 
-const SCREENS = ['startup', 'menu', 'setup', 'story-home', 'story-scene', 'story-cast', 'story-transcript', 'longest-chain', 'largest-hand', 'partnership', 'handoff', 'pause', 'results'] as const;
+const SCREENS = ['startup', 'menu', 'menu-stats', 'menu-settings', 'menu-achievements', 'setup', 'story-home', 'story-scene', 'story-cast', 'story-transcript', 'longest-chain', 'largest-hand', 'partnership', 'handoff', 'pause', 'results'] as const;
 type Screen = (typeof SCREENS)[number];
 
 async function capture(vp: (typeof VIEWPORTS)[number], screen: Screen, page: Page, opts: { pageMayScroll?: boolean } = {}) {
@@ -312,6 +312,12 @@ try {
     if (await skip.count()) await tryClick(skip);
     await page.waitForSelector('[data-go="setup"]');
     await capture(vp, 'menu', page);
+    for (const sub of ['stats', 'settings', 'achievements']) {
+      await page.click(`[data-go="${sub}"]`);
+      await capture(vp, `menu-${sub}` as Screen, page, { pageMayScroll: sub === 'settings' });
+      await page.click('[data-act="home"]');
+      await page.waitForSelector('[data-go="setup"]');
+    }
     await page.click('[data-go="setup"]');
     await page.check('input[name="mode"][value="partnership4"]');
     await capture(vp, 'setup', page, { pageMayScroll: true });

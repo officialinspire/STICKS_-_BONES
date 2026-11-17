@@ -18,7 +18,8 @@ import { AudioManager, type Scene, type SfxId } from './audio/manager';
 import { WebAudioBackend } from './audio/webaudio';
 import { haptic, type HapticCue } from './audio/haptics';
 import { showStart } from './ui/intro-screen';
-import { renderMenu, type MenuChoice, type ResumeOffer } from './ui/menu';
+import { renderMenu, type MenuChoice, type ResumeOffer, type StoryOffer } from './ui/menu';
+import { readStory } from './story/progress';
 import { TableScreen } from './ui/table';
 import { chaptersReady, consumeUpdatedFlag, consumeUpdateResume, describeAudio, describeOffline, describeStory, eraseLocalData, PwaController, setUpdateResume, type ResumeTarget } from './app/pwa';
 import { SCENE_IMAGES } from './story/scene-images';
@@ -472,6 +473,15 @@ function resumeOffer(game: SavedGame): ResumeOffer {
   return { summary, twoHumans: game.opponent === 'local' };
 }
 
+/** The home Story card: where the case stands (read-only; never touches the record). */
+function storyOffer(): StoryOffer | null {
+  const p = readStory(store).value;
+  if (!p) return null;
+  if (p.completed.includes('epilogue')) return { label: 'Replay any chapter from the case file', closed: true };
+  const at = p.sceneId === 'prologue' ? 'Prologue' : p.sceneId === 'epilogue' ? 'Epilogue' : `Chapter ${p.sceneId.slice(8)} of 7`;
+  return { label: `${at}${p.part === 'hand' ? ' · hand in play' : ''}`, closed: false };
+}
+
 function showMenu(): void {
   document.documentElement.classList.remove('table-lock');
   // Leaving Story: drop the scene player's handlers and backdrop.
@@ -498,6 +508,7 @@ function showMenu(): void {
     dev: DEV,
     settings: settingsApi,
     resume: saved.value ? resumeOffer(saved.value) : null,
+    story: storyOffer(),
     notices: notices.splice(0),
     stats: () => stats,
     onResetStats: () => updateStats(resetStats(store)),

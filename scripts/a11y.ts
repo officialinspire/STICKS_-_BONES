@@ -146,7 +146,7 @@ try {
     await page.click('.start-button');
     await page.waitForSelector('[data-go="setup"]');
     await axe(page, 'menu');
-    for (const s of ['setup', 'rules', 'stats', 'settings']) {
+    for (const s of ['setup', 'setup-local', 'rules', 'stats', 'settings', 'achievements']) {
       await page.click(`[data-go="${s}"]`);
       await page.waitForSelector('[data-act="home"]');
       await axe(page, `menu: ${s}`);

@@ -175,8 +175,11 @@ export class TableScreen {
       this.#resumeScene();
     });
     let lastFit = -1;
+    let rowsFrame = 0;
     this.#ro = new ResizeObserver(() => {
-      this.#layoutHandRows();
+      // Next frame, outside the observer callback: the row change resizes the observed board.
+      cancelAnimationFrame(rowsFrame);
+      rowsFrame = requestAnimationFrame(() => this.#layoutHandRows());
       const w = this.#q('board-wrap')?.clientWidth ?? 0;
       // A height change re-renders only if it changes the fitted tile size (keeps focus on end targets).
       const fit = this.#userZoom ? this.#unit : this.#fitUnit();

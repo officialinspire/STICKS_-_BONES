@@ -1123,7 +1123,16 @@ try {
       notes.push(`statistics: ${stat.replace(/\s+/g, ' ').trim()}`);
       // Discard (Stage 7 regression): returns to the menu with a notice, not the start screen.
       await page.click('[data-act="home"]');
+      // Discard asks first: Cancel (and Escape) keep the save; only the destructive button discards.
       await page.click('[data-act="discard"]');
+      await page.click('dialog.confirm[open] [data-act="confirm-no"]');
+      check((await page.locator('[data-act="resume"]').count()) === 1, 'discard: Cancel must keep the saved game');
+      check(await page.evaluate(() => (document.activeElement as HTMLElement)?.dataset.act === 'discard'), 'discard: focus did not return to Discard after Cancel');
+      await page.click('[data-act="discard"]');
+      await page.keyboard.press('Escape');
+      check((await page.locator('[data-act="resume"]').count()) === 1 && (await page.locator('dialog.confirm[open]').count()) === 0, 'discard: Escape must cancel and keep the save');
+      await page.click('[data-act="discard"]');
+      await page.click('dialog.confirm[open] [data-act="confirm-yes"]');
       await page.waitForTimeout(200);
       check((await page.locator('[data-go="setup"]').count()) === 1 && (await page.locator('.start-button').count()) === 0, 'discard: did not return to the menu');
       check(/Saved game discarded/.test((await page.textContent('.notice').catch(() => '')) ?? ''), 'discard: no feedback');
@@ -1199,6 +1208,50 @@ try {
       notes.push(`no dead buttons: ${n1 + n2 + n3 + n4} buttons across home, stats, rules and the pause sheet each produced a visible change`);
       await page.context().close();
     }
+  }
+
+  // 8c. Menu navigation: browser Back, Escape and ← Menu all return home with focus on the opener;
+  //     the setup heading follows the chosen players; sub-pages never scroll sideways; Achievements is
+  //     a labelled placeholder; Story shows Continue Case once a case exists.
+  {
+    const page = await newPage({ width: 360, height: 800 });
+    await enterMenu(page);
+    const atHome = () => page.locator('.scene:not(.is-sub) [data-go="setup"]').count();
+    const focusGo = () => page.evaluate(() => (document.activeElement as HTMLElement)?.dataset.go ?? '');
+    for (const sub of ['setup', 'setup-local', 'rules', 'settings', 'stats', 'achievements']) {
+      await page.click(`[data-go="${sub}"]`);
+      const wide = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+      check(wide <= 0, `menu ${sub}: page scrolls sideways by ${wide}px at 360`);
+      const nested = await page.evaluate(() => [...document.querySelectorAll('.scene *')].filter((e) => { const c = getComputedStyle(e); return /(auto|scroll)/.test(c.overflowX) && e.scrollWidth > e.clientWidth + 1; }).length);
+      check(nested === 0, `menu ${sub}: ${nested} nested sideways scroller(s)`);
+      check(await page.evaluate(() => document.activeElement?.tagName === 'H2'), `menu ${sub}: focus did not move to the page heading`);
+      const how = sub === 'setup' ? 'browser back' : sub === 'rules' ? 'escape' : 'button';
+      if (how === 'browser back') await page.goBack();
+      else if (how === 'escape') await page.keyboard.press('Escape');
+      else await page.click('[data-act="home"]');
+      await page.waitForTimeout(100);
+      check((await atHome()) === 1, `menu ${sub}: ${how} did not return home`);
+      check((await focusGo()) === sub, `menu ${sub}: focus did not return to its button after ${how} (${await focusGo()})`);
+    }
+    // After all that, one more Back must not leave a stale menu entry (the app stays on home).
+    await page.click('[data-go="stats"]');
+    await page.click('[data-act="home"]');
+    check((await atHome()) === 1, 'menu: ← Menu after history');
+    await page.click('[data-go="setup"]');
+    check((await page.textContent('#modes-heading'))?.trim() === 'Quick Play', 'setup: heading should start as Quick Play');
+    await page.check('input[name="opponent"][value="local"]');
+    check((await page.textContent('#modes-heading'))?.trim() === 'Two Players', 'setup: heading did not follow "Two players, one device"');
+    await page.goBack();
+    await page.click('[data-go="achievements"]');
+    check(/later update/i.test((await page.textContent('.soon-banner')) ?? '') && (await page.locator('.scene.is-sub button:not([data-act="home"])').count()) === 0, 'achievements: should be a labelled placeholder with no dead controls');
+    await page.click('[data-act="home"]');
+    check(/New Case/.test((await page.textContent('.dest-story')) ?? ''), 'story card: New Case without progress');
+    await page.evaluate(() => localStorage.setItem('sticks-and-bones.story', JSON.stringify({ format: 'sticks-and-bones/story', version: 2, data: { sceneId: 'chapter-3', part: 'pre', index: 0, outcome: null, completed: ['prologue', 'chapter-1', 'chapter-2'], textScale: 1, startedAt: 1, hand: null } })));
+    await enterMenu(page, true);
+    const card = (await page.textContent('.dest-story')) ?? '';
+    check(/Continue Case/.test(card) && /Chapter 3 of 7/.test(card), `story card with progress: ${card}`);
+    notes.push(`menu: Back/Escape/← Menu return home with focus restored on 6 sub-pages; no sideways scrolling at 360; setup heading follows players; Story card: "${card.replace(/\s+/g, ' ').trim()}"`);
+    await page.context().close();
   }
 
   // 9. Rapid actions: a seeded burst of fast taps across menu, setup, table, pause, confirm, cover and

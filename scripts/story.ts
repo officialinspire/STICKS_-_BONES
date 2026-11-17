@@ -70,7 +70,7 @@ async function openStory(page: Page, opts: { fresh?: boolean } = {}) {
   await page.waitForSelector('.story-shell');
   if (opts.fresh) {
     await page.click('[data-act="story-new"]');
-    if (await page.locator('[data-act="story-new"][data-armed="1"]').count()) await page.click('[data-act="story-new"]');
+    if (await page.locator('dialog.confirm[open] [data-act="confirm-yes"]').count()) await page.click('dialog.confirm[open] [data-act="confirm-yes"]');
   } else await page.click('[data-act="story-continue"], [data-act="story-new"]');
   // A scene, or (resuming a hand) the table — the scene is truly hidden while a hand is played.
   await page.locator('.story-stage:not([hidden]), .table-screen').first().waitFor({ timeout: 30_000 });

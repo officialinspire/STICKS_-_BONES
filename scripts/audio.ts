@@ -233,7 +233,7 @@ try {
     await page.click('[data-act="story"]');
     await page.waitForSelector('.story-shell');
     await page.click('[data-act="story-new"]');
-    if (await page.locator('[data-act="story-new"][data-armed="1"]').count()) await page.click('[data-act="story-new"]');
+    if (await page.locator('dialog.confirm[open] [data-act="confirm-yes"]').count()) await page.click('dialog.confirm[open] [data-act="confirm-yes"]');
     check(await waitState(page, 'presenting'), 'C: prologue never presented');
     await page.waitForTimeout(100);
     let v = (await voices(page)).filter((x) => motifSamples.has(x.sample ?? ''));
@@ -344,7 +344,7 @@ try {
     await page.click('[data-act="story"]');
     await page.waitForSelector('.story-shell');
     await page.click('[data-act="story-new"]');
-    if (await page.locator('[data-act="story-new"][data-armed="1"]').count()) await page.click('[data-act="story-new"]');
+    if (await page.locator('dialog.confirm[open] [data-act="confirm-yes"]').count()) await page.click('dialog.confirm[open] [data-act="confirm-yes"]');
     await waitState(page, 'presenting');
     await page.waitForTimeout(2500);
     const s = await audioState(page);

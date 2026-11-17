@@ -311,10 +311,11 @@ try {
 
   // ---- 6b. Erase: only this app's keys; offline files kept -------------------------------
   await page.click('[data-act="erase"]');
-  const armed = await page.textContent('[data-act="erase"]');
-  check(/Tap again/.test(armed ?? ''), 'erase: first tap did not arm the button');
-  check(Object.keys(await page.evaluate(() => ({ ...localStorage }))).some((k: string) => k.startsWith('sticks-and-bones.')), 'erase: first tap already deleted data');
-  await Promise.all([page.waitForNavigation(), page.click('[data-act="erase"]')]);
+  check((await page.locator('dialog.confirm[open]').count()) === 1, 'erase: no confirmation sheet');
+  await page.click('dialog.confirm[open] [data-act="confirm-no"]');
+  check(Object.keys(await page.evaluate(() => ({ ...localStorage }))).some((k: string) => k.startsWith('sticks-and-bones.')), 'erase: Cancel deleted data');
+  await page.click('[data-act="erase"]');
+  await Promise.all([page.waitForNavigation(), page.click('dialog.confirm[open] [data-act="confirm-yes"]')]);
   const keys = await page.evaluate(() => Object.keys(localStorage));
   check(!keys.some((k: string) => k.startsWith('sticks-and-bones.')), `erase: our keys remain ${keys.join(', ')}`);
   await otherAppIntact(page, 'after erase');
@@ -322,7 +323,7 @@ try {
   check(cachesAfterErase.length >= 2 && cachesAfterErase.every((c) => c.urls.length > 0 || !/:(shell|assets)/.test(c.name)) && cachesAfterErase.some((c) => /:shell:/.test(c.name)) && cachesAfterErase.some((c) => /:assets:v1$/.test(c.name)), `erase: offline files were removed (they must be kept): ${cachesAfterErase.map((c) => `${c.name}=${c.urls.length}`).join(', ')}`);
   await enterMenu(page);
   check(/erased/.test((await page.textContent('.notice')) ?? ''), 'erase: no confirmation notice');
-  notes.push(`erase (two taps): removed only sticks-and-bones.* keys; other app's keys ('other-app.save', 'sticks-and-bones-fan-page') kept; offline files kept; notice shown`);
+  notes.push(`erase (confirm sheet; Cancel keeps everything): removed only sticks-and-bones.* keys; other app's keys ('other-app.save', 'sticks-and-bones-fan-page') kept; offline files kept; notice shown`);
   await ctx.close();
 
   // ---- 3. Interrupted downloads ---------------------------------------------------------

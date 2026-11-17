@@ -23,6 +23,7 @@ import { sceneAssets } from './story-assets';
 import { envKey } from '../assets/env';
 import { wordmarkHtml } from './brand';
 import { esc } from './svg';
+import { confirmSheet } from './confirm';
 
 // ---- speakers -----------------------------------------------------------------------
 const NAMES: Record<string, { label: string; tone: string }> = {
@@ -225,19 +226,20 @@ export async function renderStoryHome(d: StoryDeps, notice?: string): Promise<vo
     </div>`;
   const on = (act: string, fn: () => void) => root.querySelector(`[data-act="${act}"]`)?.addEventListener('click', fn);
   on('story-home', () => d.onBack());
+  // Escape on the case file is the same as ← Menu (never inside the confirm sheet).
+  root.querySelector('.story-shell')?.addEventListener('keydown', (e) => {
+    const ev = e as KeyboardEvent;
+    if (ev.key === 'Escape' && !ev.defaultPrevented && !(ev.target as HTMLElement).closest('dialog')) d.onBack();
+  });
   on('story-continue', () => void renderStoryRun(d, { replay: null }));
   on('update-now', () => d.update?.apply());
   // After an update reload in the middle of the case: straight back to the saved scene, line or hand (once).
   if (p && d.takeAutoContinue?.()) void renderStoryRun(d, { replay: null, via: 'update' });
   root.querySelectorAll<HTMLElement>('[data-act="story-replay"]').forEach((b) => b.addEventListener('click', () => void renderStoryRun(d, { replay: b.dataset.scene as SceneId })));
   const newBtn = root.querySelector<HTMLButtonElement>('[data-act="story-new"]');
-  newBtn?.addEventListener('click', () => {
-    // With a case in progress, the first tap only arms (no accidental reset).
-    if (p && newBtn.dataset.armed !== '1') {
-      newBtn.dataset.armed = '1';
-      newBtn.textContent = 'Tap again to start over (story progress only)';
-      return;
-    }
+  newBtn?.addEventListener('click', async () => {
+    // With a case in progress, starting over asks first (Story progress only; Quick Play saves are kept).
+    if (p && !(await confirmSheet(root, { title: 'Start the case over?', body: 'Your Story progress and notebook go back to the prologue. Quick Play saves, settings and statistics are kept.', yes: 'Start over', no: 'Keep my case' }))) return;
     clearStory(d.store);
     save(d, newProgress(Date.now()));
     void renderStoryRun(d, { replay: null });

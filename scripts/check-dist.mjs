@@ -33,7 +33,7 @@ const bytes = files.reduce((s, f) => s + statSync(f).size, 0);
 // raise it only on purpose, with a measurement, in the same change.
 const KB = 1024;
 export const BUDGET = {
-  codeKB: 300, // core JS + CSS + HTML, excluding the lazy Story chunks (Stage 13 measured ~265 KB raw)
+  codeKB: 310, // core JS + CSS + HTML, excluding the lazy Story chunks (menu polish measured 305 KB raw: +6 KB for the confirm sheet, Achievements page, stats cards, menu history; was 300)
   storyKB: 130, // lazy Story chunks, loaded only when Story opens: the approved script (76 KB) + player/director/staging/cast frames (36 KB) = 112 KB measured
   fontsKB: 100, // self-hosted DM Sans + Bricolage Grotesque WOFF2 subsets (measured 82 KB)
   imagesKB: 3300, // CORE images: menu, table, Cousin, effects, tiles + the seven full-frame backdrops (measured ~3,050 KB; unchanged)

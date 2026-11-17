@@ -76,7 +76,7 @@ try {
   await page.click('[data-act="story"]');
   await page.locator('[data-act="story-new"]').first().waitFor();
   await page.click('[data-act="story-new"]');
-  if (await page.locator('[data-act="story-new"][data-armed="1"]').count()) await page.click('[data-act="story-new"]');
+  if (await page.locator('dialog.confirm[open] [data-act="confirm-yes"]').count()) await page.click('dialog.confirm[open] [data-act="confirm-yes"]');
 
   for (const id of ORDER) {
     const scene = script.scenes.find((s) => s.id === id)!;

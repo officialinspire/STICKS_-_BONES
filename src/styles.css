@@ -1529,30 +1529,6 @@ body {
   font-size: 2.6rem;
   color: var(--teal);
 }
-.table-scroll {
-  overflow-x: auto;
-}
-.stats-table {
-  border-collapse: collapse;
-  width: 100%;
-  font-variant-numeric: tabular-nums;
-  margin: 8px 0;
-}
-.stats-table caption {
-  text-align: left;
-  font-size: 0.8rem;
-  color: var(--ink-soft);
-  padding-bottom: 4px;
-}
-.stats-table th,
-.stats-table td {
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--cream-2);
-  text-align: center;
-}
-.stats-table th[scope='row'] {
-  text-align: left;
-}
 .stat-line {
   margin: 6px 0;
 }
@@ -1891,8 +1867,7 @@ html.table-lock body {
 /* Focus is always visible on form controls (radios/checkboxes/ranges on light cards). */
 input:focus-visible,
 select:focus-visible,
-summary:focus-visible,
-.table-scroll:focus-visible {
+summary:focus-visible {
   outline: 3px solid var(--teal);
   outline-offset: 2px;
 }
@@ -1956,10 +1931,6 @@ summary:focus-visible,
 }
 .case-offline {
   margin: 4px 0 0;
-}
-[data-act='erase'].is-armed {
-  border-color: #a5321f;
-  color: #a5321f;
 }
 
 /* =====================================================================================
@@ -2038,7 +2009,7 @@ h1, h2, h3, .title, .chapter-title, .section-h, .score-val, .dest-title, .points
   font-family: var(--display);
 }
 /* Tabular score digits: Bricolage Grotesque ships a real tnum feature (DM Sans does not). */
-.score-val, .tally, .scores-line strong, .cine-pos, .stats-table td {
+.score-val, .tally, .scores-line strong, .cine-pos {
   font-family: var(--display);
   font-variant-numeric: tabular-nums lining-nums;
   font-feature-settings: 'tnum' 1, 'lnum' 1;
@@ -2048,7 +2019,7 @@ h1, h2, h3, .title, .chapter-title, .section-h, .score-val, .dest-title, .points
   outline-offset: 2px;
   box-shadow: var(--focus-ring);
 }
-.btn:focus-visible, .btn-ghost:focus-visible, .hand-tile:focus-visible, .end-slot:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, .table-scroll:focus-visible, .dest:focus-visible {
+.btn:focus-visible, .btn-ghost:focus-visible, .hand-tile:focus-visible, .end-slot:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, .dest:focus-visible {
   outline: 2px solid transparent;
   outline-offset: 2px;
   box-shadow: var(--focus-ring);
@@ -2575,3 +2546,80 @@ h1, h2, h3, .title, .chapter-title, .section-h, .score-val, .dest-title, .points
 }
 /* Scene bar stays legible over bright skies (gold 8.6:1 and ivory 14:1 on the ink scrim). */
 .story-bar-title { background: rgba(20, 37, 43, 0.86); padding: 5px 10px; border-radius: 8px; }
+
+/* ---- Menu polish: one gold primary (Story), dark secondaries, guava as the accent ---- */
+.dest-kicker {
+  font: 800 0.72rem / 1.2 var(--body);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.dest-story { background: var(--sb-gold); color: var(--sb-ink); box-shadow: 4px 4px 0 var(--sb-guava); }
+.dest-story .dest-title { color: var(--sb-ink); }
+.dest-story:active { box-shadow: 2px 2px 0 var(--sb-guava); }
+.dest.dest-quick { background: var(--sb-deep-sea); color: var(--sb-ivory); }
+.dest.dest-two { background: var(--sb-ink); color: var(--sb-ivory); }
+.home-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 128px), 1fr));
+  gap: 8px;
+}
+.home-row .btn-ghost { min-height: 44px; white-space: nowrap; padding-inline: 10px; }
+.soon-tag, .soon-banner {
+  display: inline-block;
+  font: 800 0.68rem / 1 var(--body);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sb-gold);
+  background: var(--sb-ink);
+  border-radius: 4px;
+  padding: 3px 5px;
+  vertical-align: 0.15em;
+}
+.soon-banner { font-size: 0.8rem; padding: 6px 10px; margin: 0 0 8px; box-shadow: 3px 3px 0 var(--sb-guava); }
+/* Destructive menu actions: ink text, guava outline, ⚠ mark (docs/DESIGN.md). */
+.btn-ghost.danger-ghost { border-color: var(--sb-guava); }
+.btn-ghost.danger-ghost::before { content: '⚠ '; }
+/* Statistics: one card per mode instead of a wide table (no sideways scrolling). */
+.stat-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 10px;
+  margin: 10px 0;
+}
+.stat-card {
+  border: 2px solid var(--sb-ink);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--sb-ivory);
+}
+.stat-card h3 { margin: 0 0 4px; font: 800 1.1rem / 1.2 var(--display); color: var(--sb-deep-sea); }
+.stat-k { margin: 4px 0; font-size: 0.85rem; color: var(--ink-soft); }
+.stat-k strong { color: var(--sb-ink); }
+.stat-skill {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+.stat-skill strong, .stat-k strong { font-family: var(--display); font-variant-numeric: tabular-nums; }
+/* Sub-pages: the one-line mark, so the page's own content starts near the top. */
+.scene.is-sub .wm-full { display: none; }
+.scene.is-sub .wm-compact { display: block; width: min(72vw, 300px); }
+.scene.is-sub .brand { padding-top: 0; }
+.scene .panel h2:focus { outline: none; }
+.scene .panel h2:focus-visible { box-shadow: var(--focus-ring); border-radius: 4px; }
+@media (min-width: 1000px) {
+  /* Long sub-pages: a wider panel, with Cousin kept in view beside it instead of far below. */
+  .scene.is-sub { grid-template-columns: minmax(0, 3fr) minmax(0, 8fr); align-items: start; }
+  .scene.is-sub .brand { justify-items: start; text-align: left; }
+  .scene.is-sub .brand .wordmark { justify-items: start; }
+  .scene.is-sub .host { position: sticky; top: 16px; grid-template-columns: minmax(0, 1fr); justify-items: start; }
+}
+@media (orientation: landscape) and (max-height: 560px) {
+  .scene.is-sub .wm-compact { width: min(36vw, 300px); }
+}
+@media (min-width: 1000px) {
+  .scene:not(.is-sub) .wm-full { width: 280px; }
+}
