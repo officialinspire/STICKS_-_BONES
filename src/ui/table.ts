@@ -176,6 +176,7 @@ export class TableScreen {
     });
     let lastFit = -1;
     this.#ro = new ResizeObserver(() => {
+      this.#layoutHandRows();
       const w = this.#q('board-wrap')?.clientWidth ?? 0;
       // A height change re-renders only if it changes the fitted tile size (keeps focus on end targets).
       const fit = this.#userZoom ? this.#unit : this.#fitUnit();
@@ -484,13 +485,7 @@ export class TableScreen {
     const scroller = el.querySelector('.hand-scroll') as HTMLElement;
     // Long hands: two rows when one row would scroll and the screen has the height for it
     // (portrait phones and tablets), so more tiles — and the playable ones — are in view at once.
-    const tileW = parseFloat(getComputedStyle(scroller).getPropertyValue('--hand-w')) || 42;
-    const perRow = Math.max(1, Math.floor((scroller.clientWidth - 8 + 6) / (tileW + 6)));
-    const rows = tiles.length > perRow && window.innerHeight >= 640 && window.innerHeight > window.innerWidth * 0.9 ? 2 : 1;
-    if (rows === 2) {
-      scroller.classList.add('two-rows');
-      scroller.style.setProperty('--hand-cols', String(Math.ceil(tiles.length / 2)));
-    }
+    this.#layoutHandRows();
     scroller.scrollLeft = prevScroll;
     // A new turn with tiles off-screen: bring the first playable tile into view (once per turn,
     // so the player's own scrolling is never fought).
@@ -502,13 +497,32 @@ export class TableScreen {
       }
     }
     this.#handTurnKey = turnKey;
-    const edges = () => {
-      const more = scroller.scrollWidth - scroller.clientWidth > 2;
-      scroller.dataset.more = !more ? 'none' : scroller.scrollLeft < 2 ? 'right' : scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 2 ? 'left' : 'both';
-    };
-    edges();
-    scroller.addEventListener('scroll', edges, { passive: true });
+    this.#handEdges();
+    scroller.addEventListener('scroll', () => this.#handEdges(), { passive: true });
     if (focused) (el.querySelector(`[data-tile="${focused}"]`) as HTMLElement | null)?.focus({ preventScroll: true });
+  }
+
+  /** Long hands: two rows when one row would scroll and the screen is tall (portrait phones, tablets).
+   *  Re-run on every resize, so rotating never leaves a stale layout. */
+  #layoutHandRows(): void {
+    const scroller = this.#root.querySelector<HTMLElement>('.hand-scroll');
+    if (!scroller) return;
+    const n = scroller.children.length;
+    const tileW = parseFloat(getComputedStyle(scroller).getPropertyValue('--hand-w')) || 42;
+    const perRow = Math.max(1, Math.floor((scroller.clientWidth - 8 + 6) / (tileW + 6)));
+    const two = n > perRow && window.innerHeight >= 640 && window.innerHeight > window.innerWidth * 0.9;
+    scroller.classList.toggle('two-rows', two);
+    if (two) scroller.style.setProperty('--hand-cols', String(Math.ceil(n / 2)));
+    else scroller.style.removeProperty('--hand-cols');
+    this.#handEdges();
+  }
+
+  /** More tiles off-screen: mark which edge(s) fade. */
+  #handEdges(): void {
+    const s = this.#root.querySelector<HTMLElement>('.hand-scroll');
+    if (!s) return;
+    const more = s.scrollWidth - s.clientWidth > 2;
+    s.dataset.more = !more ? 'none' : s.scrollLeft < 2 ? 'right' : s.scrollLeft + s.clientWidth >= s.scrollWidth - 2 ? 'left' : 'both';
   }
 
   #renderCover(): void {

@@ -596,7 +596,7 @@ try {
     const long = await p2.evaluate(() => {
       const s = document.querySelector('.hand-scroll') as HTMLElement;
       const r = s.getBoundingClientRect();
-      const rows = new Set([...document.querySelectorAll('.hand-tile')].map((t) => Math.round(t.getBoundingClientRect().top))).size;
+      const rows = new Set([...document.querySelectorAll<HTMLElement>('.hand-tile')].map((t) => t.offsetTop)).size;
       const legalVisible = [...document.querySelectorAll('.hand-tile.is-legal')].some((t) => {
         const b = t.getBoundingClientRect();
         return b.left >= r.left - 1 && b.right <= r.right + 1;
@@ -606,7 +606,7 @@ try {
     check(long.rows === 2 && long.legalVisible && long.more !== 'none', `polish: long hand at 390×844 ${JSON.stringify(long)}`);
     await p2.setViewportSize({ width: 844, height: 390 });
     await p2.waitForTimeout(250);
-    const rowsLandscape = await p2.evaluate(() => new Set([...document.querySelectorAll('.hand-tile')].map((t) => Math.round(t.getBoundingClientRect().top))).size);
+    const rowsLandscape = await p2.evaluate(() => new Set([...document.querySelectorAll<HTMLElement>('.hand-tile')].map((t) => t.offsetTop)).size);
     check(rowsLandscape === 1, `polish: short landscape should keep one hand row (got ${rowsLandscape})`);
     notes.push(`polish: 21-tile hand → 2 rows on 390×844 with a playable tile in view (edge fade ${long.more}); 1 row on 844×390`);
     await p2.context().close();
