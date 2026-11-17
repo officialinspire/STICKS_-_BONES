@@ -1063,6 +1063,107 @@ Larger crisp figures on those screens need higher-resolution character art.
   `e1`).
 - Only Chromium; no real devices.
 
+## Gameplay polish stage (2026-11-17)
+
+### Inspected
+Every supported mode was played in Chromium at 390×844, 844×390, 768×1024 and 1366×768: Draw, Block and
+Partnership against the computer, two humans on one device, and the both-ends, 21-tile-hand, max-board and
+match-point fixtures. Captures covered the selected tile, legal ends, draw/pass guidance, the results sheet
+and the handoff cover.
+
+### Defects found and fixed
+- **The selected tile was clipped:** its lift, ring and ✓ badge were cut off at the top of the hand row in
+  every layout (the row scrolls sideways, so it clips vertically). The row now has room above it.
+- **Long hands hid the playable tiles:** a 21-tile hand showed 7 tiles on a phone, and the only playable
+  ones could be off-screen.
+  - Tall screens now show long hands in two rows.
+  - The first playable tile is scrolled into view once per turn, never fighting the player's own scrolling.
+  - Scrollable edges fade.
+  - Short landscape keeps one row, and rotating recomputes the layout.
+- **Selection was hard to read:** while one tile is picked up, the other playable tiles step back.
+- **Partner identity:** the partner's seat chip now carries the team colour as well as the word "Partner".
+- **Results:** a player who went out read "no tiles left" twice. It now appears once.
+- **ResizeObserver loop error (found by e2e):** the row layout now runs on the next frame, outside the
+  observer callback.
+
+### Verified
+- e2e § 5b:
+  - 5 rapid taps on a tile settle on one selection with both ends offered;
+  - the selection and both ends survive rotating 390×844 → 844×390 → 667×375, with the badge and ring
+    unclipped at every size, and the tile is then placed;
+  - the 21-tile hand shows 2 rows with a playable tile visible;
+  - partner chip; results.
+- Existing coverage still passes: complete hands in every setup, blocked outcomes, restart, resume
+  (including during AI thinking, with 0 stale AI decisions), rapid actions and double-tap (exactly one tile
+  placed), keyboard-only placement, and privacy covers at every handoff.
+
+## Menu / interface polish stage (2026-11-17)
+
+### Inspected
+Home, Quick Play, Two Players, How to Play, Settings, Statistics and the Story case file at 390×844,
+667×375, 768×1024 and 1366×768.
+
+### Defects found and fixed
+- **Discard on the home screen deleted a saved game in one tap.** It now opens a confirmation sheet.
+- **One confirmation sheet for every destructive action:** discarding a saved game, resetting statistics,
+  erasing data and starting the Story over (`src/ui/confirm.ts`).
+  - It replaces the inconsistent two-tap "Tap again" buttons and matches the table's ivory sheet.
+  - Focus starts on the safe choice; Escape cancels; focus returns to the opener.
+  - Destructive buttons carry the guava outline and ⚠ mark.
+- **Statistics needed sideways scrolling on phones** (a six-column table in its own scroller). It is now one
+  card per mode. Reset is offered only when there is something to reset.
+- **Sub-pages started below a full-size wordmark.** They now use the one-line mark. On desktop the panel is
+  wider and Cousin stays in view beside it.
+- **Inconsistent Back labels** ("← Back" in menus, "← Menu" in Story): now "← Menu" everywhere.
+- **Back navigation:**
+  - The browser/OS Back button and Escape now return from any menu sub-page, with focus back on the button
+    that opened it.
+  - Back does nothing once a table or Story is open.
+  - Escape on the Story case file returns to the menu.
+- **Setup heading:** it now follows the players choice ("Quick Play" or "Two Players"), so switching never
+  leaves a stale title.
+- **Home hierarchy:**
+  - Story is the single gold primary, with a guava offset like the subtitle tag. It reads New Case,
+    Continue Case (with chapter, e.g. "Chapter 3 of 7") or Case Closed from the saved progress
+    (read-only).
+  - Quick Play is deep sea and Two Players is ink.
+  - The four secondary links share one grid.
+- **Achievements:** a reserved destination labelled "Soon". Its page says "Coming in a later update" and
+  that nothing is tracked yet. It has no dead controls and invents no data.
+
+Saves are untouched by navigation: the confirmation sheets guard every delete, and the Story card only reads
+progress. Only approved token pairings are used (ink on gold, gold on ink, ivory on deep sea and ink).
+
+### Budget
+Code is **305 KB / 310 KB** (the budget was 300). The +6 KB is recorded in `docs/PERFORMANCE.md`, and the
+CSS for the removed statistics table was deleted. Startup is 816 / 900 KB.
+
+### Commands run and results (Chromium)
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | pass: 340 tests, lint, assets, budgets (code 305/310 KB) |
+| `npm run e2e` | running at commit time; result recorded in the next commit |
+| `npm run qa` | running at commit time; result recorded in the next commit |
+| `npm run a11y` | running at commit time; result recorded in the next commit |
+| `npm run pwa` | running at commit time; result recorded in the next commit |
+| `npm run story:e2e` | running at commit time; result recorded in the next commit |
+| `npm run matches` / `npm run smoke` | running at commit time; result recorded in the next commit |
+
+New coverage:
+- e2e § 8c: Back, Escape and ← Menu on 6 sub-pages; focus on the heading, then back on the opener; no
+  sideways scrolling or nested sideways scrollers at 360 px; setup heading; Achievements placeholder; Story
+  card states.
+- e2e: discard via Cancel, Escape and confirm.
+- pwa: erase via Cancel and confirm.
+- qa: stats, settings and achievements screens on all 8 viewports.
+- a11y: Two Players and Achievements pages.
+
+### Known issues
+- Only Chromium; no real devices.
+- Achievements are a placeholder until stage 5.
+- Browser Back is not wired inside Story runs or the table (they keep their own Menu/Pause controls).
+
 ## Next stage
 
 The detailed list is in `docs/STORY_BUILD_STATUS.md`:

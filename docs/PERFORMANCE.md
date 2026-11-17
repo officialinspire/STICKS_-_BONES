@@ -186,3 +186,7 @@ The Story content is on-demand, so instead of raising the image budget, images a
 | story chunks | 130 KB (unchanged) | 113 KB | + the cast frame table |
 | service worker | **22 KB (was 16)** | 19 KB | per-file sizes for truncation checks and four groups |
 | total | **15,400 KB (was 13,900)** | 15,045 KB | + 1.46 MB of on-demand Story images, none at startup |
+
+**Menu polish stage (2026-11-17):** code **310 KB (was 300)**, measured 305 KB raw. The +6 KB is the shared
+confirmation sheet, the Achievements page, the per-mode statistics cards, menu Back/Escape history and their
+styles; 1 KB of styles for the removed statistics table was deleted. Startup stays under its 900 KB budget.
