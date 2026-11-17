@@ -849,6 +849,7 @@ try {
       });
     const intro = async (route: 'ok' | '404' | 'hang' | 'none' | 'reject', vp = { width: 390, height: 844 }, mobile = false) => {
       const ctx = await browser.newContext({ viewport: vp, ...(mobile ? { isMobile: true, hasTouch: true } : {}) });
+      await ctx.addInitScript('window.__name = (f) => f;'); // tsx wraps named inner functions in page callbacks
       const page = await ctx.newPage();
       page.on('pageerror', (e: { message: string }) => failures.push(`page error: ${e.message}`));
       page.on('console', (m: Ctx) => {
