@@ -52,11 +52,19 @@ v0.2, committed to `main` by the owner as 242ee60). The general project log stay
 | | Portrait, short landscape, tablet and desktop layouts | ✅ (6 viewports × 11 screens) |
 | | Hand targets ≥ 44 px without overlap | ✅ via gap-split hit areas |
 | | Cast atlases catalogued (Vale, Luz, Marisol, Rafa) | ✅ (variants; not yet runtime) |
-| **Next: chapter play** | Story hand sessions (one guarded hand per chapter), outcome inserts, notebook/evidence progression, chapter replay, epilogue | ☐ |
-| | Cast portraits in dialogue (needs expression labels → derivatives) | ☐ |
-| | Chapter backdrops (the six other environments) as derivatives with focal points | ☐ (cave done for the Prologue) |
-| | Story audio (night and cave beds, case-complete cues), real SFX | ☐ |
-| | Finish Hand with AI assistance, skip with recap | ☐ |
+| **Stage 13: chapter play + cinematic presentation** | Story hand sessions: one guarded hand per chapter (frozen presets, fair AI, named seats), every win/loss/tie advances | ✅ |
+| | Verbatim outcome insert matching the hand, common continuation, notebook entry, end card, next scene; epilogue "Case complete" | ✅ |
+| | Progress v2 (migrates v1): scene/part/beat/outcome plus the in-progress hand from the deal onward; completion written once with the outcome | ✅ |
+| | Chapter replay from the case file (memory-only; never changes case progress) | ✅ |
+| | SceneDirector: explicit states, cancellable tokens, settle(), single-step input, configurable and reduced-motion timings (`docs/CINEMATICS.md`) | ✅ |
+| | Staging for every moment in the brief, anchored to the script's exact stage directions; Chapter 6 hand never on the ancient platform | ✅ |
+| | Five chapter backdrops as on-demand WebP derivatives (decode before reveal; drawn fallback) | ✅ |
+| | Story audio cue hooks on the central AudioManager (knock live; others reserved); story tables without banter | ✅ |
+| **Next** | Cast portraits in dialogue (needs expression labels → derivatives) | ☐ |
+| | Story audio: night/cave beds, case-complete cue, real SFX (reserved hooks exist) | ☐ |
+| | Finish Hand with AI assistance, skip with recap, optional table banter in safe gaps | ☐ |
+| | Interrupted resilience items: update-time save retry, music recovery, AI worker timeouts | ☐ |
+| | Version alignment (package vs release notes) | ☐ |
 | | Representative human playtest timing (target 90–110 min, under 120) | ☐ |
 
 ## Verification (this stage, Chromium only)

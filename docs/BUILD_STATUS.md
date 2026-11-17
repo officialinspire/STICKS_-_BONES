@@ -866,6 +866,69 @@ Story tracking: `docs/STORY_BUILD_STATUS.md`. Design system: `docs/DESIGN.md`.
 - **The total dist is 9.58 MB of a 9.8 MB budget**, mostly music. The next story
   backdrops will need a deliberate raise.
 
+## Stage 13 — Playable story chapters and the cinematic presentation system ✅ (2026-11-17)
+
+Details: `docs/CINEMATICS.md`. Story checklist: `docs/STORY_BUILD_STATUS.md`.
+
+### Completed
+
+- **Chapter play** (it didn't exist yet, despite the brief's "now-playable story"):
+  - one guarded hand per chapter, on the frozen presets with the fair AI;
+  - named seats (Tío Rafa, Marisol, Vale, Luz) via a new `seatNames` session option;
+  - any result advances: verbatim Win/Loss/Tie insert → common continuation → notebook
+    entry → next scene;
+  - epilogue "Case complete";
+  - replay of completed chapters is memory-only.
+- **Progress v2** (migrates v1) saves the scene, part, beat and outcome, plus the
+  in-progress hand **from the deal onward**. Completion is written once, together with
+  the outcome.
+- **SceneDirector** (`src/story/director.ts`):
+  - explicit states;
+  - tokens that every async continuation must still hold;
+  - `settle()`, so backgrounding or Skip never leaves a blocker;
+  - reveal-first single-step input with a 180 ms double-tap guard;
+  - `enterHand` only once per scene;
+  - default timings (550 ms scene fades, 260 ms actors) and reduced-motion timings
+    (120 ms simple fades, no reveal or move).
+- **Stage view:**
+  - backdrops are decoded before the curtain opens, with a drawn fallback and no blank;
+  - light grades, threshold glow, water, boundary, warmth;
+  - Roberto's bust via `HostView` (stable boxes, no double face), in the flow above the
+    dialogue, shown only on his lines and reaction beats.
+- **Staging for every moment in the brief:** anchored to the script's exact stage
+  directions (tested). Chapter 6's hand and rest-area beats are never on the ancient
+  platform.
+- **Five chapter backdrops** as on-demand WebP derivatives (the jungle at q84, because
+  q80 failed the quality gate).
+- **The Story layer is now a lazy chunk:** startup fell from 894 to 866 KB.
+- **Story audio cue hooks** route through the central AudioManager; story tables have no
+  banter.
+
+### Commands run and results (Chromium)
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | pass (new tests: director 9, staging 3, chapters 4) |
+| `npm run story:e2e` (new) | pass. Covered: rapid taps (0–1 beat per burst); skip during transitions; double Deal → one hand; refresh mid-dialogue (same beat) and mid-hand (identical tiles); a real hand → its verbatim insert (passed as a win and as a loss on separate runs); completion once; missing images; backgrounding; reduced motion; rotation; repeated navigation; 10 staged moments in portrait and short landscape |
+| `npm run e2e` / `npm run qa` / `npm run a11y` | pass / 0 failures / 0 failures |
+| `npm run pwa` / `npm run smoke` | pass (offline cache 3,595,963 B, including the scene backdrops) / pass |
+
+### Bugs found and fixed while testing
+
+- A refresh before the first move dealt a new hand: the deal is now saved.
+- Resuming at Chapter 6's rest-area beat showed the platform: replayed cues now set the
+  backdrop intent before preparing.
+- An inline `none` hid the drawn fallback.
+- Roberto's face appeared beside other speakers' lines, and long lines covered it.
+- Next wasn't focused when a scene opened.
+
+### Known issues
+
+- **Other characters' portraits** are pending expression labels (staged with name tags,
+  light and text).
+- **Audio:** story cue hooks other than the knock are reserved, waiting for the sound bank.
+- **Browsers and devices:** only Chromium was tested.
+
 ## Next stage
 
 **Stage 13: Story chapter play.** The detailed list is in `docs/STORY_BUILD_STATUS.md`:

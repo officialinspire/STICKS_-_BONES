@@ -306,7 +306,14 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
           persist({ ...p, sceneId, part: part === 'pre' && beats === preBeats ? 'pre' : 'post', index: i, hand: null });
         },
         finishReveal: () => s.finishReveal(),
-        setState: (x) => s.setState(x),
+        setState: (x) => {
+          s.setState(x);
+          // Once the scene is up, the primary control gets focus (unless the player is focused elsewhere in the stage).
+          if (x === 'presenting') {
+            const a = document.activeElement;
+            if (!a || a === document.body || !root.contains(a) || a.closest('.st-curtain')) (root.querySelector('[data-act="story-next"]:not([hidden])') as HTMLElement | null)?.focus({ preventScroll: true });
+          }
+        },
       },
       {
         textOf: (b) => b.block.text ?? b.block.raw,

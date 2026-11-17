@@ -18,7 +18,6 @@ import { haptic, type HapticCue } from './audio/haptics';
 import { showStart } from './ui/intro-screen';
 import { renderMenu, type MenuChoice, type ResumeOffer } from './ui/menu';
 import { TableScreen } from './ui/table';
-import { renderStoryHome } from './ui/story-ui';
 import { consumeUpdatedFlag, describeOffline, eraseLocalData, PwaController } from './app/pwa';
 import { Analytics, winnerLabel, type AnalyticsEvent, type MatchInfo, type StartKind } from './app/analytics';
 import { ANALYTICS_CONFIG } from './app/analytics-config';
@@ -206,7 +205,8 @@ function openStory(): void {
   active = null;
   audio.setScene('menu');
   const fast = DEV && Boolean((window as unknown as { __sbStoryFast?: boolean }).__sbStoryFast);
-  void renderStoryHome({
+  // The whole Story layer (player, director, staging, script) is a lazy chunk: nothing of it loads at startup.
+  void import('./ui/story-ui').then(({ renderStoryHome }) => renderStoryHome({
     root,
     store,
     fast,
@@ -255,7 +255,7 @@ function openStory(): void {
       }
       if (DEV) (window as unknown as { __sb: unknown }).__sb = { session, controller, runnerKind: runner.kind, matchId: `story:${req.sceneId}`, stats: () => stats };
     },
-  });
+  }));
 }
 // ---- the active match ----------------------------------------------------------------
 interface Active {

@@ -158,7 +158,11 @@ try {
     await axe(page, 'story: case file');
     await page.click('[data-act="story-new"], [data-act="story-continue"]');
     await page.waitForSelector('.story-stage');
+    // Input during the entrance fade is ignored by design: wait until the scene is presenting.
+    await page.waitForFunction(`window.__sbStory && window.__sbStory.director.state === 'presenting'`, null, { timeout: 8000 });
     check(await activeIs(page, '[data-act="story-next"]'), 'story: Next not focused when the scene opens');
+    // First input on a revealing line only completes the reveal (by design); let it finish so Enter advances.
+    await page.waitForTimeout(1000);
     const pos0 = await page.textContent('.cine-pos');
     await page.keyboard.press('Enter');
     await page.waitForTimeout(100);

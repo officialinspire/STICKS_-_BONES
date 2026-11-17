@@ -33,8 +33,8 @@ const bytes = files.reduce((s, f) => s + statSync(f).size, 0);
 // raise it only on purpose, with a measurement, in the same change.
 const KB = 1024;
 export const BUDGET = {
-  codeKB: 300, // core JS + CSS + HTML, excluding the lazy story-script chunk (Stage 12 measured 266 KB raw: +29 KB inlined wordmark vectors, story UI)
-  storyKB: 100, // the approved script as a lazy chunk, loaded only when Story opens (measured 76 KB raw / 18 KB gzip)
+  codeKB: 300, // core JS + CSS + HTML, excluding the lazy Story chunks (Stage 13 measured ~265 KB raw)
+  storyKB: 130, // lazy Story chunks, loaded only when Story opens: the approved script (76 KB) + player/director/staging (29 KB)
   fontsKB: 100, // self-hosted DM Sans + Bricolage Grotesque WOFF2 subsets (measured 82 KB)
   imagesKB: 3300, // every runtime image (Stage 13 measured ~3,050 KB: +five story backdrops, all loaded per scene on demand, none at startup)
   singleImageKB: 450, // largest single image (Stage 13: jungle backdrop 428 KB at q84 — q80 failed the derivative quality gate)
@@ -46,7 +46,7 @@ export const BUDGET = {
 };
 const size = (f) => statSync(f).size;
 const rel = (f) => f.slice(dist.length);
-const isStory = (f) => /assets\/script-[\w-]+\.js$/.test(rel(f));
+const isStory = (f) => /assets\/(script|story-ui)-[\w-]+\.js$/.test(rel(f)); // lazy Story chunks: the script text and the player
 const isCode = (f) => /\.(js|css|html)$/.test(f) && !isStory(f);
 const isFont = (f) => /\.woff2$/.test(f);
 const isImage = (f) => /\.(webp|png|avif|jpe?g|svg|gif)$/.test(f);
@@ -55,7 +55,7 @@ const sumKB = (fs) => fs.reduce((s, f) => s + size(f), 0) / KB;
 const code = sumKB(files.filter(isCode));
 const storyKB = sumKB(files.filter(isStory));
 const fontsKB = sumKB(files.filter(isFont));
-if (files.filter(isStory).length !== 1) errors.push(`expected exactly one lazy story-script chunk, found ${files.filter(isStory).length}`);
+if (files.filter(isStory).length !== 2) errors.push(`expected the two lazy Story chunks (script, story-ui), found ${files.filter(isStory).length}`);
 const isIcon = (f) => rel(f).startsWith('icons/');
 const images = files.filter((f) => isImage(f) && !isIcon(f));
 const iconsKB = sumKB(files.filter(isIcon));
