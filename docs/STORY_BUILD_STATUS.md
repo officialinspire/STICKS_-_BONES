@@ -81,6 +81,10 @@ v0.2, committed to `main` by the owner as 242ee60). The general project log stay
 | | Repair re-downloads only this app's caches plus the groups the player chose; both save slots kept | ✅ |
 | | Update mid-case: Update now on the case file, scene bar and story table; stable state written and checked; honest failed-save choice; no hand visible; returns once to the same line or hand | ✅ |
 | | Story analytics events separate from Quick Play (encounter start on first move, chapter/case completion, resume, assist), deduplicated, enum-only | ✅ (adapter still **disabled**; contract not inspected) |
+| **Character framing stage** | Larger dialogue characters sized from visible bounds, resolution-capped (≤ 1.6×), upper-body Cousin crop, head-matched scale | ✅ |
+| | Two-character staging (Cousin left, speaker right, listener dimmed, no scale jumps); compact cast portraits at story tables; listener primed on resume | ✅ |
+| | Cousin's portrait derivative cleaned (specks/fringes); story stage no longer drawn under the table (fixed + regression check) | ✅ |
+| | Checked at 390×844, 844×390, 768×1024, 1366×768 (and QA's 8 viewports); faces clear of panel and bar; reduced motion | ✅ (emulation only) |
 | **Next** | Cast expressions in dialogue (needs the owner's expression labels) | ☐ |
 | | Owner listening pass: SFX choices, bed seams (`/dev/audio-audition.html`), levels on headphones and speakers; mark `auditioned` / `final` | ☐ |
 | | Commissioned music (night bed, cave bed, stingers) and recorded domino foley | ☐ |

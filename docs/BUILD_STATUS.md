@@ -1000,6 +1000,69 @@ Details: `docs/CINEMATICS.md`. Story checklist: `docs/STORY_BUILD_STATUS.md`.
 - Missing: the intro video (fallback works), commissioned music, the speaker recording.
 - Only Chromium was tested (Safari's MP3 decoding may add priming; `src/audio/loop.ts` trims it).
 
+## Character framing stage: larger dialogue characters (2026-11-17)
+
+### Completed
+
+- **Inspected first:** at 390×844, 844×390, 768×1024 and 1366×768 the dialogue figures were 86–170 px tall,
+  with most of the stage empty.
+- **Sized from visible bounds:**
+  - **Cast:** the box is cropped to the visible figure (head top to baseline, padding trimmed), the same crop
+    for every frame.
+  - **Cousin:** a new upper-body dialogue crop (`HostView` variant `dialogue`, 275×363 source px, hat
+    included), one box for every expression.
+  - Boxes always take the region's own aspect, so art is never stretched.
+- **No blur:** each figure is capped at the height where its source pixels would be upscaled 1.6× on this
+  screen (`devicePixelRatio`). The cap is recomputed on resize, browser zoom and rotation.
+- **Responsive framing:**
+  - **Dialogue:** generous upper bodies, standing on the panel's top edge with only the lowest 22 %
+    tucked behind it.
+  - **Two characters:** Cousin on the left, the cast member on the right. The listener is dimmed, never
+    rescaled; the speaker stands in front where the two overlap on narrow phones; the name tag moves to
+    the speaker's side.
+  - **Resume:** the last cast speaker comes back as the listener.
+  - **Head-matched scale:** Cousin ×1.146, measured, within his own cap.
+  - **Domino play:** compact head-and-shoulders portraits beside the cast seats on story tables.
+- **Clean edges:** Cousin's portrait derivative is now cleaned like the cast sheets (shared
+  `scripts/lib/clean.ts`): 175 specks removed, fringe 426 → 0 px, same size, so every rect still applies.
+  The original is untouched.
+- **Reduced motion:** both the OS preference and the in-game setting turn the figure transitions off.
+
+| Viewport (emulated, DPR 2) | Cousin before → after | Cast before → after |
+| --- | --- | --- |
+| 390×844 | 177 → 268 px | 185 → 220 px |
+| 844×390 | 90 → 206 px | 94 → 180 px |
+| 768×1024 | 179 → 290 px | 186 → 325 px |
+| 1366×768 | 161 → 290 px | 168 → 325 px |
+
+At DPR 3 (most phones) the resolution cap binds earlier: Cousin about 194 px, cast about 216 px tall.
+Larger crisp figures on those screens need higher-resolution character art.
+
+### Defects found and fixed
+
+- **The story stage stayed drawn under the table during every story hand.** Its `display: grid` overrode
+  `hidden`, so the scene bar and controls ghosted behind the board and stayed in the accessibility tree.
+  Fixed, with a regression check (story e2e § I).
+- Cousin's sheet had visible red/yellow edge specks at the larger size: cleaned derivative.
+
+### Commands run and results (Chromium)
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | pass: 340 tests in 36 files, lint, assets, all budgets (code 297/300 KB, core images 2,961 KB) |
+| `npm run story:e2e` | pass. § G now checks the actual FACE regions of both figures (clear of the panel and the scene bar) and that cast and Roberto stay ≤ 1.6× upscale, in 10 staged moments × portrait/landscape |
+| `npm run qa` | 0 failures, 1 documented comfort warning (8 viewports × 13 screens, including the cast line) |
+| `npm run a11y` / `npm run e2e` | 0 failures / pass |
+| `npm run perf:story` | pass: 8 chapter visits, no growth in nodes, listeners, timers, workers or audio sources (the new resize listener is removed on dispose) |
+
+### Known issues
+
+- Phones at DPR 3 are limited by the art's resolution (above). Higher-resolution cast and Cousin art would
+  allow larger figures there.
+- Expression labels are still missing; figures show the current mappings (Cousin's moods, cast frame
+  `e1`).
+- Only Chromium; no real devices.
+
 ## Next stage
 
 The detailed list is in `docs/STORY_BUILD_STATUS.md`:
