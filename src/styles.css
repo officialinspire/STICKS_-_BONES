@@ -2652,3 +2652,7 @@ h1, h2, h3, .title, .chapter-title, .section-h, .score-val, .dest-title, .points
 @media (prefers-reduced-motion: reduce) {
   .scene.is-reveal > *, .credit-card { animation: none !important; }
 }
+/* The credit frame always fills the screen (never sized by the video's own aspect), so the video
+   letterboxes inside it in every orientation. */
+.intro-stage .intro-frame { position: absolute; inset: 0; width: auto; height: auto; }
+.intro-stage .intro-video { position: absolute; inset: 0; }
