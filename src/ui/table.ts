@@ -82,6 +82,7 @@ export class TableScreen {
   #pendingConfirm: 'menu' | 'restart' | null = null;
   #unsub: (() => void)[] = [];
   #ro: ResizeObserver | null = null;
+  #handTurnKey = '';
 
   constructor(root: HTMLElement, controller: TableController, cb: TableCallbacks) {
     this.#root = root;
@@ -481,7 +482,32 @@ export class TableScreen {
       .join('');
     el.innerHTML = `<div class="hand-head"><span>${esc(this.#s.opponent === 'ai' ? 'Your tiles' : `${this.#name(v.viewer)}’s tiles`)} (${tiles.length})</span><span class="hint">${myTurn ? (v.legalMoves.length ? 'Pick a glowing tile, then tap where it goes.' : '') : ''}</span></div><div class="hand-scroll" role="toolbar" aria-label="Your tiles">${buttons}</div>`;
     const scroller = el.querySelector('.hand-scroll') as HTMLElement;
+    // Long hands: two rows when one row would scroll and the screen has the height for it
+    // (portrait phones and tablets), so more tiles — and the playable ones — are in view at once.
+    const tileW = parseFloat(getComputedStyle(scroller).getPropertyValue('--hand-w')) || 42;
+    const perRow = Math.max(1, Math.floor((scroller.clientWidth - 8 + 6) / (tileW + 6)));
+    const rows = tiles.length > perRow && window.innerHeight >= 640 && window.innerHeight > window.innerWidth * 0.9 ? 2 : 1;
+    if (rows === 2) {
+      scroller.classList.add('two-rows');
+      scroller.style.setProperty('--hand-cols', String(Math.ceil(tiles.length / 2)));
+    }
     scroller.scrollLeft = prevScroll;
+    // A new turn with tiles off-screen: bring the first playable tile into view (once per turn,
+    // so the player's own scrolling is never fought).
+    const turnKey = myTurn ? `${v.viewer}:${v.line.tiles.length}:${tiles.length}:${v.handNumber}` : '';
+    if (turnKey && turnKey !== this.#handTurnKey) {
+      const legal = scroller.querySelector<HTMLElement>('.hand-tile.is-legal');
+      if (legal && (legal.offsetLeft < scroller.scrollLeft || legal.offsetLeft + legal.offsetWidth > scroller.scrollLeft + scroller.clientWidth)) {
+        scroller.scrollLeft = Math.max(0, legal.offsetLeft - 8);
+      }
+    }
+    this.#handTurnKey = turnKey;
+    const edges = () => {
+      const more = scroller.scrollWidth - scroller.clientWidth > 2;
+      scroller.dataset.more = !more ? 'none' : scroller.scrollLeft < 2 ? 'right' : scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 2 ? 'left' : 'both';
+    };
+    edges();
+    scroller.addEventListener('scroll', edges, { passive: true });
     if (focused) (el.querySelector(`[data-tile="${focused}"]`) as HTMLElement | null)?.focus({ preventScroll: true });
   }
 
@@ -550,7 +576,7 @@ export class TableScreen {
         const faces = h.length ? h.map((id) => `<span class="result-tile" role="img" aria-label="${esc(tileLabel(id))}">${faceHtml(id)}</span>`).join('') : '<em>no tiles left</em>';
         // The pip sum is spelled out under the tiles (zero-pip tiles and empty hands included).
         const sum = handLine(name(seat as SeatIndex), h).replace(/^[^:]+: /, '');
-        return `<div class="result-hand"><div class="result-who"><strong>${esc(name(seat as SeatIndex))}</strong><span>${r.seatTotals[seat]} pip${r.seatTotals[seat] === 1 ? '' : 's'}</span></div><div class="result-tiles">${faces}</div><p class="math-line">${esc(sum)}</p></div>`;
+        return `<div class="result-hand"><div class="result-who"><strong>${esc(name(seat as SeatIndex))}</strong><span>${r.seatTotals[seat]} pip${r.seatTotals[seat] === 1 ? '' : 's'}</span></div><div class="result-tiles">${faces}</div>${h.length ? `<p class="math-line">${esc(sum)}</p>` : ''}</div>`;
       })
       .join('');
     const ex = explainResult(r, this.#s.rules, name, (t) => this.#s.teamName(t));

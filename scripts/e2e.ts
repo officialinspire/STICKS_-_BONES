@@ -559,6 +559,79 @@ try {
     check(await page.locator('[data-go="setup"]').count() === 1, 'menu: confirming did not return to the menu');
     await page.context().close();
   }
+  // 5b. Gameplay polish: selection never clipped, long hands in two rows with a playable tile in
+  //     view, rapid taps settle, rotation keeps the selection, partner marked, results not repeated.
+  {
+    const unclipped = (page: Page) =>
+      page.evaluate(() => {
+        const s = (document.querySelector('.hand-scroll') as HTMLElement).getBoundingClientRect();
+        const t = document.querySelector('.hand-tile.is-selected');
+        if (!t) return 'no selection';
+        const badgeTop = t.getBoundingClientRect().top + parseFloat(getComputedStyle(t, '::after').top);
+        const ringTop = t.getBoundingClientRect().top - 6;
+        return Math.min(badgeTop, ringTop) >= s.top - 0.5 ? 'ok' : `clipped by ${(s.top - Math.min(badgeTop, ringTop)).toFixed(1)}px`;
+      });
+    const page = await newPage({ width: 390, height: 844 });
+    await startMatch(page, { fixture: 'both-ends' });
+    const tile = page.locator('.hand-tile[data-tile="t53"]');
+    for (let i = 0; i < 5; i++) await tile.click({ delay: 0 });
+    check((await page.locator('.hand-tile.is-selected').count()) === 1 && (await page.locator('.end-slot.is-legal').count()) === 2, 'polish: 5 rapid taps on a tile should leave it selected with both ends offered');
+    check((await unclipped(page)) === 'ok', `polish: selected tile clipped at 390×844 (${await unclipped(page)})`);
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.waitForTimeout(250);
+    check((await page.locator('.hand-tile.is-selected').count()) === 1 && (await page.locator('.end-slot.is-legal').count()) === 2, 'polish: rotation dropped the selection or the legal ends');
+    check((await unclipped(page)) === 'ok', `polish: selected tile clipped at 844×390 (${await unclipped(page)})`);
+    await page.setViewportSize({ width: 667, height: 375 });
+    await page.waitForTimeout(250);
+    check((await unclipped(page)) === 'ok', `polish: selected tile clipped at 667×375 (${await unclipped(page)})`);
+    await page.locator('.end-slot.is-legal').last().click();
+    await page.waitForTimeout(150);
+    check((await page.locator('.board-tile').count()) === 3 && (await page.locator('.hand-tile.is-selected').count()) === 0, 'polish: placing after rotation failed');
+    notes.push('polish: 5 rapid taps settle on one selection; selection + both ends survive 390×844 → 844×390 → 667×375; badge/ring unclipped; placed after rotating');
+    await page.context().close();
+
+    const p2 = await newPage({ width: 390, height: 844 });
+    await startMatch(p2, { fixture: 'max-hand' });
+    await p2.waitForTimeout(300);
+    const long = await p2.evaluate(() => {
+      const s = document.querySelector('.hand-scroll') as HTMLElement;
+      const r = s.getBoundingClientRect();
+      const rows = new Set([...document.querySelectorAll('.hand-tile')].map((t) => Math.round(t.getBoundingClientRect().top))).size;
+      const legalVisible = [...document.querySelectorAll('.hand-tile.is-legal')].some((t) => {
+        const b = t.getBoundingClientRect();
+        return b.left >= r.left - 1 && b.right <= r.right + 1;
+      });
+      return { rows, legalVisible, more: s.dataset.more };
+    });
+    check(long.rows === 2 && long.legalVisible && long.more !== 'none', `polish: long hand at 390×844 ${JSON.stringify(long)}`);
+    await p2.setViewportSize({ width: 844, height: 390 });
+    await p2.waitForTimeout(250);
+    const rowsLandscape = await p2.evaluate(() => new Set([...document.querySelectorAll('.hand-tile')].map((t) => Math.round(t.getBoundingClientRect().top))).size);
+    check(rowsLandscape === 1, `polish: short landscape should keep one hand row (got ${rowsLandscape})`);
+    notes.push(`polish: 21-tile hand → 2 rows on 390×844 with a playable tile in view (edge fade ${long.more}); 1 row on 844×390`);
+    await p2.context().close();
+
+    const p3 = await newPage({ width: 390, height: 844 });
+    await startMatch(p3, { mode: 'partnership4', seed: 'polish-partner', aiSeed: 'p', fast: true });
+    await p3.locator('.seat-chip').first().waitFor();
+    const partner = await p3.evaluate(() => [...document.querySelectorAll('.seat-chip.is-partner')].map((c) => (c as HTMLElement).dataset.seatPos));
+    check(partner.length === 1 && partner[0] === 'top', `polish: partner chip ${JSON.stringify(partner)}`);
+    await p3.context().close();
+
+    const p4 = await newPage({ width: 390, height: 844 });
+    await startMatch(p4, { fixture: 'match-point' });
+    await p4.locator('.hand-tile.is-legal').first().click();
+    await p4.locator('.end-slot.is-legal').first().click();
+    await p4.locator('dialog.results[open]').waitFor();
+    const empty = await p4.evaluate(() => {
+      const h = [...document.querySelectorAll('.result-hand')].find((x) => x.querySelector('.result-tiles em'));
+      return h ? { lines: h.querySelectorAll('.math-line').length, mentions: (h.textContent!.match(/no tiles left/g) ?? []).length } : null;
+    });
+    check(!!empty && empty.lines === 0 && empty.mentions === 1, `polish: empty hand in results ${JSON.stringify(empty)}`);
+    notes.push('polish: partner chip marked (top seat); results say "no tiles left" once for the player who went out');
+    await p4.context().close();
+  }
+
   // 6. Presentation: opening line & language setting, rules before play, art positions,
   //    effects that never block input or hide scores, reduced motion, slam, rematch, missing art.
   {
