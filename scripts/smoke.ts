@@ -166,6 +166,14 @@ try {
   await ctx.setOffline(true);
   await page.reload();
   await enterMenu();
+  await page.evaluate(() => {
+    localStorage.setItem('sticks-and-bones.save', '{"format":"sticks-and-bones/match"');
+    localStorage.setItem('sticks-and-bones.settings', 'not valid JSON');
+  });
+  await page.reload();
+  await enterMenu();
+  const notice = await page.locator('.home-nav .notice').textContent();
+  check(/saved game couldn’t be read/.test(notice ?? '') && /settings couldn’t be read/.test(notice ?? ''), 'home must show both damaged-record notices together');
   check(problems.length === 0, `console not clean: ${problems.slice(0, 3).join(' | ')}`);
 } catch (e) {
   failures.push(`exception: ${(e as Error).message}`);
