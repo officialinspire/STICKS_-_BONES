@@ -89,7 +89,8 @@ v0.2, committed to `main` by the owner as 242ee60). The general project log stay
 | **Resort backdrop correction** | Chapter 3 (establishing shot, dialogue, partnership hand) and Chapter 7's confrontation and hand use the approved corporate `env.executive-terrace` (inspected; focal x = 0.27, portrait crop re-derived). The leisure `env.resort-patio` is retired (original kept, not bundled, pruned from caches on update). Script text unchanged | ✅ |
 | **QA checkpoint (2026-11-18)** | `npm run story:sweep`: 1,485 beats (all scenes and outcome routes at 390×844; Chapters 3 and 7 at seven viewports) with verbatim text, tagged expressions, verified frames, one settled figure, Continue only, one beat per tap, corporate terrace. Fixed a stale text focus stop and the panel limit's safe-area inset | ✅ (Chromium emulation) |
 | | Owner listening pass: SFX choices, bed seams (`/dev/audio-audition.html`), levels on headphones and speakers; mark `auditioned` / `final` | ☐ |
-| | Commissioned music (night bed, cave bed, stingers) and recorded domino foley | ☐ |
+| | Commissioned music (night bed, cave bed, stingers) and recorded domino foley | Partly ✅ (owner audio stage): Chapter 4 / 6 beds, round win / other cues, slam and deal foley wired. ☐ case-complete cue, ☐ foley for pickup / place / slide / draw, ☐ listening pass |
+| **Owner audio stage (2026-11-18)** | 13 uploads merged from `main`, originals untouched in `assets/audio/originals/`; reproducible derivatives with source hashes and measurements (`npm run audio:owner`, `audio:owner:check`); three foley clips trimmed per clip; scene tracks chosen by measurement and stream-copied; result cues cut from the final cadences; a duplicate recognised; budgets raised deliberately | ✅ (measured, **not auditioned**) |
 | | Finish Hand with AI assistance, skip with recap, optional table banter in safe gaps | ☐ |
 | | Resilience: update-time save retry, music recovery, AI worker timeouts | ✅ Done in the hardening pass (below) |
 | **Hardening pass (2026-11-18)** | Dialogue reveal timers belong to their own beat (an early-finished line can't end the next line's reveal; Back, Skip, settle, cancel and exit retire it) | ✅ |
@@ -124,8 +125,8 @@ stage entry of `docs/BUILD_STATUS.md` and `docs/AUDIO.md` § Verification.
 | Owner's listening approval of the selected sounds and bed seams | Marking any sound `final` / any seam `auditioned` |
 | Permission to read `officialinspire/SPIRITBALL` (`js/analytics.js`, `js/attribution.js`), or the analytics contract itself (service + key for this game, consent, event mapping, attribution) | Turning analytics on (the session's attempt to attach SPIRITBALL was refused) |
 | Portraits for Worker, Representative, the contractor speaker | Those speakers (name tags today) |
-| Recorded domino foley (real double-six tiles on wood) | Replacing the casino-chip stand-ins |
-| Commissioned original music: night-investigation bed, cave suspense bed, round/case stingers (`docs/MUSIC_BRIEFS.md`) | Chapter 4 and 6 music, results and case-complete cues |
+| Recorded domino foley for picking up, placing, sliding and drawing a tile (the slam and the deal are now the owner's recordings) | Replacing the remaining casino-chip stand-ins |
+| ~~Night-investigation bed, cave suspense bed, round stingers~~ — delivered (owner audio stage). Still missing: the case-complete cue, the optional chapter-card cue, edited loops / endings for the two beds (`docs/MUSIC_BRIEFS.md`) | Chapter 4 and 6 music, results and case-complete cues |
 | The contractor speaker recording (voice + repeating cough), if the owner wants it voiced | Chapter 6 (caption-only until then; never impersonated) |
 | INSPIRE intro video `assets/video/inspiresoftwareintro.mp4` | The studio credit (the fallback already works) |
 | INSPIRE analytics contract | Analytics (still disabled) |

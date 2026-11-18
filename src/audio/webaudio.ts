@@ -282,8 +282,13 @@ export class WebAudioBackend implements AudioBackend {
 
   playSfx(v: Voice): SfxHandle | null {
     const ctx = this.#ctx;
-    const bus = this.#bus.get('sfx');
+    const bus = this.#bus.get(v.bus ?? 'sfx');
     if (!ctx || !bus || ctx.state !== 'running') return null;
+    if (v.placeholder === false && v.sample && !(this.#buffers.get(v.sample) instanceof AudioBuffer)) {
+      // Music cues are never synthesized: not decoded yet (fetch it for next time), missing or failed → nothing.
+      if (!this.#buffers.has(v.sample)) this.#decode(v.sample, sampleUrl(v.sample));
+      return null;
+    }
     const startAt = ctx.currentTime + 0.005 + Math.max(0, v.delay);
     const gain = ctx.createGain();
     gain.gain.value = v.gain;

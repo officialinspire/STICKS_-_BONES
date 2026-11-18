@@ -98,7 +98,7 @@ const tick = () => new Promise<void>((r) => setTimeout(r, 0));
 function make(levels: Partial<AudioSettings> = {}, backendOpts: Parameters<typeof fakeBackend>[0] = {}) {
   const fb = fakeBackend(backendOpts);
   const sc = manualScheduler();
-  const m = new AudioManager({ backend: fb.b, scheduler: sc.s, levels: { ...DEFAULT_AUDIO, ...levels }, gapSec: { menu: 0.8, gameplay: 0.6 } });
+  const m = new AudioManager({ backend: fb.b, scheduler: sc.s, levels: { ...DEFAULT_AUDIO, ...levels }, gapSec: { menu: 0.8, gameplay: 0.6, promenade: 1.2, threshold: 1.5 } });
   return { m, fb, sc };
 }
 
@@ -448,14 +448,23 @@ describe('AudioManager: story profiles, cues and the knock motif', () => {
     expect(r.fb.sfx).toHaveLength(0);
   });
 
-  it('profiles choose the bed and the single track; supernatural scenes have no music', async () => {
+  it('profiles choose the bed and the single track; the owner scene beds play where the briefs place them', async () => {
     const { m, fb, sc } = await story();
     expect(fb.ambience().bed).toBe('amb-cave');
-    expect(fb.log.some((l) => l.startsWith('play'))).toBe(false);
+    expect(fb.log).toContain('play:threshold'); // Chapter 6: the cave suspense bed (low), not silence any more
+    fb.resolveAll();
+    await tick();
+    expect(fb.log).toContain('fade:threshold:0.4');
     m.setStoryProfile('chapter-4');
     expect(fb.ambience().bed).toBe('amb-promenade');
+    sc.flushAll(); // threshold fades out BEFORE promenade starts
+    expect(fb.log.indexOf('pause:threshold')).toBeLessThan(fb.log.lastIndexOf('play:promenade'));
+    fb.resolveAll();
+    await tick();
+    expect([...fb.audible]).toEqual(['promenade']);
     m.setStoryProfile('chapter-1');
     expect(fb.ambience().bed).toBe('amb-patio');
+    sc.flushAll(); // promenade fades out first; then the patio track
     expect(fb.log).toContain('play:menu');
     fb.resolveAll();
     await tick();
@@ -619,5 +628,96 @@ describe('AudioManager: story profiles, cues and the knock motif', () => {
       expect(m.recover()).toBe(true);
       expect(fb.ambience().bed).toBe('amb-jungle'); // never the old scene's bed
     });
+  });
+});
+
+describe('AudioManager: owner scene beds and result cues', () => {
+  async function at(profile: 'chapter-4' | 'chapter-6' | null, levels: Partial<AudioSettings> = {}) {
+    const r = make({ ambienceOn: true, ...levels });
+    await r.m.unlock();
+    r.m.setStoryProfile(profile);
+    r.m.setScene(profile ? 'story' : 'gameplay');
+    r.fb.resolveAll();
+    await tick();
+    return r;
+  }
+
+  it('Chapter 4 keeps one track from the dialogue into its hand (lower), never restarting it', async () => {
+    const { m, fb } = await at('chapter-4');
+    expect([...fb.audible]).toEqual(['promenade']);
+    const plays = fb.log.filter((l) => l === 'play:promenade').length;
+    m.setScene('gameplay');
+    expect(fb.log.filter((l) => l === 'play:promenade')).toHaveLength(plays); // same track: no restart
+    expect(fb.log.at(-1)).toBe('fade:promenade:0.35');
+    expect([...fb.audible]).toEqual(['promenade']);
+  });
+
+  it("Chapter 6's music-off holds for the scene (through the rest-area hand and back), and is a replayable state", async () => {
+    const { m, fb, sc } = await at('chapter-6');
+    expect([...fb.audible]).toEqual(['threshold']);
+    expect(STATE_CUES.has('music-off')).toBe(true);
+    expect(m.cue('music-off')).toBe(true);
+    sc.flushAll();
+    expect(fb.audible.size).toBe(0);
+    expect(fb.ambience().bed).toBe('amb-cave'); // the water bed stays
+    m.setScene('gameplay'); // the hand at the rest area: no music
+    m.setScene('story');
+    sc.flushAll();
+    expect(fb.audible.size).toBe(0);
+    expect(fb.log.filter((l) => l === 'play:threshold')).toHaveLength(1);
+    m.setStoryProfile('chapter-4'); // a new scene starts clean
+    sc.flushAll();
+    expect(fb.log).toContain('play:promenade');
+  });
+
+  it('a result cue is music: on the music bus, never synthesized, ducking (not adding) the track, then releasing it', async () => {
+    const { m, fb, sc } = await at(null);
+    expect([...fb.audible]).toEqual(['gameplay']);
+    m.setScene('results');
+    expect(m.resultCue('win')).toBe(true);
+    const v = fb.sfx.at(-1)!.id;
+    expect(v).toMatchObject({ sample: 'result-win', bus: 'music', placeholder: false });
+    expect(fb.log.at(-1)).toBe(`fade:gameplay:${0.7 * 0.25}`); // ducked under the cue
+    expect([...fb.audible]).toEqual(['gameplay']); // still one track
+    m.setScene('gameplay'); // Next hand while the cue sounds: the duck holds
+    expect(fb.log.at(-1)).toBe(`fade:gameplay:${1 * 0.25}`);
+    sc.flushAll(); // the cue's own timer releases it
+    expect(fb.log.at(-1)).toBe('fade:gameplay:1');
+    expect(m.stats.resultCues).toBe(1);
+    expect(m.resultCue('other')).toBe(true);
+    expect(fb.sfx.at(-1)!.id.sample).toBe('result-other');
+    expect(fb.sfx.at(-2)!.stopped).toBe(true); // one cue at a time: a new one replaces the last
+  });
+
+  it('result cues are refused when they must be silent, and never queued for later', async () => {
+    const locked = make();
+    locked.m.setScene('results');
+    expect(locked.m.resultCue('win')).toBe(false); // before the first gesture
+    await locked.m.unlock();
+    expect(locked.fb.sfx).toHaveLength(0);
+    for (const scene of ['intro', 'menu', 'story', 'init'] as const) {
+      locked.m.setScene(scene);
+      expect(locked.m.resultCue('win')).toBe(false);
+    }
+    const muted = await at(null, { muted: true });
+    muted.m.setScene('results');
+    expect(muted.m.resultCue('win')).toBe(false);
+    const quiet = await at(null, { music: 0 });
+    quiet.m.setScene('results');
+    expect(quiet.m.resultCue('other')).toBe(false);
+    expect([locked, muted, quiet].every((r) => r.fb.sfx.length === 0)).toBe(true);
+  });
+
+  it('reset, backgrounding and leaving the table stop the cue and release its duck', async () => {
+    for (const end of ['reset', 'hidden', 'menu'] as const) {
+      const { m, fb } = await at(null);
+      m.setScene('results');
+      m.resultCue('win');
+      const cue = fb.sfx.at(-1)!;
+      if (end === 'reset') m.reset();
+      else if (end === 'hidden') m.setHidden(true);
+      else m.setScene('menu');
+      expect(cue.stopped, end).toBe(true);
+    }
   });
 });

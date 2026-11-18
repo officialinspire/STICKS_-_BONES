@@ -52,8 +52,11 @@ export function stripManifestProse(): Plugin {
     name: 'sticks-strip-manifest-prose',
     apply: 'build',
     transform(code, id) {
-      if (!id.replace(/\\/g, '/').endsWith('/src/assets/manifest.ts')) return null;
-      return { code: code.replace(/^[ \t]*(proposedUse|originalName): ".*",?\r?\n/gm, ''), map: null };
+      const path = id.replace(/\\/g, '/');
+      if (path.endsWith('/src/assets/manifest.ts')) return { code: code.replace(/^[ \t]*(proposedUse|originalName): ".*",?\r?\n/gm, ''), map: null };
+      // The music manifest's `notes` (selection reasons, measurements) are for people and the docs; drop them too.
+      if (path.endsWith('/src/assets/audio-manifest.ts')) return { code: code.replace(/^[ \t]*notes:[ \t]*(?:\r?\n[ \t]*)?(['"])(?:\\.|(?!\1).)*\1,?\r?\n/gm, ''), map: null };
+      return null;
     },
   };
 }

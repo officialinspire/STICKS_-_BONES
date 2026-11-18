@@ -68,7 +68,7 @@ playback path (the dev audition page is a developer tool outside the build).
 | story | the profile's track (often none) | on | the profile's bed |
 | gameplay | gameplay track (story: the profile's hand track) | on | patio (story: the profile's bed) |
 | paused | gameplay track, ducked to 35% | off | — |
-| results | gameplay track, ducked to 70% | on | the table bed at 60% |
+| results | gameplay track, ducked to 70%; a result cue ducks it to 25% of that for ~2 s | on | the table bed at 60% |
 
 **Story profiles** (`src/audio/profiles.ts`): each story scene names one track (or none) and
 one bed, for its dialogue and for its hand.
@@ -79,14 +79,16 @@ one bed, for its dialogue and for its hand.
 | 1 Patio | patio track at 45% · patio bed | table track · patio bed |
 | 2 Alley + phone call | no music · patio bed, low | table track · patio bed |
 | 3 Resort | no music · dining-room murmur | table track, low |
-| 4 Promenade | **no music** · surf (swells on "Let the surf hold the silence") | no music · surf |
+| 4 Promenade | **"Promenade After Dark"** at 50% · surf at 75% (swells on "Let the surf hold the silence") | the same track at 35% (never restarted) · surf |
 | 5 Jungle | **no music** · close forest bed | no music |
-| 6 Cave | **no music** · cave water bed | no music · cave bed, lower |
+| 6 Cave | **"The Lit Threshold (Alt)"** at 40% · cave water bed at 75%, until "Cut to the entrance rest area" (`music-off`) | no music (the rest area) · cave bed, lower |
 | 7 Terrace | no music · restaurant murmur (polished, uncomfortable) | table track, thin |
 | Epilogue | patio track at 40% · patio bed; it fades away on "The water goes still." | table track |
 
-There is no constant ominous music anywhere: the supernatural scenes run on ambience and silence
-until the commissioned beds exist (`docs/MUSIC_BRIEFS.md`).
+There is no constant ominous music anywhere. The owner's two scene beds play only where the briefs put them
+(`docs/MUSIC_BRIEFS.md`); the other supernatural moments run on ambience and silence. `music-off` is a
+state cue like `ambience-off`: it holds for the rest of the scene (through the hand) and is replayed when a
+saved scene resumes after it.
 
 **One music source:**
 
@@ -193,8 +195,9 @@ you land on.
   context is suspended.
 - Back in focus, **only the current scene** resumes (its track and bed).
 
-**Offline:** the short SFX are precached with the images (they're small and make the table feel
-right offline). Music, ambience beds and video are never cached.
+**Offline:** the short SFX (the owner's slam and drop included) are precached with the images (they're
+small and make the table feel right offline). Music, the result cues and the ambience beds are cached only in
+the optional audio download, after the player asks for it (`docs/PWA.md`). Video is never cached.
 
 **Haptics** (`src/audio/haptics.ts`): feature-detected `navigator.vibrate`. There's a
 setting, shown only where supported, for short cues on place, knock and domino.
@@ -204,6 +207,89 @@ Haptics only follow public events.
 the live region and his expressions. The voice level is kept for when recordings
 arrive.
 
+## Owner uploads (owner audio stage, 2026-11-18)
+
+Thirteen files uploaded to `main` were merged without touching any newer work and moved, **byte-identical**,
+into `assets/audio/originals/`. Nothing globs that folder, so originals are never bundled.
+`npm run audio:owner` (`scripts/build-owner-audio.py`) builds every runtime file from them, and
+`npm run audio:owner:check` rebuilds in a temp dir and proves the outputs byte-identical. Every original and
+derivative is in `src/assets/owner-audio.json`: bytes, SHA-256, decoded-PCM hash, loudness (EBU R128 I / LRA /
+true peak), edits and boundaries, with each derivative's source hash. `npm run assets:verify` checks all of it.
+
+**Slam and dropped dominoes (three clips).**
+- **Tails:** each upload held about 0.42 s of digital silence before the attack and 5–6 s of silence after
+  the decay.
+- **Boundaries, detected per clip:**
+  - start at the first sample ≥ −60 dB re the clip's peak, minus 2 ms, with a 1 ms fade-in (the attack
+    is untouched);
+  - end at the last 5 ms window ≥ −72 dB re peak, plus 10 ms, with a 6 ms cosine fade-out.
+
+| Clip | Kept | Trailing silence removed |
+| --- | --- | --- |
+| Clear Crisp Slap… Take 1 | 0.162 s | 5.50 s |
+| Crisp Slap… | 0.103 s | 6.24 s |
+| Few Dominos Dropped… Take 1 | 0.685 s | 4.90 s |
+
+  The ends sit about 15 dB below a −60 dBFS cut, which keeps the natural decay.
+- **Format:** mono, peak −3 dBFS like the CC0 bank.
+  - Sample rate by measurement: the slaps keep 48 kHz (2–3 % of their energy is above 12 kHz, which is
+    their crack); the drop uses 24 kHz (0.27 %).
+- **Wiring:** `slam` uses both slap takes (alternating, never the same twice in a row); `shuffle` (the deal) uses
+  the drop. Their chips-collide stand-ins (`tile-slap-1/2`, `tile-shuffle-1`) were retired from the CC0 bank
+  so they are no longer decoded with every table. Pickup, place, slide and draw keep their stand-ins (no
+  replacements were supplied).
+
+**Scene music (two of four variants).** Each pair was measured against its brief:
+- **Promenade After Dark: main take for Chapter 4.**
+  - Its opening is bare (−23 to −27 LUFS short-term for 15 s, then ≈ −18), it has a sparse regular pulse,
+    and it is 2.5 dB quieter than the Alt.
+  - The Alt reaches full level within 15 s and is denser.
+- **The Lit Threshold: Alt take for Chapter 6.**
+  - It breathes, with phrases receding into near-silence: LRA 7.9 LU, 24 two-second jumps above 6 dB, and
+    24 % of its energy below 60 Hz.
+  - The main take holds a dense full-band wall for two minutes: LRA 15, 100 jumps, 33 % below 60 Hz.
+  - The brief asks for silence between phrases and forbids sudden jumps and booms.
+- **Format:** both are stream copies, with cover art and tags removed (1.9 MB saved in all) and the decoded
+  audio proven identical. The runtime gain brings them to −20 LUFS. Loops are not assumed: they play through
+  and restart after a breath.
+- **Preserved, not bundled:** the other two takes stay in the originals.
+
+**Round result cues.** The recordings are 62–67 s pieces; each cue is the piece's final cadence.
+- **How the cut is chosen:**
+  1. The final hit is the strongest onset among the last 0.6 s of onsets before the closing level falls away.
+  2. The start is the most accented onset 2–4 whole beats earlier (beat period from onset autocorrelation),
+     or else the most accented onset that gives 1.5–2.5 s.
+  3. The final chord keeps its natural decay for at most 1 s, then a cosine fade.
+- **Level:** one static gain to −18 LUFS, lowered if needed so the encoded file is ≤ −1 dBTP. Encoded as
+  48 kHz stereo MP3 at 192 kbps.
+- **`result-win`**, from "Round Win (Puerto Rico Vibe)": 57.35–59.30 s (1.95 s). Two beats of 0.565 s into a
+  final hit that decays naturally in 0.81 s, which is the brief's "ends on a ringing chord".
+- **`result-other`**, from "Round Other (Musical Shrug)": 58.14–59.92 s (1.78 s). The shrug's two chords;
+  the decay is capped at 1 s.
+- **Not used, kept as originals:** "Round Win (Tropical Vibe)" and "Round Win Stinger" decay for 3–4.5 s,
+  and "Round Win Stinger (Alt)" for 1.3 s. "Round Win Stinger (Alt)(1)" differs by a few metadata bytes but
+  decodes identically to "(Alt)", so it is catalogued as a **duplicate**.
+- **No case-complete music** was supplied, and none is fabricated.
+
+**How a result cue plays** (`AudioManager.resultCue`):
+- **When:** once, when the results sheet opens for a hand that resolved live at that table. A results sheet
+  restored after a reload never replays it.
+- **Which:** `win` when the player's team (solo, Story, partners) won the hand, or, with two people on
+  opposite sides, when anyone won. A blocked tie or a loss plays `other`.
+- **How:**
+  - It is music: it plays on the music bus (music level and mute apply) and ducks the current track to
+    25 % for about 2 s instead of adding a second song.
+  - It is a decoded buffer that is never synthesized: if it isn't decoded, missing or failed, nothing
+    plays. It is never queued.
+  - One plays at a time. Reset, backgrounding or leaving the table stop it, and it is refused during
+    init, the credits, menus and Story dialogue.
+- **Recovery:** a transient fetch failure is retried by the same bounded recovery as every sample; an absent
+  cue is silence.
+
+**Budgets (deliberate):** music 13,500 KB (was 8,000), measured 12,757 KB; total 21,000 KB (was 15,400),
+measured 20,147 KB. Startup is unchanged in kind: no music or cue loads at startup. Offline, they are only in
+the optional audio download, whose size the Settings line discloses.
+
 ## What is real and what is placeholder
 
 | Audio | Source | Status |
@@ -211,11 +297,14 @@ arrive.
 | Menu/results music | `assets/audio/music/Patio Dominoes (Take 2).mp3` (owner upload, artist "officialinspire") | **final, approved** |
 | Gameplay music | `assets/audio/music/Domino Table (Subtle Vibe).mp3` (owner upload) | **final, approved** |
 | UI sounds | Kenney Interface Sounds (CC0), `assets/audio/sfx/ui-*.wav` | selected samples, **not final** (awaiting the owner's listen) |
-| Tile sounds | Kenney Casino Audio chips/cards (CC0) | **stand-ins** until real dominoes are recorded |
+| Slam and shuffle/deal | **Owner recordings** of a real domino slapped onto a table (two takes) and of several dropped onto it; trimmed derivatives (`scripts/build-owner-audio.py`) | selected, measured, **not auditioned** |
+| Other tile sounds (pickup, place, slide, draw) | Kenney Casino Audio chips/cards (CC0) | **stand-ins** until real dominoes are recorded for those actions |
 | Pass knock, story knocks, drops, glass | BigSoundBank (CC0) | selected samples, **not final** |
 | Ambience beds (patio, promenade, jungle, cave, terrace) | BigSoundBank field recordings (CC0), looped | selected, seams **machine-measured, not auditioned** |
 | Synthesized SFX (`src/audio/synth.ts`) | code | **fallback only** (decoding / missing file) |
-| Night-investigation bed, cave suspense bed, stingers | — | **missing**: briefs in `docs/MUSIC_BRIEFS.md` |
+| Chapter 4 and 6 scene beds | **Owner uploads** "Promenade After Dark" and "The Lit Threshold (Alt)" (stream-copied, audio bit-identical) | selected by measurement, **not auditioned** |
+| Round result cues (`result-win`, `result-other`) | **Owner uploads** "Round Win (Puerto Rico Vibe)" and "Round Other (Musical Shrug)", final cadence extracted (1.95 s / 1.78 s) | measured, **not auditioned** |
+| Case-complete music, chapter-card cue | — | **missing** (not supplied; nothing fabricated): the end card stays on the bed |
 | Contractor speaker voice and cough; trail voice | — | **missing**: caption only, never impersonated |
 | Studio intro | `assets/video/inspiresoftwareintro.mp4` | **not supplied yet** (fallback: a 1.6 s typeset text credit, then the menu) |
 

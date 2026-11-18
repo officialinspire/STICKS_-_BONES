@@ -62,6 +62,27 @@ describe('manifest prose is stripped from the bundle (vite stripManifestProse)',
     const users = files.filter((f) => /\b(proposedUse|originalName)\b/.test(readFileSync(f, 'utf8')));
     expect(users).toEqual([]);
   });
+
+  it("no runtime source reads a music track's notes, and the build regex removes every one of them", async () => {
+    const files: string[] = [];
+    const walk = (d: string) => {
+      for (const f of readdirSync(d)) {
+        const p = join(d, f);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (/\.ts$/.test(f) && !/\.test\.ts$/.test(f) && !/audio-manifest\.ts$/.test(p)) files.push(p);
+      }
+    };
+    walk(join(__dirname, '..'));
+    expect(files.filter((f) => /\.notes\b/.test(readFileSync(f, 'utf8')))).toEqual([]);
+    const { stripManifestProse } = await import('../../vite.config');
+    const src = readFileSync(join(__dirname, 'audio-manifest.ts'), 'utf8');
+    const plugin = stripManifestProse() as unknown as { transform(code: string, id: string): { code: string } | null };
+    const out = plugin.transform(src, '/x/src/assets/audio-manifest.ts')!.code;
+    const { MUSIC } = await import('./audio-manifest');
+    expect((src.match(/^\s*notes:/gm) ?? []).length).toBe(MUSIC.length); // one per track (the interface says `readonly notes`)
+    expect((out.match(/^\s*notes:/gm) ?? []).length).toBe(0);
+    expect(out).toContain('readonly notes: string;');
+  });
 });
 
 import { castFace, castFrame } from '../ui/story-assets';

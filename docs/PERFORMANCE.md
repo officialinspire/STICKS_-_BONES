@@ -200,12 +200,25 @@ The Story content is on-demand, so instead of raising the image budget, images a
 | service worker | **22 KB (was 16)** | 19 KB | per-file sizes for truncation checks and four groups |
 | total | **15,400 KB (was 13,900)** | 15,045 KB | + 1.46 MB of on-demand Story images, none at startup |
 
+**Owner audio stage (2026-11-18):** music **13,500 KB (was 8,000)**, measured 12,757 KB; total **21,000 KB (was
+15,400)**, measured 20,147 KB.
+- **What grew:** the owner's two scene beds (5,335 KB, stream-copied with cover art removed, which saved
+  1.9 MB) and two result cues (90 KB).
+- **Rejected:** re-encoding the owner's masters to a lower bitrate (a second lossy generation; the briefs ask
+  for ≥ 192 kbps).
+- **When it loads:** none of it loads at startup. Music streams per scene, cues decode with the table sounds,
+  and offline it is in the optional audio download only (now 15.1 MB, disclosed).
+- **SFX:** 576 KB / 720. The owner's three trimmed clips (58 KB) replace three retired stand-ins (36 KB).
+- **Code:** 325 KB / 330, of which about 1 KB is the service worker's longer file list. The music manifest's
+  `notes` prose is now stripped from the bundle like the image manifest's.
+- **Startup:** 951 KB / 960 (948 after the hardening pass).
+
 **Hardening pass (2026-11-18):** code **330 KB (was 320)**, measured 322 KB.
 - The +8 KB is resilience code: worker answer validation and the observation-only fallback, media failure
   classification and recovery, per-record save health with Try again, the Retry / Back panels for failed
   chunks, and image deadlines.
 - It must be in the core bundle: it handles the failure of the lazy chunks themselves.
-- Startup and every other budget are unchanged.
+- Every other budget is unchanged; startup measured 948 KB / 960 (the code growth carries into it).
 
 **Resort backdrop correction (2026-11-18):** Chapter 3 now downloads the executive terrace (its 3:4 crop is
 96 KB) instead of the retired leisure patio, and `resort-patio` is no longer bundled.

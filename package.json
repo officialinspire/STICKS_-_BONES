@@ -28,6 +28,8 @@
     "story:sweep": "tsx scripts/story-sweep.ts",
     "faults": "tsx scripts/faults.ts",
     "audio": "tsx scripts/audio.ts",
+    "audio:owner": "python3 scripts/build-owner-audio.py",
+    "audio:owner:check": "python3 scripts/build-owner-audio.py --check",
     "pwa": "tsx scripts/pwa.ts",
     "matches": "tsx scripts/matches.ts",
     "smoke": "tsx scripts/smoke.ts",

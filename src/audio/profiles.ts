@@ -5,8 +5,10 @@
  *
  * Mix intent (docs/AUDIO.md): the patio is social, the promenade gets space and surf, the jungle
  * is close and humid, the cave leaves room for water and silence, and the terrace is polished
- * and uncomfortable. No scene has constant ominous music: the supernatural scenes run on
- * ambience and silence until the commissioned beds exist (docs/MUSIC_BRIEFS.md).
+ * and uncomfortable. No scene has constant ominous music. The owner's two scene beds are used
+ * where the briefs place them (docs/MUSIC_BRIEFS.md): "Promenade After Dark" for Chapter 4 and
+ * "The Lit Threshold" for Chapter 6 until the cut to the entrance rest area (a `music-off` cue);
+ * every other supernatural moment runs on ambience and silence.
  */
 import type { BedId } from './sounds';
 import type { TrackId } from './manager';
@@ -38,12 +40,14 @@ export const PROFILES: Readonly<Record<StoryProfileId, SceneProfile>> = {
   'chapter-2': p(null, 0, 'amb-patio', 0.55, 'gameplay', 0.5, 0.4),
   // Resort: polished dining-room murmur; the table track only for the hand.
   'chapter-3': p(null, 0, 'amb-terrace', 0.7, 'gameplay', 0.45, 0.5),
-  // Moonlit promenade: space and surf. Silence instead of music (the night bed is a brief, not a file).
-  'chapter-4': p(null, 0, 'amb-promenade', 0.9, null, 0, 0.7),
+  // Moonlit promenade: the night-investigation bed under the talk, the surf a little lower beneath it; the same
+  // track stays (lower) through the hand, so nothing switches between dialogue and table.
+  'chapter-4': p('promenade', 0.5, 'amb-promenade', 0.75, 'promenade', 0.35, 0.6),
   // Jungle camp: close and humid; no music.
   'chapter-5': p(null, 0, 'amb-jungle', 0.85, null, 0, 0.6),
-  // Cave: water and silence get the room. The hand is at the modern rest area, still by the water.
-  'chapter-6': p(null, 0, 'amb-cave', 0.85, null, 0, 0.5),
+  // Cave: the suspense bed, low so the water and the authored knocks stay the loudest sudden events, until the
+  // cut to the entrance rest area (`music-off`). The hand is at the rest area: no music, the water bed only.
+  'chapter-6': p('threshold', 0.4, 'amb-cave', 0.75, null, 0, 0.5),
   // Corporate terrace: polished, uncomfortable murmur; the table track is thin and low for the hand.
   'chapter-7': p(null, 0, 'amb-terrace', 0.8, 'gameplay', 0.35, 0.6),
   // Home patio after the case: the patio track returns softly.

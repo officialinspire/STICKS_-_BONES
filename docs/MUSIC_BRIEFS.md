@@ -1,5 +1,15 @@
 # Music briefs: missing cues for NO REST FOR COUSIN
 
+> **Delivery status (2026-11-18):** the owner uploaded takes for §1, §2 and the round cues. How they were
+> measured, selected, cut and wired is in `docs/AUDIO.md` ("Owner uploads").
+> - **§1 "Promenade After Dark":** the main take is used in Chapter 4.
+> - **§2 "The Lit Threshold":** the (Alt) take is used in Chapter 6, up to the cut to the rest area.
+> - **`round-win` / `round-other`:** extracted from "Round Win (Puerto Rico Vibe)" and "Round Other (Musical
+>   Shrug)".
+> - **Still missing:** the case-complete cue and the optional chapter-card cue (nothing fabricated), and the
+>   §1/§2 edited loops and separate endings (the tracks play through and restart).
+> - **Not auditioned:** none of it has been listened to by ear yet.
+
 These are copy-ready briefs for **original** music, to be commissioned or composed.
 They name instruments, moods and constraints, not other artists: do not imitate,
 quote or "sound like" any existing artist or recording.

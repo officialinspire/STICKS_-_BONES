@@ -54,9 +54,8 @@ SFX = [
     ('tile-slide-1', 'kenney-casino/x/Audio/card-slide-1.ogg', KENNEY_CASINO, 0, 0.45, 'tile slide (stand-in: card slide)', ''),
     ('tile-slide-2', 'kenney-casino/x/Audio/card-slide-2.ogg', KENNEY_CASINO, 0, 0.45, 'tile slide (stand-in: card slide)', ''),
     ('tile-slide-3', 'kenney-casino/x/Audio/card-slide-3.ogg', KENNEY_CASINO, 0, 0.45, 'tile slide (stand-in: card slide)', ''),
-    ('tile-slap-1', 'kenney-casino/x/Audio/chips-collide-1.ogg', KENNEY_CASINO, 0, 0.5, 'emphatic slap (stand-in: chips collide)', 'bass=g=4:f=180'),
-    ('tile-slap-2', 'kenney-casino/x/Audio/chips-collide-2.ogg', KENNEY_CASINO, 0, 0.5, 'emphatic slap (stand-in: chips collide)', 'bass=g=4:f=180'),
-    ('tile-shuffle-1', 'kenney-casino/x/Audio/chips-collide-3.ogg', KENNEY_CASINO, 0, 1.2, 'shuffle (stand-in: chips)', ''),
+    # tile-slap-1/2 and tile-shuffle-1 (chips-collide stand-ins) were retired: the owner's own recordings of a
+    # domino slapped onto a table and of dominoes dropped onto it replace them (scripts/build-owner-audio.py).
     ('tile-draw-1', 'kenney-casino/x/Audio/chips-handle-4.ogg', KENNEY_CASINO, 0, 0.4, 'draw from the boneyard (stand-in: chips)', ''),
     ('tile-draw-2', 'kenney-casino/x/Audio/chips-handle-5.ogg', KENNEY_CASINO, 0, 0.4, 'draw from the boneyard (stand-in: chips)', ''),
     ('pass-knock-1', 'bsb/0374.ogg', BSB('0374', 'Knock on a light door', 'knock-on-a-light-door'), 0.035, 0.30, 'pass knock on the table', 'lowpass=f=4000'),

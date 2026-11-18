@@ -1748,8 +1748,9 @@ each with a focused regression.
 - a11y checked the start button's focus before initialization had enabled it.
 
 **Budget:** code 330 KB (was 320), measured 322 KB. The +8 KB is resilience code that has to live in the core
-bundle (see `docs/PERFORMANCE.md`). Every other budget is unchanged: startup 940 / 960 KB, story chunk
-123 / 130 KB.
+bundle (see `docs/PERFORMANCE.md`). Every other budget is unchanged; startup measured 948 / 960 KB (the code
+growth carries into it; an earlier version of this note said 940 KB, which was the previous stage's figure),
+story chunk 123 / 130 KB.
 
 ### Commands run and results (Chromium, this checkpoint's code)
 
@@ -1784,6 +1785,95 @@ was also checked.
   cached as failed. The player returns once to the same screen after the start tap.
 - **Owner decisions still open:** the expression readings and the transcript decision.
 
+## Owner audio stage (2026-11-18)
+
+The owner's 13 new root-level uploads on `main` were brought in. The merge only added those files, so no
+newer work was touched. Each file was then moved byte-identically into `assets/audio/originals/` (verified
+with `sha256sum`), where it is preserved and never bundled.
+
+**Reproducible derivatives** (`npm run audio:owner`, `scripts/build-owner-audio.py`). Every runtime file is
+built only from those originals.
+- **Manifest:** `src/assets/owner-audio.json` records every original and every derivative.
+  - Originals: bytes, SHA-256, decoded-PCM hash, EBU R128 loudness / LRA / true peak, and their role
+    (used / alternative / duplicate).
+  - Derivatives: the source hash, the exact edits and boundaries, and the measured result.
+- **Reproducibility:** `npm run audio:owner:check` rebuilds into a temp dir and found every output
+  byte-identical.
+- **Verification:** `npm run assets:verify` checks originals unchanged, derivative hashes, the source links
+  and that the music manifest agrees.
+
+**Slap / dropped domino clips.**
+- **Trailing silence removed:** 5.50, 6.24 and 4.90 s (you estimated about 5.6, 6.3 and 5.1).
+  - Boundaries were detected per clip: attack at −60 dB re peak minus 2 ms, end at the last 5 ms window
+    ≥ −72 dB re peak plus 10 ms.
+  - Natural decay is kept about 15 dB below a −60 dBFS cut.
+  - Fades are 1 ms in and 6 ms out, so the attacks are untouched.
+- **Format:** mono, peak −3 dBFS. The slaps stay at 48 kHz (their crack is 2–3 % of the energy above 12 kHz);
+  the drop uses 24 kHz.
+- **Wiring:** `slam` = both slap takes; `shuffle` (the deal) = the drop. Their stand-ins were retired from the
+  CC0 bank and `docs/SOUND_SOURCES.md` was regenerated. Pickup, place, slide and draw keep their stand-ins.
+
+**Scene tracks.** Each was chosen by measurement against `docs/MUSIC_BRIEFS.md`.
+- **Chapter 4:** "Promenade After Dark", the main take. It has a bare opening and is 2.5 dB quieter than the
+  Alt.
+- **Chapter 6:** "The Lit Threshold (Alt)", up to the cut to the rest area (a new `music-off` state cue,
+  replayed on resume). It breathes: LRA 7.9 against 15, 24 jumps against 100, less sub-60 Hz energy.
+- **Format:** both are stream copies with the audio proven bit-identical and the cover art removed (1.9 MB).
+- **Alternatives:** kept as originals and not bundled.
+- **Mix:** Chapter 4 keeps its track through the hand at a lower level, never restarting it. Chapter 6's hand
+  at the rest area has no music.
+
+**Result cues** (typed `ResultCue`, `AudioManager.resultCue`).
+- **`result-win`:** 1.95 s from "Round Win (Puerto Rico Vibe)", 2 beats into its final hit, which decays
+  naturally in 0.81 s.
+- **`result-other`:** 1.78 s from "Round Other (Musical Shrug)", its two-chord shrug, with the decay capped
+  at 1 s.
+- **Level:** −18 LUFS, ≤ −1 dBTP measured on the encoded file.
+- **Duplicate:** "Round Win Stinger (Alt)(1)" decodes identically to "(Alt)" and is catalogued as a duplicate.
+  The three other win takes are preserved alternatives.
+- **No case-complete music** was supplied, and none was made.
+- **When it plays:** once, when the results sheet opens for a hand that resolved live (never on a restored
+  sheet), from the player's side.
+- **How it plays:** on the music bus, ducking the one track to 25 % for about 2 s. It is never synthesized
+  and never queued, it is stopped by reset, hide or leaving the table, and it is silent during init, credits,
+  menus and dialogue.
+
+**Kept:** typed track ids (`TRACK_IDS`: menu, gameplay, promenade, threshold); one music source at a time;
+mute and levels; cue cancellation; the silent init and credits; and bounded recovery for transient failures,
+which covers the new tracks and cues too.
+
+**Budgets, raised deliberately** (`docs/PERFORMANCE.md`):
+- music 13,500 KB (was 8,000), measured 12,757 KB;
+- total 21,000 KB (was 15,400), measured 20,147 KB.
+
+The other budgets hold: code 325 / 330 KB, startup 951 / 960 KB, sfx 576 / 720 KB. The music manifest's
+`notes` prose is stripped from the bundle (tested). The optional offline audio download is now 15.1 MB
+(disclosed by the Settings line).
+
+**Corrected:** the hardening pass's note claimed startup 940 KB; the measured figure was 948 KB.
+
+### Commands run and results (Chromium)
+
+| Command | Result |
+| --- | --- |
+| `npm run audio:owner` / `npm run audio:owner:check` | built; reproduced byte-identically |
+| `npm run check` | pass: typecheck, lint, **518 unit tests** (new: `sounds.test.ts`, owner beds and result cues in `manager.test.ts`, notes stripping), assets verified (13 originals untouched, 7 derivatives), build and budgets |
+| `npm run audio` | pass. § B: the deal plays the owner's drop. § D: Chapter 6 knocks over "threshold", one element. § H: a 404 is absent and an abort is transient. New § K: the owner samples decode in Chromium; a real Chapter 4 hand plays "promenade" and its result plays exactly one cue on the music bus; a reload on the results sheet replays nothing |
+| `npm run e2e` | pass |
+| `npm run story:e2e` | pass |
+| `npm run faults` | pass (§ G/I media recovery) |
+| `npm run pwa` | pass (the optional audio group grows to 11 files / 15.1 MB, disclosed) |
+| `npm run perf:story` | pass |
+| `npm run smoke` | pass |
+
+### Known limitations
+- **Nothing was auditioned by ear.** The cuts, trims, track choices and levels are measured, not heard. A
+  listening pass is still needed before anything is marked `final`.
+- **No case-complete or chapter-card music**, and no edited loops or separate endings for the two beds (they
+  play through and restart).
+- **Tile foley is partial:** only the slam and the deal are real recordings.
+- **Chromium only:** decoding of the 48 kHz MP3 cues was not tested on WebKit / Safari.
+
 ## Next stage
 
 The detailed list is in `docs/STORY_BUILD_STATUS.md`:
@@ -1799,10 +1889,10 @@ Still waiting on the owner:
 - **Merge:** enabling Pages and authorising the merge.
 - **Intro video:** `assets/video/inspiresoftwareintro.mp4` (the honest branded fallback runs meanwhile).
 - **Music:**
-  - commissioned original music: the night-investigation bed, the cave suspense bed, and the round and case
-    stingers (`docs/MUSIC_BRIEFS.md`);
-  - recorded domino foley (real double-six tiles on wood);
-  - a listening pass on the selected sounds and bed seams.
+  - the case-complete cue (and the optional chapter-card cue); edited loops / endings for the Chapter 4 and 6
+    beds (`docs/MUSIC_BRIEFS.md`); the night bed, the cave bed and the round cues are delivered and wired;
+  - recorded foley for picking up, placing, sliding and drawing a tile (the slam and the deal are delivered);
+  - a listening pass on the selected sounds, bed seams, the two scene tracks and the result-cue cuts.
 - **Voices and portraits:** the contractor speaker's recording (if it should be voiced); portraits for
   Worker, Representative and the contractor speaker.
 - **Confirmations:** the expression readings, and the transcript decision.

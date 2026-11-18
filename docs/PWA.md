@@ -62,7 +62,7 @@ Reading the status never creates a cache.
 | `inspire:sticks-and-bones:shell:<build>` | HTML, JS (entry, AI worker and the two lazy Story chunks), CSS, fonts, manifest, the 192-px icons — **11 files, 486 KB** | At install, all or nothing (`cache.addAll`, bypassing the HTTP cache) |
 | `inspire:sticks-and-bones:assets:v1` (core) | What Quick Play needs: both patio variants, Cousin's portrait and slam, tile atlas, tabletop, effects, UI/table/pass sounds — **30 files, 1.80 MB** | After the shell, best effort (the name is unchanged so existing installs stay valid) |
 | `inspire:sticks-and-bones:story:v1` | Chapter backdrops (full + portrait), the four cast sheets, story accents — **23 files, 3.20 MB** | **Per chapter as it is played** (cache-on-fetch: the current chapter and the prefetched next one), and **in full only when the player chooses "Download the whole story"** |
-| `inspire:sticks-and-bones:audio:v1` | Music and the five ambience beds — **7 files, 9.15 MB** | **Optional, only when the player turns on offline audio** (size shown first). Served with byte ranges (206) for `<audio>` |
+| `inspire:sticks-and-bones:audio:v1` | Music (the two songs and the owner's Chapter 4 / Chapter 6 beds), the two result cues and the five ambience beds — **11 files, 15.1 MB** (9.15 MB before the owner audio stage) | **Optional, only when the player turns on offline audio** (size shown first). Served with byte ranges (206) for `<audio>` |
 | — | **Never cached:** PNG source sheets (the build fails if one is bundled), the studio intro video, the 512-px icons | Network only |
 
 **Policy change, deliberate and narrow:** music and ambience used to be "never cached". They are now cached
@@ -78,14 +78,14 @@ removable in one tap. Nothing else changed: the first visit caches exactly shell
 | **Only the app is ready offline; story scenes download as you play them.** | No story scene is fully saved yet |
 | **n of 9 story scenes are ready offline (the ones you have opened, and the next one).** | Counted from the saved files of each scene's backdrop (this screen shape) and cast |
 | **The whole story is ready offline (3.2 MB).** | The story group is complete |
-| **Music and ambience are an optional 9.1 MB extra download.** / **…saved for offline play (9.1 MB).** | Offline audio off / on |
+| **Music and ambience are an optional 15.1 MB extra download.** / **…saved for offline play (15.1 MB).** (measured from the build; was 9.1 MB) | Offline audio off / on |
 
 The case file adds one line for the current scene: **"Saved for offline play."** or **"Needs a connection the
 first time (it saves for offline as you play)."** A scene whose art is missing offline still plays with the
 drawn backdrop and name tags.
 
 **Downloads (whole story, offline audio):** the button shows the measured size left
-(**Download the whole story (3.2 MB)**, **Save music & ambience for offline (9.1 MB)**). Before starting, the
+(**Download the whole story (3.2 MB)**, **Save music & ambience for offline (15.1 MB)**). Before starting, the
 browser's storage estimate is checked; if the files would not fit, nothing is downloaded and the line says
 how much is needed and free. Persistent storage is requested (where offered). A progress bar shows bytes.
 - **Interrupted** (connection lost, a file cut off, the browser stopped the worker): finished files are kept;

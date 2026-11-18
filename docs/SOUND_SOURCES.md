@@ -1,22 +1,25 @@
 # Sound sources and credits
 
-_Generated from `src/assets/sound-manifest.json` by `scripts/sound-credits.py`. Do not edit by hand._
+_Generated from `src/assets/sound-manifest.json` and `src/assets/owner-audio.json` by `scripts/sound-credits.py`. Do not edit by hand._
 
-Every runtime sound effect and ambience bed is a **derivative** of a public CC0 1.0 recording. The
-originals are untouched and are not in the repository; the edits made are recorded per file below.
+Two kinds of runtime audio, both **derivatives** with their edits recorded per file:
+- the owner's own uploads (artist "officialinspire"): originals kept untouched in `assets/audio/originals/`
+  (`scripts/build-owner-audio.py`; see "Owner recordings and music" below);
+- public CC0 1.0 recordings (originals not in the repository; `scripts/build-audio.py`).
 CC0 needs no attribution; it is given anyway. Licences were read from each pack's own licence text
 (Kenney: `License.txt` inside the zip; BigSoundBank: each sound's page, "Free and royalty-free / CC0").
 Freesound was **not** used: its terms vary per sound and per API use, and nothing was assumed.
 
-**Nothing here is final.** `final: false` on every entry. Tile sounds are casino-chip/card stand-ins
-until a real double-six set is recorded; bed seams are machine-measured, not yet auditioned by ear.
+**Nothing here is final.** `final: false` on every entry. The slam and the shuffle/deal are the owner's
+recordings of real dominoes; the other tile sounds are still casino-chip/card stand-ins. Bed seams and the
+cue cuts are machine-measured, not yet auditioned by ear.
 
 ## Packs and recordings
 
 | Source | Creator | Licence | Used for |
 | --- | --- | --- | --- |
 | [Kenney — Interface Sounds 1.0](https://opengameart.org/content/interface-sounds) | Kenney (Kenney Vleugels) | CC0 1.0 | `ui-select-1`, `ui-select-2`, `ui-back-1`, `ui-back-2`, `ui-confirm-1`, `ui-confirm-2`, `ui-invalid-1` |
-| [Kenney — Casino Audio 1.1](https://opengameart.org/content/54-casino-sound-effects-cards-dice-chips) | Kenney (Kenney Vleugels) | CC0 1.0 | `tile-pickup-1`, `tile-pickup-2`, `tile-pickup-3`, `tile-place-1`, `tile-place-2`, `tile-place-3`, `tile-slide-1`, `tile-slide-2`, `tile-slide-3`, `tile-slap-1`, `tile-slap-2`, `tile-shuffle-1`, `tile-draw-1`, `tile-draw-2` |
+| [Kenney — Casino Audio 1.1](https://opengameart.org/content/54-casino-sound-effects-cards-dice-chips) | Kenney (Kenney Vleugels) | CC0 1.0 | `tile-pickup-1`, `tile-pickup-2`, `tile-pickup-3`, `tile-place-1`, `tile-place-2`, `tile-place-3`, `tile-slide-1`, `tile-slide-2`, `tile-slide-3`, `tile-draw-1`, `tile-draw-2` |
 | [BigSoundBank #0374 “Knock on a light door”](https://bigsoundbank.com/knock-on-a-light-door-s0374.html) | Joseph Sardin (BigSoundBank) | CC0 1.0 (“Free and royalty-free”) | `pass-knock-1`, `pass-knock-2` |
 | [BigSoundBank #0095 “Door Knock”](https://bigsoundbank.com/door-knock-s0095.html) | Joseph Sardin (BigSoundBank) | CC0 1.0 (“Free and royalty-free”) | `motif-knock-1`, `motif-knock-2`, `motif-knock-3`, `motif-knock-beyond` |
 | [BigSoundBank #1386 “Drops of Water #3”](https://bigsoundbank.com/drops-of-water-3-s1386.html) | Joseph Sardin (BigSoundBank) | CC0 1.0 (“Free and royalty-free”) | `water-drop-1`, `water-drop-2` |
@@ -47,9 +50,6 @@ until a real double-six set is recorded; bed seams are machine-measured, not yet
 | `tile-slide-1` | tile slide (stand-in: card slide) | card-slide-1.ogg | trim 0s +0.45s; no EQ; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 21,678 |
 | `tile-slide-2` | tile slide (stand-in: card slide) | card-slide-2.ogg | trim 0s +0.45s; no EQ; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 21,678 |
 | `tile-slide-3` | tile slide (stand-in: card slide) | card-slide-3.ogg | trim 0s +0.45s; no EQ; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 21,678 |
-| `tile-slap-1` | emphatic slap (stand-in: chips collide) | chips-collide-1.ogg | trim 0s +0.50s; bass=g=4:f=180; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 12,360 |
-| `tile-slap-2` | emphatic slap (stand-in: chips collide) | chips-collide-2.ogg | trim 0s +0.50s; bass=g=4:f=180; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 10,978 |
-| `tile-shuffle-1` | shuffle (stand-in: chips) | chips-collide-3.ogg | trim 0s +1.20s; no EQ; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 12,360 |
 | `tile-draw-1` | draw from the boneyard (stand-in: chips) | chips-handle-4.ogg | trim 0s +0.40s; no EQ; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 17,188 |
 | `tile-draw-2` | draw from the boneyard (stand-in: chips) | chips-handle-5.ogg | trim 0s +0.40s; no EQ; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 19,278 |
 | `pass-knock-1` | pass knock on the table | 0374.ogg | trim 0.035s +0.30s; lowpass=f=4000; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 14,110 |
@@ -72,11 +72,32 @@ until a real double-six set is recorded; bed seams are machine-measured, not yet
 | `amb-cave` | Cave: water and room for silence | 2136.flac | window 10s–52s; highpass=f=40; 3 s equal-power tail→head cross-fade loop (exact length 42 s); one static gain to −30 LUFS (peak ≤ −6 dBFS); stereo MP3 | -36.2 | 88.8 / 89.8 | **no** |
 | `amb-terrace` | Corporate terrace: polished, slightly uncomfortable room | 3542.flac | window 30s–70s; highpass=f=110,treble=g=-3; 3 s equal-power tail→head cross-fade loop (exact length 40 s); one static gain to −30 LUFS (peak ≤ −6 dBFS); stereo MP3 | -30.7 | 48.5 / 73.6 | **no** |
 
+## Owner recordings and music
+
+| id | Kind | Source (original, untouched) | Edits | Bytes | Loudness |
+| --- | --- | --- | --- | --- | --- |
+| `tile-slam-owner-1` | sfx | `Clear Crisp Slap as Domino Is Slammed onto Table Take 1.mp3` (sha256 `25f553c3e23c…`) | start 0.4226s (attack −2 ms), end 0.5850s (last 5 ms RMS ≥ −72 dB re peak, +10 ms); 1 ms fade-in, 6 ms cosine fade-out; mono sum; -2.38 dB to −3 dBFS peak; 48 kHz PCM16 (2.66 % of energy above 12 kHz) | 15,634 | peak -3.0 dBFS, TP -3.0 dBTP |
+| `tile-slam-owner-2` | sfx | `Crisp Slap as Domino Is Slammed onto Table.mp3` (sha256 `289bb262b9a2…`) | start 0.4225s (attack −2 ms), end 0.5250s (last 5 ms RMS ≥ −72 dB re peak, +10 ms); 1 ms fade-in, 6 ms cosine fade-out; mono sum; -3.10 dB to −3 dBFS peak; 48 kHz PCM16 (2.15 % of energy above 12 kHz) | 9,886 | peak -3.0 dBFS, TP -2.9 dBTP |
+| `tile-drop-owner-1` | sfx | `Few Dominos Being Dropped onto Table Take 1.mp3` (sha256 `0b249bcb163b…`) | start 0.4246s (attack −2 ms), end 1.1100s (last 5 ms RMS ≥ −72 dB re peak, +10 ms); 1 ms fade-in, 6 ms cosine fade-out; mono sum; +6.41 dB to −3 dBFS peak; 24 kHz PCM16 (0.27 % of energy above 12 kHz) | 32,944 | -25.4 LUFS, TP -3.0 dBTP |
+| `promenade` | music | `Promenade After Dark.mp3` (sha256 `7c5f42cd0881…`) | stream copy of the MPEG audio (no re-encode); cover art and tags removed; bit-exact muxing; decoded audio identical to the original | 2,842,752 | -18.0 LUFS, TP -0.4 dBTP |
+| `threshold` | music | `The Lit Threshold (Alt).mp3` (sha256 `845c23ca38d5…`) | stream copy of the MPEG audio (no re-encode); cover art and tags removed; bit-exact muxing; decoded audio identical to the original | 2,620,032 | -15.3 LUFS, TP -0.8 dBTP |
+| `result-win` | cues | `Round Win (Puerto Rico Vibe).mp3` (sha256 `e64fdd9e2abb…`) | source 57.350–59.300s: the most accented onset 2.0 beats (beat 0.565s) before the final hit at 58.491s, decay 0.81s (natural end 59.30s, capped at 1 s) with a 0.35s cosine fade-out; 10 ms pre-roll, 5 ms fade-in; -2.40 dB static gain (−18 LUFS target, ≤ −1 dBTP measured on the encoded file); 48 kHz stereo MP3 192 kbps | 48,384 | -18.3 LUFS, TP -4.6 dBTP |
+| `result-other` | cues | `Round Other (Musical Shrug).mp3` (sha256 `7fa40adda930…`) | source 58.139–59.917s: the most accented onset 2.48 beats (beat 0.309s) before the final hit at 58.917s, decay 1.00s (natural end 61.10s, capped at 1 s) with a 0.35s cosine fade-out; 10 ms pre-roll, 5 ms fade-in; +2.90 dB static gain (−18 LUFS target, ≤ −1 dBTP measured on the encoded file); 48 kHz stereo MP3 192 kbps | 44,352 | -18.2 LUFS, TP -2.7 dBTP |
+
+Uploads kept as originals but not bundled:
+
+- `Promenade After Dark (Alt).mp3`: alternative for `promenade`
+- `The Lit Threshold.mp3`: alternative for `threshold`
+- `Round Win (Tropical Vibe).mp3`: alternative for `result-win`
+- `Round Win Stinger.mp3`: alternative for `result-win`
+- `Round Win Stinger (Alt).mp3`: alternative for `result-win`
+- `Round Win Stinger (Alt)(1).mp3`: duplicate for `result-win` (decoded audio identical to `Round Win Stinger (Alt).mp3`)
+
 ## Not supplied (no stand-in is used)
 
 | Sound | Why it is missing | What the game does |
 | --- | --- | --- |
 | The contractor speaker's recorded voice and repeating cough (Chapter 6) | A voice recording would have to be authored or performed; impersonating one is out of bounds | Caption only (the script's own lines) |
 | The voice from the empty trail (Chapter 5) | Same | Caption only |
-| Night-investigation bed, cave suspense bed, case/round stingers | Original music to be commissioned: `docs/MUSIC_BRIEFS.md` | Silence plus the scene's ambience bed |
-| Recorded domino foley (real tiles on wood) | Not available as CC0 | Kenney casino chips/cards as stand-ins |
+| Case-complete music (and the optional chapter-card cue) | Not supplied: `docs/MUSIC_BRIEFS.md` | The end card is silent apart from the bed; nothing is fabricated |
+| Recorded foley for placing, picking up, sliding and drawing tiles | Only the slam and a multi-tile drop were recorded | Kenney casino chips/cards as stand-ins for those actions |

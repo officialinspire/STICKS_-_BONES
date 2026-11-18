@@ -53,6 +53,8 @@ export interface TableAudio {
   scene(s: 'gameplay' | 'paused' | 'results'): void;
   sfx(id: 'place' | 'knock' | 'draw' | 'slam' | 'pickup' | 'invalid' | 'shuffle'): void;
   haptic(cue: 'place' | 'knock' | 'domino'): void;
+  /** A short musical result cue for a hand that just resolved (presentation only, never awaited). */
+  result?(kind: 'win' | 'other'): void;
 }
 
 const UNIT_MIN = 26;
@@ -90,6 +92,8 @@ export class TableScreen {
   #unsub: (() => void)[] = [];
   #ro: ResizeObserver | null = null;
   #handTurnKey = '';
+  /** The hand number whose resolution was observed live (its results sheet plays the result cue once). */
+  #liveResult: number | null = null;
 
   constructor(root: HTMLElement, controller: TableController, cb: TableCallbacks) {
     this.#root = root;
@@ -629,6 +633,15 @@ export class TableScreen {
     dlg.innerHTML = `<div class="results-head"><div class="results-host">${hostFigureHtml(mood, 'full')}</div><div><h2 id="results-title">${esc(title)}</h2><p class="why">${esc(why)}</p></div></div>${hands}${teamLine}<p class="points">${pts}</p><p class="scores-line">${scores} · to ${v.targetScore}</p>${matchLine}<div class="sheet-actions">${buttons}</div>`;
     if (!dlg.open) dlg.showModal();
     this.#cb.audio?.scene('results');
+    // The result cue, only for a hand that resolved live at this table (a results sheet restored after a reload
+    // never replays it), and from the players' side: their team won, or, when two people play against each
+    // other, someone at the table won. A blocked tie is "other".
+    if (this.#liveResult === r.handNumber) {
+      this.#liveResult = null;
+      const humanTeams = new Set(this.#s.rules.teams.flatMap((tm, t) => (tm.some((x) => this.#s.isHuman(x)) ? [t] : [])));
+      const won = r.winnerTeam !== null && (humanTeams.size === 1 ? humanTeams.has(r.winnerTeam) : true);
+      this.#cb.audio?.result?.(won ? 'win' : 'other');
+    }
     // Focus the primary action without scrolling: the sheet opens at its title (the actions are sticky).
     (dlg.querySelector('.btn') as HTMLElement).focus({ preventScroll: true });
     dlg.scrollTop = 0;
@@ -772,6 +785,7 @@ export class TableScreen {
           } else say('tranque');
           break;
         case 'hand-resolved':
+          this.#liveResult = e.result.handNumber; // observed live: the results sheet may play its cue once
           if (e.result.winnerTeam === null) say('tie');
           break;
         case 'match-won': {

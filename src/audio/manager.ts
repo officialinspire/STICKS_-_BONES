@@ -26,10 +26,18 @@ import type { AudioSettings } from '../app/settings';
 import type { Scheduler } from '../app/session';
 import { PROFILES, QUICK_PLAY_BED, type StoryProfileId } from './profiles';
 import { MOTIF, samplesFor, VARIANTS, type BedId } from './sounds';
+import { TRACK_IDS, type MusicTrackId } from '../assets/audio-manifest';
 
 export type Scene = 'init' | 'intro' | 'menu' | 'story' | 'gameplay' | 'paused' | 'results';
 export type Bus = 'music' | 'sfx' | 'voice' | 'ambience';
-export type TrackId = 'menu' | 'gameplay';
+export type TrackId = MusicTrackId;
+/** Short musical result cues (decoded buffers on the music bus): a hand won, or lost / blocked. */
+export type ResultCue = 'win' | 'other';
+export const RESULT_CUE_SAMPLE: Readonly<Record<ResultCue, string>> = { win: 'result-win', other: 'result-other' };
+/** How long a result cue holds the music down (its longest cue is 1.95 s; the duck releases after it). */
+export const RESULT_DUCK_SEC = 2.2;
+/** The track's level under a result cue (× the scene's duck). */
+export const RESULT_DUCK = 0.25;
 export type SfxId = 'select' | 'back' | 'confirm' | 'invalid' | 'pickup' | 'slide' | 'place' | 'slam' | 'shuffle' | 'draw' | 'knock' | 'tap';
 /** Synthesized placeholder voices: used only while a sample is still decoding or if its file is missing. */
 export type SynthId = 'place' | 'knock' | 'draw' | 'slam' | 'tap' | 'thud';
@@ -42,11 +50,12 @@ export type SynthId = 'place' | 'knock' | 'draw' | 'slam' | 'tap' | 'thud';
  *   knock-one        a single quiet knock (the gate; "One quiet knock, no answer demanded")
  *   water / dinner   small accents; surf swells the promenade bed for that beat
  *   ambience-off     the bed fades away for the rest of the scene (state, replayed on resume)
+ *   music-off        the scene's music fades away for the rest of the scene (state, replayed on resume)
  *   whisper / speaker CAPTION ONLY: no voice recording has been supplied and none is impersonated
  */
-export type StoryCue = 'knock-three' | 'knock-beyond' | 'knock-motif' | 'knock-motif-soft' | 'knock-one' | 'water' | 'surf' | 'dinner' | 'ambience-off' | 'whisper' | 'speaker';
+export type StoryCue = 'knock-three' | 'knock-beyond' | 'knock-motif' | 'knock-motif-soft' | 'knock-one' | 'water' | 'surf' | 'dinner' | 'ambience-off' | 'music-off' | 'whisper' | 'speaker';
 /** Cues that only change the mix (safe to replay when a saved scene resumes). Everything else is a one-shot. */
-export const STATE_CUES: ReadonlySet<StoryCue> = new Set(['ambience-off']);
+export const STATE_CUES: ReadonlySet<StoryCue> = new Set(['ambience-off', 'music-off']);
 export const CAPTION_ONLY_CUES: ReadonlySet<StoryCue> = new Set(['whisper', 'speaker']);
 
 /** Why a music file failed: gone for good (absent), unusable (broken), or maybe only for now (transient). */
@@ -69,6 +78,10 @@ export interface Voice {
   readonly gain: number;
   readonly rate: number;
   readonly delay: number;
+  /** Which bus it plays on (default sfx). Result cues are music. */
+  readonly bus?: 'sfx' | 'music';
+  /** false: if the sample isn't decoded, play nothing (never a synthesized stand-in for music). */
+  readonly placeholder?: boolean;
 }
 
 export interface AudioBackend {
@@ -192,19 +205,25 @@ export class AudioManager {
   #cueVoices: SfxHandle[] = [];
   /** Story mix state for the current beat/scene. */
   #bedOff = false;
+  #musicOff = false;
   #swell = false;
+  /** The result cue sounding now (one at most), and its duck. */
+  #stinger: SfxHandle | null = null;
+  #ducked = false;
+  /** The duck's own release timer (scene changes clear #later timers; this one belongs to the cue). */
+  #duckTimer: unknown = null;
   #lastBed: { bed: BedId | null; level: number } = { bed: null, level: 0 };
   #samplesRequested = new Set<'ui' | 'table' | 'story'>();
   #lastVariant = new Map<SfxId, number>();
   #rng = 0x2545f491;
-  readonly stats = { musicStarts: 0, staleDropped: 0, playRejected: 0, sfxPlayed: 0, sfxDropped: 0, cuesPlayed: 0, cuesCancelled: 0, cuesCaptionOnly: 0, cuesRefused: 0 };
+  readonly stats = { musicStarts: 0, staleDropped: 0, playRejected: 0, sfxPlayed: 0, sfxDropped: 0, cuesPlayed: 0, cuesCancelled: 0, cuesCaptionOnly: 0, cuesRefused: 0, resultCues: 0 };
 
   constructor(d: ManagerDeps) {
     this.#b = d.backend;
     this.#sched = d.scheduler;
     this.#levels = d.levels;
     this.#gap = d.gapSec;
-    for (const id of ['menu', 'gameplay'] as TrackId[]) {
+    for (const id of TRACK_IDS) {
       this.#b.onEnded(id, () => this.#onEnded(id));
       this.#b.onError(id, (kind) => this.#onError(id, kind ?? 'broken'));
     }
@@ -308,6 +327,8 @@ export class AudioManager {
     this.#scene = scene;
     const token = ++this.#token;
     this.cancelCues();
+    // A result cue belongs to the table: leaving it (menu, story, intro) stops the cue; results ⇄ gameplay keep it.
+    if (scene !== 'gameplay' && scene !== 'results' && scene !== 'paused') this.stopStinger();
     if (!SCENES[scene].sfx) this.stopAllSfx();
     if (this.#unlocked && !this.#hidden) this.#apply(token);
   }
@@ -320,6 +341,7 @@ export class AudioManager {
     if (id === this.#profile) return;
     this.#profile = id;
     this.#bedOff = false;
+    this.#musicOff = false;
     this.#swell = false;
     this.cancelCues();
     const token = ++this.#token;
@@ -345,6 +367,7 @@ export class AudioManager {
       this.#finishFadeOut();
       this.stopAllSfx();
       this.cancelCues();
+      this.stopStinger();
       if (this.#playing) this.#b.pause(this.#playing);
       this.#playing = null;
       this.#b.ambience(null, 0, 0);
@@ -392,6 +415,13 @@ export class AudioManager {
       if (this.#unlocked && !this.#hidden) this.#applyBed(c === 'ambience-off' ? 3 : 1.5);
       return true;
     }
+    if (c === 'music-off') {
+      // The scene's music fades away (normal track change path: one track, faded out before anything else).
+      if (this.#musicOff) return true;
+      this.#musicOff = true;
+      if (this.#unlocked && !this.#hidden) this.#apply(++this.#token);
+      return true;
+    }
     this.cancelCues();
     if (!this.#canSound()) {
       this.stats.cuesRefused++;
@@ -417,6 +447,49 @@ export class AudioManager {
     for (const h of all) h.stop();
   }
 
+  /**
+   * A short musical result cue (a hand won / lost or blocked) at a table. It is music, so it plays on the music
+   * bus (the player's music level and mute apply) and ducks the current track instead of adding a second song;
+   * it is never synthesized (an undecoded or missing cue plays nothing) and never queued for later. One at a
+   * time; cancelled by reset, backgrounding, or leaving the table.
+   */
+  resultCue(kind: ResultCue): boolean {
+    const L = this.#levels;
+    if (!this.#unlocked || this.#hidden || L.muted || L.music <= 0 || L.master <= 0) return false;
+    if (this.#scene !== 'gameplay' && this.#scene !== 'results') return false;
+    this.stopStinger();
+    const h = this.#b.playSfx({ sample: RESULT_CUE_SAMPLE[kind], synth: 'tap', gain: 1, rate: 1, delay: 0, bus: 'music', placeholder: false });
+    if (!h) return false;
+    this.#stinger = h;
+    h.onEnded(() => {
+      if (this.#stinger === h) this.#stinger = null;
+    });
+    // Duck the track under the cue, then let the mix return to the scene's own level.
+    this.#ducked = true;
+    if (this.#playing) this.#b.fade(this.#playing, this.#mix().duck * RESULT_DUCK, 0.12);
+    this.#duckTimer = this.#sched.set(() => {
+      this.#duckTimer = null;
+      this.#unduck();
+    }, RESULT_DUCK_SEC * 1000);
+    this.stats.resultCues++;
+    return true;
+  }
+
+  /** Stop the result cue (if any) and release its duck. */
+  stopStinger(): void {
+    const h = this.#stinger;
+    this.#stinger = null;
+    h?.stop();
+    if (this.#ducked) this.#unduck();
+  }
+
+  #unduck(): void {
+    if (this.#duckTimer !== null) this.#sched.clear(this.#duckTimer);
+    this.#duckTimer = null;
+    this.#ducked = false;
+    if (this.#playing && this.#unlocked && !this.#hidden) this.#b.fade(this.#playing, this.#mix().duck, 0.6);
+  }
+
   stopAllSfx(): void {
     const all = this.#active;
     this.#active = [];
@@ -429,6 +502,7 @@ export class AudioManager {
     this.#clearTimers();
     this.stopAllSfx();
     this.cancelCues();
+    this.stopStinger();
   }
 
   // ---- internals ----------------------------------------------------------------
@@ -447,6 +521,7 @@ export class AudioManager {
       bed = p?.bed ?? null;
       level = p?.bedLevel ?? 0;
       if (this.#bedOff) bed = null;
+      if (this.#musicOff) track = null;
       if (this.#swell) level = Math.min(1, level * 1.5);
     } else if (this.#scene === 'gameplay' || this.#scene === 'paused' || this.#scene === 'results') {
       if (p) {
@@ -574,7 +649,8 @@ export class AudioManager {
     const want = mix.track && this.#b.hasTrack(mix.track) && !this.#broken.has(mix.track) && !this.#down.has(mix.track) ? mix.track : null;
     const cur = this.#playing;
     if (cur && cur === want) {
-      this.#b.fade(cur, mix.duck, 0.5);
+      // A result cue is sounding: the track stays under it until the cue's own timer releases the duck.
+      this.#b.fade(cur, this.#ducked ? mix.duck * RESULT_DUCK : mix.duck, 0.5);
       return;
     }
     if (cur) {

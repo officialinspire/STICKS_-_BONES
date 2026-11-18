@@ -42,12 +42,12 @@ export const BUDGET = {
   chapterImagesKB: 1000, // the most ONE chapter downloads (full-frame backdrop + its cast sheets); measured max 923 KB (Chapter 3)
   singleImageKB: 450, // largest single image (Stage 13: jungle backdrop 428 KB at q84 — q80 failed the derivative quality gate)
   startupKB: 960, // initialization, raw bytes: core code + fonts + ONE patio variant (the larger: landscape) + Cousin's portrait + the tile atlas (startup stage: the tiles are decoded before the start prompt; measured ~931 KB, was 900 without the atlas)
-  mediaKB: 8000, // music, streamed on demand only (measured 7,331 KB)
+  mediaKB: 13500, // music, streamed on demand only, never at startup: 12,757 KB measured = the two approved songs 7,331 + the owner's two scene beds 5,335 (stream-copied, audio bit-identical to the uploads; cover art removed saved 1.9 MB) + two result cues 90. Re-encoding the owner's masters lower was rejected (generation loss; the briefs ask ≥ 192 kbps)
   sfxKB: 720, // short CC0 SFX (WAV, decoded once after the first gesture; measured ~600 KB)
   ambienceKB: 2200, // five CC0 ambience beds (MP3, fetched per scene on demand; measured ~1,900 KB)
   iconsKB: 140, // PWA icons (PNG by spec), generated from approved art (measured 113 KB)
   swKB: 22, // service worker + build manifest: 19 KB measured (per-file sizes for truncation checks and four offline groups; was 8 KB)
-  totalKB: 15400, // whole dist: audio stage 13.4 MB + Story images 1.46 MB (on demand) = 15.0 MB measured. Nothing in that increase loads at startup.
+  totalKB: 21000, // whole dist: 20,147 KB measured after the owner audio stage (+5.4 MB of on-demand scene music and cues). Nothing in the increase loads at startup; offline it is only in the optional, size-disclosed audio download
 };
 const size = (f) => statSync(f).size;
 const rel = (f) => f.slice(dist.length);

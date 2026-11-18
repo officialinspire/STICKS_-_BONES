@@ -188,7 +188,7 @@ try {
     const decoded = await waitFor(async () => Object.entries((await audioState(page)).buffers).filter(([k, x]) => k.startsWith('ui-') && x === 'decoded').length >= uiCount, 8000);
     const st = await audioState(page);
     check(decoded, `A: the UI samples did not decode: ${JSON.stringify(st.buffers)}`);
-    check(!Object.keys(st.buffers).some((k) => /^(tile-|motif-|water-|glass-|pass-)/.test(k)), `A: table/story samples fetched at the menu: ${Object.keys(st.buffers).join(',')}`);
+    check(!Object.keys(st.buffers).some((k) => /^(tile-|motif-|water-|glass-|pass-|result-)/.test(k)), `A: table/story samples or result cues fetched at the menu: ${Object.keys(st.buffers).join(',')}`);
     check(st.music <= 1, `A: ${st.music} music elements playing`);
     notes.push(`A: scenes during start ${[...new Set(seen)].join(' → ')}; ${Object.values(st.buffers).filter((x) => x === 'decoded').length} UI samples decoded at the menu (table/story samples deferred); music playing: ${st.playing}; intro video ${(await page.evaluate("document.querySelector('video') ? 'element present' : 'absent (fallback)'"))}`);
     check(errors.length === 0, `A: page errors ${errors.join(' | ')}`);
@@ -213,7 +213,7 @@ try {
     await page.waitForTimeout(120);
     vb = await voices(page);
     check(vb.some((x) => /^tile-pickup-/.test(x.sample ?? '')), `B: selecting a legal tile played no pickup: ${JSON.stringify(vb.map((x) => x.sample))}`);
-    check(vb.some((x) => /^tile-shuffle-/.test(x.sample ?? '')), `B: no shuffle at the deal: ${JSON.stringify(vb.map((x) => x.sample))}`);
+    check(vb.some((x) => x.sample === 'tile-drop-owner-1'), `B: the deal did not play the owner's dominoes-dropped recording: ${JSON.stringify(vb.map((x) => x.sample))}`);
     const qp = await audioState(page);
     check(qp.bed.wanted === 'amb-patio', `B: Quick Play bed ${JSON.stringify(qp.bed)}`);
     notes.push(`B: UI ${vb.filter((x) => /^ui-/.test(x.sample ?? '')).map((x) => x.sample).join(', ')}; table ${vb.filter((x) => /^tile-/.test(x.sample ?? '')).map((x) => x.sample).join(', ')}; Quick Play bed ${qp.bed.wanted}`);
@@ -275,8 +275,9 @@ try {
     const rel = heard.slice(0, 4).map((n) => n.startAt - heard[0]!.startAt);
     check(Math.abs(rel[1]! - MOTIF.interval) < 0.002 && Math.abs(rel[3]! - (2 * MOTIF.interval + MOTIF.answerGap)) < 0.002, `D: scheduled start times ${rel}`);
     const s6 = await audioState(page);
-    check(s6.profile === 'chapter-6' && s6.playing === null, `D: chapter-6 mix ${JSON.stringify({ p: s6.profile, m: s6.playing })}`);
-    notes.push(`D: chapter 6 — motif on the audio clock at ${rel.map((x) => x.toFixed(3)).join(', ')} s (exact to the sample); no music; bed ${s6.bed.bed}`);
+    // Before the cut to the rest area the cave suspense bed plays under the knocks (one track, low).
+    check(s6.profile === 'chapter-6' && s6.playing === 'threshold' && s6.music <= 1, `D: chapter-6 mix ${JSON.stringify({ p: s6.profile, m: s6.playing, n: s6.music })}`);
+    notes.push(`D: chapter 6 — motif on the audio clock at ${rel.map((x) => x.toFixed(3)).join(', ')} s (exact to the sample); music ${s6.playing} (one element); bed ${s6.bed.bed}`);
 
     // ---- E. rapid advance -------------------------------------------------------------------------------
     await backToMenu(page);
@@ -402,6 +403,72 @@ try {
     check(maxBeds <= 2, `I: ${maxBeds} beds at once`);
     check(errors.length === 0, `I: page errors ${errors.join(' | ')}`);
     notes.push(`I: max concurrent music ${maxMusic}, max beds ${maxBeds} (one fading)`);
+    await page.close();
+  }
+
+  // ---- K. owner recordings: decoded in Chromium; a real story hand's result cue; no replay on reload ----------
+  {
+    const { page, errors } = await newPage();
+    await toMenu(page);
+    await clock(page);
+    // Count result cues at the manager (presentation hook) without changing behaviour.
+    await page.evaluate(`(() => { const A = window.__sbAudio.audio; const f = A.resultCue.bind(A); window.__cues = []; A.resultCue = (k) => { const ok = f(k); window.__cues.push({ k, ok, scene: A.scene }); return ok; }; })()`);
+    await seed(page, { sceneId: 'chapter-4', part: 'hand', index: 0, completed: ['prologue', 'chapter-1', 'chapter-2', 'chapter-3'] });
+    await page.click('[data-act="story"]');
+    await page.waitForSelector('.story-shell');
+    await page.click('[data-act="story-continue"]');
+    await page.waitForSelector('.table-screen', { timeout: 20000 });
+    const owned = ['tile-slam-owner-1', 'tile-slam-owner-2', 'tile-drop-owner-1', 'result-win', 'result-other'];
+    const decoded = await waitFor(async () => {
+      const b = (await audioState(page)).buffers;
+      return owned.every((id) => b[id] === 'decoded');
+    }, 15000);
+    const bufs = (await audioState(page)).buffers;
+    check(decoded, `K: owner samples not decoded at the table: ${JSON.stringify(Object.fromEntries(owned.map((id) => [id, bufs[id]])))}`);
+    // The case file's menu track fades out first (one source at a time); then the chapter's track plays.
+    const promenade = await waitFor(async () => (await audioState(page)).playing === 'promenade', 8000);
+    const inHand = await audioState(page);
+    check(promenade && inHand.music <= 1, `K: chapter 4's hand should play "promenade" (one track): ${inHand.playing} / ${inHand.music}`);
+    // Play the hand out (fast story timing): the results sheet plays exactly one cue of the right kind.
+    let done = false;
+    const until = Date.now() + 120_000;
+    while (!done && Date.now() < until) {
+      done = await page.evaluate(() => (document.querySelector('dialog.results') as HTMLDialogElement | null)?.open ?? false);
+      if (done) break;
+      const legal = page.locator('.hand-tile.is-legal');
+      if (await legal.count()) {
+        await legal.first().click({ timeout: 2000 }).catch(() => undefined);
+        await page.locator('.end-slot.is-legal').first().click({ timeout: 2000 }).catch(() => undefined);
+        continue;
+      }
+      const act = page.locator('[data-act="draw"]:not([disabled]), [data-act="pass"]:not([disabled])');
+      if (await act.count()) await act.first().click({ timeout: 2000 }).catch(() => undefined);
+      await page.waitForTimeout(60);
+    }
+    check(done, 'K: the chapter-4 hand did not finish');
+    await page.waitForTimeout(400);
+    const cues = (await page.evaluate('window.__cues')) as { k: string; ok: boolean; scene: string }[];
+    const outcome = (await page.evaluate(`JSON.parse(localStorage.getItem('sticks-and-bones.story') || 'null')?.data?.outcome ?? null`)) as string | null;
+    check(cues.length === 1 && cues[0]!.ok && cues[0]!.scene === 'results' && cues[0]!.k === (outcome === 'win' ? 'win' : 'other'), `K: result cues ${JSON.stringify(cues)} for outcome ${outcome}`);
+    const cueVoice = (await voices(page)).find((x) => x.sample === `result-${cues[0]?.k}`) as (Voice & { bus?: string; placeholder?: boolean }) | undefined;
+    check(cueVoice?.bus === 'music' && cueVoice?.placeholder === false, `K: the cue was not a music-bus buffer: ${JSON.stringify(cueVoice)}`);
+    const atResults = await audioState(page);
+    check(atResults.music <= 1, `K: ${atResults.music} music elements under the cue`);
+    // Reload with the results sheet showing: the restored sheet never replays the cue.
+    await page.reload();
+    await instrument(page);
+    await clock(page);
+    await page.evaluate(`(() => { const A = window.__sbAudio.audio; const f = A.resultCue.bind(A); window.__cues = []; A.resultCue = (k) => { const ok = f(k); window.__cues.push({ k, ok }); return ok; }; })()`);
+    await page.click('.start-button');
+    await page.waitForSelector('[data-act="story"]', { timeout: 15000 });
+    await page.click('[data-act="story"]');
+    await page.waitForSelector('.story-shell');
+    await page.click('[data-act="story-continue"]');
+    await page.waitForTimeout(2500);
+    const replayed = (await page.evaluate('window.__cues')) as unknown[];
+    check(replayed.length === 0, `K: a cue was replayed after the reload: ${JSON.stringify(replayed)}`);
+    check(errors.length === 0, `K: page errors ${errors.join(' | ')}`);
+    notes.push(`K: owner slams, drop and both result cues decoded in Chromium; chapter-4 hand played "promenade" (${inHand.music} element); the ${outcome} → "${cues[0]?.k}" cue played once on the music bus at the results sheet; after a reload nothing replayed`);
     await page.close();
   }
 

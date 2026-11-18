@@ -159,7 +159,7 @@ export const STAGING: Readonly<Record<SceneId, SceneStaging>> = {
       { at: '[The reflection brightens as if a door has opened farther.', cues: [{ kind: 'threshold', to: 'bright' }, { kind: 'boundary', show: true }] },
       { at: '[Roberto kneels on the modern walkway, staying behind the agreed boundary.]', cues: [{ kind: 'boundary', show: true }, { kind: 'expr', mood: 'thinking' }] },
       { at: '[The lifted water lowers.', cues: [{ kind: 'water', to: 'recede' }, { kind: 'threshold', to: 'dim' }, { kind: 'pulse' }, { kind: 'boundary', show: false }, { kind: 'audio', cue: 'knock-one' }] },
-      { at: '[Cut to the entrance rest area.', cues: [{ kind: 'threshold', to: 'off' }, { kind: 'water', to: 'none' }, { kind: 'backdrop', env: null, light: 'rest-area' }, { kind: 'warmth', on: true }] },
+      { at: '[Cut to the entrance rest area.', cues: [{ kind: 'threshold', to: 'off' }, { kind: 'water', to: 'none' }, { kind: 'backdrop', env: null, light: 'rest-area' }, { kind: 'warmth', on: true }, { kind: 'audio', cue: 'music-off' }] },
       { at: '[She takes his hand. He lets her.]', cues: [{ kind: 'expr', mood: 'neutral' }] },
     ],
   },

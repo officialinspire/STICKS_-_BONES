@@ -15,7 +15,7 @@ import { envKey, onViewportShape, setEnvBackdrop } from './assets/env';
 import { urlFor, type RuntimeAssetId } from './assets';
 import { MUSIC } from './assets/audio-manifest';
 import { introVideoUrl, musicUrl } from './assets/media-urls';
-import { AudioManager, type Scene, type SfxId } from './audio/manager';
+import { AudioManager, type ResultCue, type Scene, type SfxId, type TrackId } from './audio/manager';
 import { WebAudioBackend } from './audio/webaudio';
 import { haptic, type HapticCue } from './audio/haptics';
 import { showStart } from './ui/intro-screen';
@@ -67,14 +67,14 @@ if (!store) notices.push('This browser isn’t letting the game save. Settings, 
 
 // ---- audio: one manager for the whole app ---------------------------------------
 const backend = new WebAudioBackend(
-  { menu: musicUrl('menu') ?? undefined, gameplay: musicUrl('gameplay') ?? undefined } as never,
+  Object.fromEntries(MUSIC.map((m) => [m.id, musicUrl(m.id) ?? undefined]).filter(([, u]) => u)) as Partial<Record<TrackId, string>>,
   Object.fromEntries(MUSIC.map((m) => [m.id, m.gainDb])),
 );
 const audio = new AudioManager({
   backend,
   scheduler: realScheduler,
   levels: settings.audio,
-  gapSec: Object.fromEntries(MUSIC.map((m) => [m.id, m.loop.gapSec])) as Record<'menu' | 'gameplay', number>,
+  gapSec: Object.fromEntries(MUSIC.map((m) => [m.id, m.loop.gapSec])) as Record<TrackId, number>,
 });
 // Any later gesture re-unlocks if the browser suspended audio (iOS, focus loss).
 const regesture = () => {
@@ -126,6 +126,7 @@ const audioApi = {
   scene: (s: Scene) => audio.setScene(s),
   sfx: (id: SfxId) => void audio.playSfx(id),
   haptic: (cue: HapticCue) => void haptic(cue, settings.haptics),
+  result: (kind: ResultCue) => void audio.resultCue(kind),
 };
 
 const settingsApi = {

@@ -21,6 +21,7 @@ import sharp from 'sharp';
 import derivativesJson from '../src/assets/derivatives.json' with { type: 'json' };
 import iconsJson from '../src/assets/icons.json' with { type: 'json' };
 import soundJson from '../src/assets/sound-manifest.json' with { type: 'json' };
+import ownerJson from '../src/assets/owner-audio.json' with { type: 'json' };
 import castJson from '../src/assets/cast.json' with { type: 'json' };
 import { ENV_FOCUS, ENV_IDS, portraitCrop } from '../src/assets/focal.ts';
 import { PORTRAIT_URLS } from '../src/assets/urls.ts';
@@ -38,6 +39,11 @@ interface SoundEntry {
   auditioned?: boolean;
 }
 const SOUNDS = [...soundJson.sfx, ...soundJson.ambience] as SoundEntry[];
+/** The owner's uploads (untouched originals) and their runtime derivatives (scripts/build-owner-audio.py). */
+interface OwnerOriginal { file: string; role: string; for: string; bytes: number; sha256: string; decodedPcmSha256: string; duplicateOf?: string }
+interface OwnerDerivative { id: string; file: string; source: string; sourceSha256: string; bytes: number; sha256: string; edits: string }
+const OWNER_ORIGINALS = ownerJson.originals as OwnerOriginal[];
+const OWNER_DERIVED = [...ownerJson.sfx, ...ownerJson.music, ...ownerJson.cues] as OwnerDerivative[];
 
 interface Derivative {
   id: string;
@@ -163,8 +169,8 @@ for (const file of walk(join(repoRoot, 'assets'))) {
   const rel = relative(repoRoot, file).split('\\').join('/');
   if (/\.(png|jpe?g|webp|gif|avif|svg)$/i.test(rel) && !registered.has(rel))
     errors.push(`unregistered image ${rel} — add it to src/assets/manifest.ts`);
-  if (/\.(mp3|ogg|wav|m4a|aac|flac|mp4|webm|mov)$/i.test(rel) && !MUSIC.some((m) => m.path === rel) && !SOUNDS.some((x) => x.file === rel) && rel !== 'assets/video/inspiresoftwareintro.mp4')
-    errors.push(`uncatalogued media ${rel} — add it to src/assets/audio-manifest.ts (music) or rebuild src/assets/sound-manifest.json (scripts/build-audio.py)`);
+  if (/\.(mp3|ogg|wav|m4a|aac|flac|mp4|webm|mov)$/i.test(rel) && !MUSIC.some((m) => m.path === rel) && !SOUNDS.some((x) => x.file === rel) && !OWNER_ORIGINALS.some((o) => o.file === rel) && !OWNER_DERIVED.some((d) => d.file === rel) && rel !== 'assets/video/inspiresoftwareintro.mp4')
+    errors.push(`uncatalogued media ${rel} — add it to src/assets/audio-manifest.ts (music), rebuild src/assets/sound-manifest.json (scripts/build-audio.py) or src/assets/owner-audio.json (scripts/build-owner-audio.py)`);
 }
 
 // Stray art at the repo root (where uploads land) should be moved under assets/art.
@@ -351,6 +357,43 @@ for (const n of notes) console.log(`  note: ${n}`);
     if (h !== x.sha256) errors.push(`[sound ${x.id}] sha256 drift — rebuild with scripts/build-audio.py, never edit by hand`);
   }
   console.log(`sound bank: ${soundJson.sfx.length} SFX + ${soundJson.ambience.length} beds verified (final: ${SOUNDS.filter((x) => x.final).length}, seams auditioned: ${soundJson.ambience.filter((x) => x.auditioned).length})`);
+}
+
+// Owner audio: originals untouched (bytes + hash), every derivative's bytes + hash, and its source hash linked to
+// the catalogued original. Duplicates must really decode identically. Bundled music must match its derivative.
+{
+  const byFile = new Map(OWNER_ORIGINALS.map((o) => [o.file, o]));
+  for (const o of OWNER_ORIGINALS) {
+    const full = join(repoRoot, o.file);
+    if (!existsSync(full)) {
+      errors.push(`[owner original] missing ${o.file}`);
+      continue;
+    }
+    const buf = readFileSync(full);
+    if (buf.length !== o.bytes || createHash('sha256').update(buf).digest('hex') !== o.sha256) errors.push(`[owner original] ${o.file} changed — originals are never edited or re-encoded`);
+    if (o.role === 'duplicate' && byFile.get(o.duplicateOf ?? '')?.decodedPcmSha256 !== o.decodedPcmSha256) errors.push(`[owner original] ${o.file} is marked a duplicate but does not decode identically`);
+  }
+  for (const d of OWNER_DERIVED) {
+    const full = join(repoRoot, d.file);
+    if (!existsSync(full)) {
+      errors.push(`[owner audio ${d.id}] missing ${d.file}`);
+      continue;
+    }
+    const buf = readFileSync(full);
+    if (buf.length !== d.bytes || createHash('sha256').update(buf).digest('hex') !== d.sha256) errors.push(`[owner audio ${d.id}] bytes/sha256 drift — rebuild with npm run audio:owner, never edit by hand`);
+    const src = byFile.get(d.source);
+    if (!src) errors.push(`[owner audio ${d.id}] source ${d.source} is not a catalogued original`);
+    else if (src.sha256 !== d.sourceSha256) errors.push(`[owner audio ${d.id}] built from a different source than the catalogued original`);
+    if (!d.edits) errors.push(`[owner audio ${d.id}] missing its edit record`);
+  }
+  for (const m of MUSIC.filter((x) => x.source)) {
+    const d = ownerJson.music.find((x) => x.file === m.path);
+    if (!d) errors.push(`[music:${m.id}] ${m.path} is not an owner-audio derivative`);
+    else if (d.sha256 !== m.sha256 || d.sourceSha256 !== m.source!.sha256 || d.source !== m.source!.path) errors.push(`[music:${m.id}] manifest entry disagrees with src/assets/owner-audio.json`);
+  }
+  // (That every sound the game asks for has a file is a unit test: src/audio/sounds.test.ts, which needs Vite's globs.)
+  const roles = OWNER_ORIGINALS.reduce<Record<string, number>>((m, o) => ((m[o.role] = (m[o.role] ?? 0) + 1), m), {});
+  console.log(`owner audio: ${OWNER_ORIGINALS.length} originals untouched (${Object.entries(roles).map(([k, v]) => `${v} ${k}`).join(', ')}); ${OWNER_DERIVED.length} derivatives verified (${ownerJson.sfx.length} SFX, ${ownerJson.music.length} music, ${ownerJson.cues.length} cues)`);
 }
 
 if (errors.length) {
