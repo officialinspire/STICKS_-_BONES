@@ -32,13 +32,22 @@ before you change anything.
   "Expression verification") and reach dialogue only through `src/story/expressions.ts`: tagged by
   stable line id, with a neutral fallback. Never random, and never a guessed frame. Rebuild derivatives after `atlas:build` or any source change. Never bundle a PNG original; keep `npm run build` inside its
   byte budget (`docs/PERFORMANCE.md`). Load images through `src/assets/warm.ts`, not ad-hoc `new Image()`.
-- **PWA isolation:** the service worker (`src/pwa/sw.js`) is scoped to the app directory and may only
-  open/delete `inspire:sticks-and-bones:*` caches; never `unregister()` or `skipWaiting()` without the
-  player's "Update now", never cache PNG source sheets or video. Groups: shell + core at install; story
-  per chapter or on the player's explicit "Download the whole story"; music/ambience **only** in the
-  optional `audio:v1` group after the player opts in (size disclosed). Never store a truncated download.
-  Updates write the stable state first, say so honestly if the write fails, and return once. Local data keys are
-  `sticks-and-bones.*`; repair must not touch them. Run `npm run pwa` for any PWA or caching change.
+- **PWA isolation and full offline storage:** the service worker (`src/pwa/sw.js`) is scoped to the app
+  directory and may only open/delete `inspire:sticks-and-bones:*` caches; never `unregister()` or
+  `skipWaiting()` without the player's "Update now". The owner has authorized **full offline storage**
+  (replacing the old optional-audio / no-video policy): every shipped runtime file — shell, lazy chunks,
+  fonts, both background orientations, characters, tiles, effects, every chapter, music, SFX, ambience,
+  result cues and the intro video — is listed by the build with its bytes and SHA-256 (`dist/build.json`;
+  the build fails on an unlisted file) and saved by the whole-game download, which starts only after the
+  menu is up, while online (Data Saver waits for the player), 2 files at a time, resumable, with progress,
+  Retry and storage estimates. Store only complete, checksum-verified 200 responses with the right MIME
+  type; serve byte ranges (200/206/416) from the cache. Say "Full game ready offline" only after every
+  file was re-hashed and the verified marker written. Keep older builds' media/art usable until the new
+  pack is verified; prune only then. Never ship or cache PNG source sheets, source masters or duplicate
+  uploads. Report quota, eviction, corruption and unavailable storage honestly. Updates write the stable
+  state first, say so honestly if the write fails, and return once. Local data keys are
+  `sticks-and-bones.*`; repair is app-only and must not touch them. Run `npm run pwa` for any PWA or
+  caching change.
 - **Analytics:** only through `src/app/analytics.ts` (per-event allowlist, sanitised errors, de-duplicated
   from applied engine events, never from renders). It stays disabled until the owner supplies the contract
   (`docs/ANALYTICS.md`): never invent keys, project ids, event names, consent behaviour or attribution

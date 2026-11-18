@@ -74,12 +74,15 @@ export interface MenuHandlers {
 export interface MenuPwa {
   /** Current status line and whether a new version is waiting. */
   view(): { text: string; ready: boolean; updateReady: boolean };
-  /** What of the story / optional audio is saved offline (measured sizes), and the matching button label. */
-  storyLine(): string;
-  audioLine(): string;
-  offlineButton(g: 'story' | 'audio'): string;
-  /** Explicit download (or, for saved audio, removal). */
-  onOffline(g: 'story' | 'audio'): void;
+  /** How much the game keeps on the device, free space, and whether the browser may clear it. */
+  storageLine(): string;
+  /** Download / Retry for the whole game (null once it is verified offline). */
+  fullButton(): { label: string; disabled: boolean } | null;
+  /** Whether the browser offered installation, and the matching note. */
+  install(): 'available' | 'installed' | 'none';
+  installNote(): string;
+  onDownload(): void;
+  onInstall(): void;
   onUpdate(): void;
   onRepair(): void;
   onErase(): void;
@@ -272,22 +275,19 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
     return;
   }
   if (screen === 'settings') {
+    const full = h.pwa?.fullButton() ?? null;
     const offline = h.pwa
       ? `<section class="offline-panel" aria-labelledby="offline-heading">
           <h3 id="offline-heading">Offline &amp; storage</h3>
           ${offlineLine(h.pwa)}
-          <p class="note">Quick Play works offline after one complete online visit. Story scenes save as you play them (and the next one ahead); to take the whole case offline, download it below.</p>
-          <h4 class="offline-sub">Story</h4>
-          <p class="offline-status" data-region="offline-story" role="status">${esc(h.pwa.storyLine())}</p>
-          <progress data-region="offline-story-progress" hidden aria-label="Story download progress"></progress>
-          <div class="row"><button type="button" class="btn-ghost dark" data-act="offline-story">${esc(h.pwa.offlineButton('story'))}</button></div>
-          <h4 class="offline-sub">Music &amp; ambience (optional)</h4>
-          <p class="offline-status" data-region="offline-audio" role="status">${esc(h.pwa.audioLine())}</p>
-          <progress data-region="offline-audio-progress" hidden aria-label="Audio download progress"></progress>
-          <div class="row"><button type="button" class="btn-ghost dark" data-act="offline-audio">${esc(h.pwa.offlineButton('audio'))}</button></div>
-          <p class="note">The studio intro always needs a connection.</p>
+          <progress data-region="offline-progress" hidden aria-label="Offline download progress"></progress>
+          <div class="row"><button type="button" class="btn-ghost dark" data-act="offline-full" ${full ? '' : 'hidden'} ${full?.disabled ? 'disabled' : ''}>${esc(full?.label ?? '')}</button></div>
+          <p class="note" data-region="offline-storage">${esc(h.pwa.storageLine())}</p>
+          <p class="note">The whole game — every chapter, the music, sounds and the studio intro — saves for offline play in the background once the menu is open and you’re online. Starting the game never waits for it.</p>
+          <div class="row" data-region="install" ${h.pwa.install() === 'available' ? '' : 'hidden'}><button type="button" class="btn-ghost dark" data-act="install">Install the game</button></div>
+          <p class="note" data-region="install-note">${esc(h.pwa.installNote())}</p>
           <div class="row"><button type="button" class="btn-ghost dark" data-act="repair">Repair offline files</button></div>
-          <p class="note">Repair re-downloads only this game’s offline files (and the story or audio you chose to keep). Your saved game, story progress, settings and statistics are kept.</p>
+          <p class="note">Repair re-checks this game’s offline files only, replaces any damaged copy and downloads what is missing. Your saved game, story progress, settings, statistics and achievements are kept.</p>
           <div class="row"><button type="button" class="btn-ghost dark danger-ghost" data-act="erase">Erase saved game, settings &amp; statistics…</button></div>
         </section>`
       : '';
@@ -295,8 +295,8 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
     wire();
     bindSettingsPanel(root.querySelector('.settings-panel') as HTMLElement, h.settings);
     root.querySelector('[data-act="repair"]')?.addEventListener('click', () => h.pwa?.onRepair());
-    root.querySelector('[data-act="offline-story"]')?.addEventListener('click', () => h.pwa?.onOffline('story'));
-    root.querySelector('[data-act="offline-audio"]')?.addEventListener('click', () => h.pwa?.onOffline('audio'));
+    root.querySelector('[data-act="offline-full"]')?.addEventListener('click', () => h.pwa?.onDownload());
+    root.querySelector('[data-act="install"]')?.addEventListener('click', () => h.pwa?.onInstall());
     const erase = root.querySelector<HTMLButtonElement>('[data-act="erase"]');
     erase?.addEventListener('click', () => {
       void confirmSheet(root, { title: 'Erase this game’s data?', body: 'Your saved game, settings, statistics and Story progress on this device are deleted. Offline files stay. This can’t be undone.', yes: 'Erase everything' }).then((yes) => yes && h.pwa?.onErase());

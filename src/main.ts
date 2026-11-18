@@ -25,7 +25,7 @@ import { achievements, achievementsReady, configureAchievements } from './ui/ach
 import { bindLoadFailure, retryable } from './ui/lazy';
 import { esc } from './ui/svg';
 import { TableScreen } from './ui/table';
-import { chaptersReady, consumeUpdatedFlag, consumeUpdateResume, describeAudio, describeOffline, describeStory, eraseLocalData, PwaController, setUpdateResume, type ResumeTarget } from './app/pwa';
+import { chaptersReady, consumeUpdatedFlag, consumeUpdateResume, describeOffline, describeStorage, eraseLocalData, fullButton, PwaController, setUpdateResume, type ResumeTarget } from './app/pwa';
 import { SCENE_IMAGES } from './story/scene-images';
 import { Analytics, winnerLabel, type AnalyticsEvent, type MatchInfo, type StartKind } from './app/analytics';
 import { ANALYTICS_CONFIG } from './app/analytics-config';
@@ -178,7 +178,7 @@ try {
   /* storage blocked */
 }
 const pwaView = () => {
-  const d = describeOffline(pwa.view.offline);
+  const d = describeOffline(pwa.view);
   return { ...d, updateReady: pwa.view.updateReady };
 };
 /** App-relative paths of each story scene's images for this screen shape (what "ready offline" checks). */
@@ -189,47 +189,46 @@ function sceneFiles(): Record<string, string[]> {
 }
 function readyScenes(): string[] {
   const st = pwa.status;
-  return st ? chaptersReady([...(st.story.have ?? []), ...(st.core.have ?? [])], sceneFiles()) : [];
+  return st ? chaptersReady(st.have, sceneFiles()) : [];
 }
-const storyLine = () => describeStory(pwa.status, pwa.view.jobs.story, readyScenes().length, Object.keys(SCENE_IMAGES).length);
-const audioLine = () => describeAudio(pwa.status, pwa.view.jobs.audio);
-/** Keep every status line / update banner on screen current (menu, settings, pause sheet). */
-pwa.subscribe(() => {
+const storageLine = () => describeStorage(pwa.status, pwa.view.storage);
+/** The live status line is announced at most once per 10% of a download (not on every file). */
+let announced = '';
+/** Keep every status line / progress bar / button on screen current (menu, settings). */
+pwa.subscribe((pv) => {
   const v = pwaView();
-  document.querySelectorAll<HTMLElement>('[data-region="offline-status"]').forEach((el) => {
-    el.textContent = (v.ready ? '✓ ' : '') + v.text;
-    el.classList.toggle('is-ready', v.ready);
-  });
-  document.querySelectorAll<HTMLElement>('[data-region="update"]').forEach((el) => (el.hidden = !v.updateReady));
-  document.querySelectorAll<HTMLElement>('[data-region="offline-story"]').forEach((el) => (el.textContent = storyLine()));
-  document.querySelectorAll<HTMLElement>('[data-region="offline-audio"]').forEach((el) => (el.textContent = audioLine()));
-  for (const g of ['story', 'audio'] as const) {
-    const j = pwa.view.jobs[g];
-    document.querySelectorAll<HTMLProgressElement>(`progress[data-region="offline-${g}-progress"]`).forEach((el) => {
-      el.hidden = j.kind !== 'running';
-      if (j.kind === 'running') {
-        el.max = j.progress.bytesTotal || 1;
-        el.value = j.progress.bytesDone;
-      }
-    });
-    document.querySelectorAll<HTMLButtonElement>(`[data-act="offline-${g}"]`).forEach((b) => {
-      b.disabled = j.kind === 'running' || !pwa.status;
-      b.textContent = offlineButton(g);
+  const p = pv.full.kind === 'running' ? pv.full.progress : null;
+  const bucket = p ? `${p.phase}:${Math.floor(((p.phase === 'verify' ? p.done / (p.total || 1) : p.bytesDone / (p.bytesTotal || 1)) * 10))}` : v.text;
+  if (bucket !== announced || !p) {
+    announced = bucket;
+    document.querySelectorAll<HTMLElement>('[data-region="offline-status"]').forEach((el) => {
+      el.textContent = (v.ready ? '✓ ' : '') + v.text;
+      el.classList.toggle('is-ready', v.ready);
     });
   }
+  document.querySelectorAll<HTMLElement>('[data-region="update"]').forEach((el) => (el.hidden = !v.updateReady));
+  document.querySelectorAll<HTMLProgressElement>('progress[data-region="offline-progress"]').forEach((el) => {
+    el.hidden = !p;
+    if (p) {
+      el.max = (p.phase === 'verify' ? p.total : p.bytesTotal) || 1;
+      el.value = p.phase === 'verify' ? p.done : p.bytesDone;
+    }
+  });
+  const btn = fullButton(pv);
+  document.querySelectorAll<HTMLButtonElement>('[data-act="offline-full"]').forEach((b) => {
+    b.hidden = !btn;
+    b.disabled = !btn || btn.disabled;
+    b.textContent = btn?.label ?? '';
+  });
+  document.querySelectorAll<HTMLElement>('[data-region="offline-storage"]').forEach((el) => (el.textContent = storageLine()));
+  document.querySelectorAll<HTMLElement>('[data-region="install"]').forEach((el) => (el.hidden = pv.install !== 'available'));
+  document.querySelectorAll<HTMLElement>('[data-region="install-note"]').forEach((el) => (el.textContent = installNote()));
 });
-function offlineButton(g: 'story' | 'audio'): string {
-  const st = pwa.status;
-  const j = pwa.view.jobs[g];
-  const mb = (b: number) => `${(b / 1048576).toFixed(1)} MB`;
-  if (!st) return g === 'story' ? 'Download the whole story' : 'Save music & ambience for offline';
-  const left = st[g].totalBytes - st[g].bytes;
-  const full = st[g].cached >= st[g].total;
-  if (j.kind === 'running') return 'Downloading…';
-  if (g === 'audio' && full) return 'Remove offline music & ambience';
-  if (full) return 'Whole story saved';
-  if (j.kind === 'interrupted' || j.kind === 'quota' || (j.kind === 'done' && j.missing)) return `Retry (${mb(left)} left)`;
-  return g === 'story' ? `Download the whole story (${mb(left)})` : `Save music & ambience for offline (${mb(left)})`;
+function installNote(): string {
+  const i = pwa.view.install;
+  if (i === 'installed') return 'Installed: the game opens from your home screen or app list.';
+  if (i === 'available') return 'Install the game to open it like an app, offline too.';
+  return 'To install, use your browser’s Install or Add to Home Screen option.';
 }
 /** The Story layer's hooks while a story run is open: write its position now, and stop it. */
 let storyHooks: { flush(): boolean; stop(): void } | null = null;
@@ -293,14 +292,12 @@ function confirmUnsavedUpdate(): void {
 }
 const menuPwa = {
   view: pwaView,
-  storyLine,
-  audioLine,
-  offlineButton,
-  onOffline: (g: 'story' | 'audio') => {
-    const st = pwa.status;
-    if (g === 'audio' && st && st.audio.cached >= st.audio.total && st.audio.total > 0) void pwa.drop('audio');
-    else void pwa.download(g);
-  },
+  storageLine,
+  fullButton: () => fullButton(pwa.view),
+  install: () => pwa.view.install,
+  installNote,
+  onDownload: () => void pwa.downloadAll(true),
+  onInstall: () => void pwa.install(),
   onUpdate: applyUpdate,
   onRepair: () => void pwa.repair(),
   onErase: () => {
@@ -421,7 +418,7 @@ function openStory(): void {
     },
     offlineNote: (id) => {
       if (pwa.view.offline.kind === 'unsupported' || !pwa.status) return null;
-      return readyScenes().includes(id) ? 'Saved for offline play.' : 'Needs a connection the first time (it saves for offline as you play).';
+      return readyScenes().includes(id) ? 'Saved for offline play.' : 'Needs a connection until the full game has saved for offline play.';
     },
     update: tableUpdate,
     takeAutoContinue: () => {
@@ -809,6 +806,9 @@ function boot(): void {
     afterStartup: () => audio.preload('menu', 'metadata'),
     // After an update reload: return once to the same place (story scene or encounter, or the saved match).
     onMenu: () => {
+      // Essential startup is over: the whole-game offline download may now start (online only), a moment
+      // after the menu reveal so it never competes with it.
+      setTimeout(() => pwa.allowBackgroundDownload(), 1500);
       if (resumeAfterUpdate?.to === 'story') {
         autoContinueOnce = resumeAfterUpdate.run === true;
         openStory();

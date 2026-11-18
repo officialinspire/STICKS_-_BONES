@@ -53,7 +53,8 @@ initialization ──ready──► start prompt ──tap / click / Enter──
   - **Skip fades the soundtrack:** the audio fades out over 380 ms (120 ms under reduced motion) with the
     picture's fade to black. The menu, and its music, start only once the media is released. A stuck fade
     is cut off by a timer.
-  - The service worker never caches it (`docs/PWA.md`).
+  - It is saved offline in the whole-game download and streamed from the cache with byte ranges
+    (`docs/PWA.md`); `npm run pwa` plays it in a cold offline launch.
 - **Fallback credit (no video):** a short typeset card, "INSPIRE / presents", in the game's fonts on
   black.
   - It holds 1.6 s, is skippable the same way, and has no logo art or imitation video.
@@ -221,9 +222,12 @@ you land on.
   context is suspended.
 - Back in focus, **only the current scene** resumes (its track and bed).
 
-**Offline:** the short SFX (the owner's slam and drop included) are precached with the images (they're
-small and make the table feel right offline). Music, the result cues and the ambience beds are cached only in
-the optional audio download, after the player asks for it (`docs/PWA.md`). Video is never cached.
+**Offline (full offline storage, owner-authorized):** the table/UI SFX and the two result cues are saved
+with Quick Play's core files at install; story sounds, all music, the five ambience beds and the studio
+intro video are saved by the whole-game download that starts after the menu is up (`docs/PWA.md`). The
+worker serves `<audio>`/`<video>` byte ranges from the cache (206/416), so music and the credit play offline;
+`HEAD` checks used by the failure classifier are answered from the cache too. Before the download finishes,
+a missing file offline is a transient failure (silence now, recovery later), exactly as before.
 
 **Haptics** (`src/audio/haptics.ts`): feature-detected `navigator.vibrate`. There's a
 setting, shown only where supported, for short cues on place, knock and domino.
@@ -313,8 +317,8 @@ true peak), edits and boundaries, with each derivative's source hash. `npm run a
   cue is silence.
 
 **Budgets (deliberate):** music 13,500 KB (was 8,000), measured 12,757 KB; total 21,000 KB (was 15,400),
-measured 20,147 KB. Startup is unchanged in kind: no music or cue loads at startup. Offline, they are only in
-the optional audio download, whose size the Settings line discloses.
+measured 20,147 KB. Startup is unchanged in kind: no music or cue loads at startup. Offline, they are in the
+whole-game download (full offline storage stage), which starts only after the menu is up.
 
 ## What is real and what is placeholder
 

@@ -200,10 +200,23 @@ The Story content is on-demand, so instead of raising the image budget, images a
 | service worker | **22 KB (was 16)** | 19 KB | per-file sizes for truncation checks and four groups |
 | total | **15,400 KB (was 13,900)** | 15,045 KB | + 1.46 MB of on-demand Story images, none at startup |
 
+**Full offline storage stage (2026-11-18):** a new **offline pack budget, 21,000 KB**: everything the
+whole-game download saves (= every shipped file except `sw.js`/`build.json`), measured **20,403 KB**.
+- **Service worker 48 KB (was 22)**, measured 43 KB: `sw.js` and `build.json` both carry every file's
+  SHA-256 (81 × 64 hex characters each) plus the verification, range and retention code.
+- **Counting correction:** `sw.js` used to be counted in **code** (and so in **startup**) although the page
+  never loads it — the browser fetches it after `load`. It now has only its own gate. Code measures
+  **315 KB / 330** (the page-side download, status and install code is ~3 KB of it); startup **941 KB / 960**.
+- **Total 21,100 KB (was 21,000)**, measured 20,446 KB (+24 KB of worker and manifest).
+- **When it loads:** nothing new at startup. The whole-game download starts 1.5 s after the menu appears,
+  online only, 2 files at a time; `npm run pwa` checks that no Story or media file is requested before the
+  menu. Under Data Saver it waits for the player.
+
 **Startup polish stage (2026-11-18):** a separate **video budget, 400 KB**; the studio credit measures 272 KB.
 It no longer counts as music.
 - **When it loads:** it is fetched only once the essentials are in, at the start prompt (`preload="auto"`
-  then), so it never competes with initialization. It is not cached offline yet; that is the next stage.
+  then), so it never competes with initialization. (Since the full offline storage stage it is also saved
+  offline, after the menu.)
 - **Totals:** total 20,418 / 21,000 KB; code 327 / 330 KB (the skip guard, the muted retry and the
   soundtrack fade).
 - **Startup:** startup stays within 960 KB; the video is not part of it.

@@ -1,6 +1,7 @@
 // Post-build check: the bundle must be base-path safe for GitHub Pages subpaths.
 // With the default relative base ('./'), index.html and CSS must not reference
 // root-absolute URLs ("/..."), and every local reference must exist in dist/.
+import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -43,18 +44,20 @@ export const BUDGET = {
   singleImageKB: 450, // largest single image (Stage 13: jungle backdrop 428 KB at q84 — q80 failed the derivative quality gate)
   startupKB: 960, // initialization, raw bytes: core code + fonts + ONE patio variant (the larger: landscape) + Cousin's portrait + the tile atlas (startup stage: the tiles are decoded before the start prompt; measured ~931 KB, was 900 without the atlas)
   mediaKB: 13500, // music, streamed on demand only, never at startup: 12,757 KB measured = the two approved songs 7,331 + the owner's two scene beds 5,335 (stream-copied, audio bit-identical to the uploads; cover art removed saved 1.9 MB) + two result cues 90. Re-encoding the owner's masters lower was rejected (generation loss; the briefs ask ≥ 192 kbps)
-  videoKB: 400, // the INSPIRE studio credit (272 KB measured, 1080×720 H.264 + AAC, 5.8 s): fetched only after the essentials, at the start prompt; never cached offline yet
+  videoKB: 400, // the INSPIRE studio credit (272 KB measured, 1080×720 H.264 + AAC, 5.8 s): fetched only after the essentials, at the start prompt; saved offline in the media group
   sfxKB: 720, // short CC0 SFX (WAV, decoded once after the first gesture; measured ~600 KB)
   ambienceKB: 2200, // five CC0 ambience beds (MP3, fetched per scene on demand; measured ~1,900 KB)
   iconsKB: 140, // PWA icons (PNG by spec), generated from approved art (measured 113 KB)
-  swKB: 22, // service worker + build manifest: 19 KB measured (per-file sizes for truncation checks and four offline groups; was 8 KB)
-  totalKB: 21000, // whole dist: 20,147 KB measured after the owner audio stage (+5.4 MB of on-demand scene music and cues). Nothing in the increase loads at startup; offline it is only in the optional, size-disclosed audio download
+  swKB: 48, // service worker + build manifest: 43 KB measured (full offline pack: every shipped file with its size AND SHA-256 — 81 × 64 hex chars in each file — plus verification, byte ranges, retention; was 19 KB)
+  offlinePackKB: 21000, // everything the whole-game offline download saves (= every shipped file except sw.js/build.json): 20,403 KB measured. The owner authorized full offline storage; it starts only after the menu is up
+  totalKB: 21100, // whole dist: 20,446 KB measured after the full-offline stage (the owner audio stage added 5.4 MB of on-demand scene music and cues; this stage +24 KB of worker/manifest). Nothing beyond the startup set loads before the menu
 };
 const size = (f) => statSync(f).size;
 const rel = (f) => f.slice(dist.length);
 const isStory = (f) => /assets\/(script|story-ui)-[\w-]+\.js$/.test(rel(f)); // lazy Story chunks: the script text and the player
 const isAchievements = (f) => /assets\/achievements-[\w-]+\.(js|css)$/.test(rel(f)); // lazy: after the menu is up
-const isCode = (f) => /\.(js|css|html)$/.test(f) && !isStory(f) && !isAchievements(f);
+const isWorker = (f) => rel(f) === 'sw.js'; // registered after load by the browser, never part of the page's code: its own gate below
+const isCode = (f) => /\.(js|css|html)$/.test(f) && !isStory(f) && !isAchievements(f) && !isWorker(f);
 const isFont = (f) => /\.woff2$/.test(f);
 const isImage = (f) => /\.(webp|png|avif|jpe?g|svg|gif)$/.test(f);
 const isAmbience = (f) => /\/amb-[a-z]+-[\w-]+\.mp3$/.test(f);
@@ -99,6 +102,44 @@ const mediaKB = sumKB(files.filter(isMedia));
 const sfxKB = sumKB(files.filter(isSfx));
 const videoKB = sumKB(files.filter(isVideo));
 const ambienceKB = sumKB(files.filter(isAmbience));
+// Offline pack (docs/PWA.md): build.json must list EVERY shipped file (bar the worker and itself) with its
+// exact size and SHA-256, so the worker can store and verify complete copies of all of them.
+const pack = JSON.parse(readFileSync(join(dist, 'build.json'), 'utf8'));
+const listed = new Map(Object.entries(pack.groups).flatMap(([g, list]) => list.map(([u, b, sha]) => [u, { g, b, sha }])));
+const shipped = files.map(rel).filter((f) => f !== 'sw.js' && f !== 'build.json');
+for (const f of shipped) {
+  const e = listed.get(f);
+  if (!e) {
+    errors.push(`${f} ships but is not in the offline pack`);
+    continue;
+  }
+  const body = readFileSync(join(dist, f));
+  if (body.length !== e.b) errors.push(`${f}: offline pack says ${e.b} bytes, dist has ${body.length}`);
+  if (createHash('sha256').update(body).digest('hex') !== e.sha) errors.push(`${f}: offline pack checksum does not match the shipped file`);
+}
+for (const f of listed.keys()) if (!shipped.includes(f)) errors.push(`offline pack lists ${f}, which does not ship`);
+const sw = readFileSync(join(dist, 'sw.js'), 'utf8');
+if (!sw.includes(`const BUILD = "${pack.build}";`)) errors.push('sw.js and build.json disagree on the build id');
+// Required content: both background orientations, every chapter's art, music, SFX, ambience, result cues, video.
+for (const [what, re] of [
+  ['the intro video', /\.mp4$/],
+  ['a landscape backdrop', /^assets\/neighborhood-patio-[\w-]{8}\.webp$/],
+  ['a portrait backdrop', /^assets\/neighborhood-patio-portrait-/],
+  ['the cast sheets', /^assets\/cast-luz-/],
+  ['the ambience beds', /^assets\/amb-cave-/],
+  ['the result cues', /^assets\/result-win-/],
+  ['the SFX', /^assets\/tile-place-1-/],
+  ['the lazy Story chunk', /^assets\/script-/],
+  ['the fonts', /\.woff2$/],
+]) if (![...listed.keys()].some((f) => re.test(f))) errors.push(`offline pack is missing ${what}`);
+// Never in the pack: source masters (PNG sheets, audio originals, uploads) and byte-identical duplicates.
+for (const f of listed.keys()) if (/(^|\/)(originals|art)\//.test(f) || (/\.png$/.test(f) && !f.startsWith('icons/'))) errors.push(`offline pack includes a source master: ${f}`);
+const shas = new Map();
+for (const [f, e] of listed) {
+  if (shas.has(e.sha)) errors.push(`offline pack ships identical files twice: ${shas.get(e.sha)} and ${f}`);
+  shas.set(e.sha, f);
+}
+const packKB = [...listed.values()].reduce((s, e) => s + e.b, 0) / KB;
 const over = [];
 const gate = (name, value, limit) => {
   const line = `${name} ${value.toFixed(0)} KB / ${limit} KB`;
@@ -121,6 +162,7 @@ const budgetLines = [
   gate('ambience', ambienceKB, BUDGET.ambienceKB),
   gate('icons', iconsKB, BUDGET.iconsKB),
   gate('service worker', swKB, BUDGET.swKB),
+  gate('offline pack', packKB, BUDGET.offlinePackKB),
   gate('total', bytes / KB, BUDGET.totalKB),
 ];
 if (images.some((f) => /\.png$/.test(f))) errors.push(`a PNG original was bundled (${images.filter((f) => /\.png$/.test(f)).map(rel).join(', ')}) — serve the WebP derivative`);

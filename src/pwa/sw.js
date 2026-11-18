@@ -11,132 +11,354 @@
  *   - It never unregisters anything and never calls skipWaiting() on its own:
  *     an update waits until the player chooses "Update now".
  *
- * Groups (each file listed with its exact byte size from the build):
- *   shell  → `shell:<build>`  HTML, JS (including the lazy Story chunks), CSS, fonts, manifest, small
- *                             icons. All-or-nothing at install.
- *   core   → `assets:v1`      Menu/table art and the UI/table sounds: Quick Play works fully offline.
- *                             Best effort at install.
- *   story  → `story:v1`       Chapter backdrops (both variants), cast sheets, story accents. Cached as each
- *                             chapter is fetched (so the current and next chapter become offline-ready),
- *                             and in full only when the player chooses "Download the whole story".
- *   audio  → `audio:v1`       Music and ambience beds. OPTIONAL: cached only when the player turns on
- *                             offline audio (its size is shown first). Never cached otherwise; served with
- *                             byte ranges for <audio>. The studio intro video is never cached.
- * Every download is checked against its expected size (a truncated response is never stored), at most
- * 2 at a time; quota errors stop a job and are reported; nothing here ever throws to the page.
+ * Full offline storage (owner-authorized): EVERY shipped runtime file is listed by the build as
+ * [path, bytes, sha256], in four groups:
+ *   shell → `shell:<build>`  HTML, every JS chunk (lazy Story/achievements included), CSS, fonts, manifest,
+ *                            icons, font licences. All-or-nothing at install.
+ *   core  → `assets:v1`      Menu/table art (both orientations), UI/table sounds, result cues. Best effort at
+ *                            install: Quick Play offline as soon as the worker is installed.
+ *   story → `story:v1`       Chapter backdrops (both orientations), cast sheets, story sounds.
+ *   media → `media:v1`       Music, ambience beds and the studio intro video.
+ * The whole-game download (SB_CACHE_ALL) saves everything still missing, 2 files at a time, then re-reads
+ * and re-hashes every stored file; only when all of them match does it write the `verified` marker for
+ * this build — the page says "Full game ready offline" only from that marker plus a presence check.
+ *
+ * Storage rules:
+ *   - A response is stored only if it is a complete 200 with exactly the expected bytes and SHA-256
+ *     (never a 206, a truncated body or a corrupt copy). It is stored with the right MIME type.
+ *   - Files are content-hashed, so a copy already held under the same path (an older build's cache, or
+ *     the retired optional `audio:v1` cache) is adopted after re-hashing instead of downloaded again.
+ *   - Old media and art stay usable until this build's pack is verified; only then are unreferenced
+ *     entries and retired caches removed. Offline, a file the new build hasn't saved yet falls back to
+ *     the previous build's copy of the same asset (images, sounds and video only — never code).
+ *   - Byte ranges: a single range gets 206 with Content-Range, an unsatisfiable one 416 with
+ *     `bytes *\/<length>`, anything else the full 200 (ranges may be ignored, RFC 9110 §14.2).
+ *   - Quota errors stop the download and are reported; missing (404) files are counted; corrupt copies
+ *     are deleted and fetched again once. Nothing here ever throws to the page.
  */
 const APP = 'inspire:sticks-and-bones';
 /* eslint-disable no-undef */
 const BUILD = __SB_BUILD__;
 const GROUPS = __SB_GROUPS__;
 /* eslint-enable no-undef */
-const CACHE = { shell: `${APP}:shell:${BUILD}`, core: `${APP}:assets:v1`, story: `${APP}:story:v1`, audio: `${APP}:audio:v1` };
+const GROUP_NAMES = ['shell', 'core', 'story', 'media'];
+const CACHE = { shell: `${APP}:shell:${BUILD}`, core: `${APP}:assets:v1`, story: `${APP}:story:v1`, media: `${APP}:media:v1` };
+const META = `${APP}:meta:v1`;
+/** Retired caches whose files may be adopted, then deleted once this build is verified. */
+const RETIRED = [`${APP}:audio:v1`];
 const ours = (name) => name.startsWith(`${APP}:`);
 const abs = (u) => new URL(u, self.location.href).href;
 const keyOf = (u) => {
   const x = new URL(u);
   return x.origin + x.pathname;
 };
-/** key → { group, url, bytes } */
+/** key → { group, url, bytes, sha } in pack order (shell, core, story, media). */
 const FILES = new Map();
-for (const [group, list] of Object.entries(GROUPS)) for (const [u, bytes] of list) FILES.set(keyOf(abs(u)), { group, url: abs(u), bytes });
+for (const group of GROUP_NAMES) for (const [u, bytes, sha] of GROUPS[group]) FILES.set(keyOf(abs(u)), { group, rel: u, url: abs(u), bytes, sha });
+const ALL = [...FILES.values()];
+const TOTAL_BYTES = ALL.reduce((s, f) => s + f.bytes, 0);
 const INDEX = abs('index.html');
 const SCOPE = self.registration.scope;
+const MARKER = abs('__sb-offline-verified');
 
-/** Last problem per group (memory only; the page re-derives status from the caches). */
-const lastError = { shell: null, core: null, story: null, audio: null };
-const jobs = { core: null, story: null, audio: null };
+const TYPES = {
+  html: 'text/html; charset=utf-8',
+  js: 'text/javascript; charset=utf-8',
+  css: 'text/css; charset=utf-8',
+  woff2: 'font/woff2',
+  webp: 'image/webp',
+  png: 'image/png',
+  wav: 'audio/wav',
+  mp3: 'audio/mpeg',
+  mp4: 'video/mp4',
+  webmanifest: 'application/manifest+json',
+  txt: 'text/plain; charset=utf-8',
+  json: 'application/json',
+};
+const extOf = (url) => (/\.([a-z0-9]+)$/i.exec(new URL(url).pathname)?.[1] ?? '').toLowerCase();
+const typeOf = (url) => TYPES[extOf(url)] || 'application/octet-stream';
+/** Media and art may fall back to an older build's copy offline; code never does. */
+const SUBSTITUTABLE = new Set(['webp', 'wav', 'mp3', 'mp4']);
 
-/** Read from one of our caches without creating it. */
-async function matchIn(name, url, opts) {
-  return (await caches.has(name)) ? (await caches.open(name)).match(url, opts) : undefined;
-}
+/** The download job (one at a time) and what the last one found (memory only). */
+let job = null;
+let progress = null;
+const last = { error: null, missing: 0, corrupt: 0, failed: 0, storage: null };
 
 const isQuota = (e) => !!e && (e.name === 'QuotaExceededError' || /quota/i.test(String(e.message || e)));
+const fail = (kind, message) => Object.assign(new Error(message), { kind });
 
 async function broadcast(msg) {
   for (const c of await self.clients.matchAll({ includeUncontrolled: true })) c.postMessage(msg);
 }
 
-async function cacheShell() {
-  const cache = await caches.open(CACHE.shell);
-  // `cache: 'reload'` bypasses the HTTP cache so a new build never stores stale files.
-  await cache.addAll(GROUPS.shell.map(([u]) => new Request(abs(u), { cache: 'reload' })));
+async function sha256(buf) {
+  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', buf));
+  let out = '';
+  for (const b of d) out += b.toString(16).padStart(2, '0');
+  return out;
 }
 
-/** Fetch one file and store it only if it is complete (exact expected size). */
-async function fetchInto(cache, url, bytes) {
-  const res = await fetch(new Request(url, { cache: 'reload' }));
-  if (!res.ok) throw Object.assign(new Error(`HTTP ${res.status}`), { missing: res.status === 404 });
-  const blob = await res.blob();
-  if (bytes && blob.size !== bytes) throw new Error(`truncated: ${blob.size} of ${bytes} bytes`);
-  await cache.put(url, new Response(blob, { status: 200, headers: { 'Content-Type': res.headers.get('Content-Type') || 'application/octet-stream', 'Content-Length': String(blob.size) } }));
+/** Our caches only, and never created just by looking. */
+async function ownNames() {
+  return (await caches.keys()).filter(ours);
+}
+async function openIf(name) {
+  return (await caches.has(name)) ? caches.open(name) : null;
 }
 
-/** Download a group's missing files, 2 at a time, with progress. Never throws. */
-function cacheGroup(group) {
-  if (jobs[group]) return jobs[group];
-  jobs[group] = (async () => {
-    lastError[group] = null;
-    const cache = await caches.open(CACHE[group]);
-    const list = GROUPS[group];
+/** A complete, checksum-verified copy is stored with these headers. */
+function stored(f, body) {
+  return new Response(body, { status: 200, headers: { 'Content-Type': typeOf(f.url), 'Content-Length': String(f.bytes), 'Accept-Ranges': 'bytes', 'X-SB-Sha256': f.sha } });
+}
+async function putVerified(cache, f, buf) {
+  if (buf.byteLength !== f.bytes) throw fail('corrupt', `incomplete: ${buf.byteLength} of ${f.bytes} bytes`);
+  if ((await sha256(buf)) !== f.sha) throw fail('corrupt', 'checksum mismatch');
+  await cache.put(f.url, stored(f, buf));
+}
+
+/** The stored copy is this build's file (cheap check: the checksum header written when it was verified). */
+async function isGood(cache, f) {
+  const r = cache && (await cache.match(f.url, { ignoreSearch: true }));
+  return !!r && r.headers.get('X-SB-Sha256') === f.sha && r.headers.get('Content-Length') === String(f.bytes);
+}
+
+/** Download one file (or adopt an identical copy we already hold) into its group's cache. */
+async function ensure(f, cache) {
+  // Adopt: the same path in any of our caches (content-hashed names), after re-hashing it.
+  for (const name of await ownNames()) {
+    if (name === META) continue;
+    const c = await caches.open(name);
+    const r = await c.match(f.url, { ignoreSearch: true });
+    if (!r || (name === CACHE[f.group] && r.headers.get('X-SB-Sha256') === f.sha)) continue;
+    try {
+      const buf = await r.arrayBuffer();
+      await putVerified(cache, f, buf);
+      return 'adopted';
+    } catch (e) {
+      if (isQuota(e)) throw e;
+      if (name === CACHE[f.group]) await c.delete(f.url, { ignoreSearch: true }); // a corrupt copy of our own: drop it
+    }
+  }
+  let lastErr = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), Math.max(30_000, f.bytes / 20)); // ≥ 20 KB/s, or it is a stall
+    try {
+      const res = await fetch(new Request(f.url, { cache: 'reload', signal: ctl.signal }));
+      if (res.status === 404 || res.status === 410) throw fail('missing', `HTTP ${res.status}`);
+      if (res.status !== 200) throw fail('network', `HTTP ${res.status}`); // never store a 206 or an error page
+      const buf = await res.arrayBuffer();
+      await putVerified(cache, f, buf);
+      return 'downloaded';
+    } catch (e) {
+      if (isQuota(e) || (e && e.kind === 'missing')) throw e;
+      lastErr = e && e.kind ? e : fail('network', String((e && e.message) || e));
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastErr;
+}
+
+async function readMarker() {
+  try {
+    const c = await openIf(META);
+    const r = c && (await c.match(MARKER));
+    return r ? await r.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Remove what this verified build no longer uses: other shells, retired caches, unreferenced entries. */
+async function prune() {
+  let removed = 0;
+  for (const name of await ownNames()) {
+    if (name === META || name === CACHE.shell) continue;
+    const group = GROUP_NAMES.find((g) => CACHE[g] === name);
+    if (!group) {
+      await caches.delete(name); // an older shell, the retired audio cache, or anything stale of ours
+      removed++;
+      continue;
+    }
+    const c = await caches.open(name);
+    for (const req of await c.keys()) {
+      const f = FILES.get(keyOf(req.url));
+      if (!f || f.group !== group) {
+        await c.delete(req);
+        removed++;
+      }
+    }
+  }
+  return removed;
+}
+
+/**
+ * The whole-game download: everything missing, then a full re-hash, then the marker and the prune.
+ * `deep` re-hashes even when this build is already verified (Repair). Never throws.
+ */
+function runFull(deep = false) {
+  if (job) return job;
+  job = (async () => {
+    Object.assign(last, { error: null, missing: 0, corrupt: 0, failed: 0 });
+    const opened = {};
+    try {
+      for (const g of GROUP_NAMES) opened[g] = await caches.open(CACHE[g]);
+    } catch (e) {
+      last.error = isQuota(e) ? 'quota' : 'storage';
+      last.storage = String((e && e.message) || e);
+      await broadcast({ type: 'SB_PROGRESS', phase: 'done', finished: true, result: { ...last, verified: false } });
+      return;
+    }
+    const marker = await readMarker();
     const todo = [];
     let done = 0;
     let bytesDone = 0;
-    for (const [u, b] of list) {
-      if (await cache.match(abs(u))) {
+    for (const f of ALL) {
+      if (await isGood(opened[f.group], f)) {
         done++;
-        bytesDone += b;
-      } else todo.push([u, b]);
+        bytesDone += f.bytes;
+      } else todo.push(f);
     }
-    const total = list.length;
-    const bytesTotal = list.reduce((s, [, b]) => s + b, 0);
-    let missing = 0;
-    const worker = async () => {
-      while (todo.length) {
-        const [u, b] = todo.shift();
-        try {
-          await fetchInto(cache, abs(u), b);
-          done++;
-          bytesDone += b;
-        } catch (e) {
-          if (isQuota(e)) {
-            lastError[group] = 'quota';
-            todo.length = 0; // stop: more files won't fit either
-          } else if (e && e.missing) missing++;
-          else lastError[group] = 'network';
-        }
-        await broadcast({ type: 'SB_PROGRESS', group, done, total, bytesDone, bytesTotal });
-      }
+    if (!todo.length && marker && marker.build === BUILD && !deep) {
+      progress = null;
+      await broadcast({ type: 'SB_PROGRESS', phase: 'done', finished: true, result: { ...last, verified: true } });
+      return;
+    }
+    const total = ALL.length;
+    const report = (phase) => {
+      progress = { phase, done, total, bytesDone, bytesTotal: TOTAL_BYTES };
+      return broadcast({ type: 'SB_PROGRESS', ...progress });
     };
-    await Promise.all([worker(), worker()]);
-    await broadcast({ type: 'SB_PROGRESS', group, done, total, bytesDone, bytesTotal, missing, error: lastError[group], finished: true });
-  })().finally(() => (jobs[group] = null));
-  return jobs[group];
-}
-
-async function groupStatus(group) {
-  const total = GROUPS[group].length;
-  const totalBytes = GROUPS[group].reduce((s, [, b]) => s + b, 0);
-  // Never create a cache just by asking about it (story/audio exist only once something is saved).
-  if (!(await caches.has(CACHE[group]))) return { cached: 0, total, bytes: 0, totalBytes, error: lastError[group], busy: !!jobs[group], have: group === 'story' || group === 'core' ? [] : undefined };
-  const cache = await caches.open(CACHE[group]);
-  let cached = 0;
-  let bytes = 0;
-  const have = [];
-  for (const [u, b] of GROUPS[group]) {
-    if (await cache.match(abs(u))) {
-      cached++;
-      bytes += b;
-      have.push(u);
+    await report('download');
+    const download = async (list) => {
+      const queue = [...list];
+      const worker = async () => {
+        while (queue.length) {
+          const f = queue.shift();
+          try {
+            await ensure(f, opened[f.group]);
+            done++;
+            bytesDone += f.bytes;
+          } catch (e) {
+            if (isQuota(e)) {
+              last.error = 'quota';
+              queue.length = 0; // more files won't fit either
+            } else if (e && e.kind === 'missing') last.missing++;
+            else if (e && e.kind === 'corrupt') last.corrupt++;
+            else last.failed++;
+          }
+          await report('download');
+        }
+      };
+      await Promise.all([worker(), worker()]);
+    };
+    await download(todo);
+    if (!last.error && last.missing + last.corrupt + last.failed === 0) {
+      // Verify: re-read and re-hash every stored file; a damaged copy is dropped and fetched once more.
+      done = 0;
+      bytesDone = 0;
+      const bad = [];
+      for (const f of ALL) {
+        const r = await opened[f.group].match(f.url, { ignoreSearch: true });
+        let ok = false;
+        try {
+          const buf = r ? await r.arrayBuffer() : null;
+          ok = !!buf && buf.byteLength === f.bytes && (await sha256(buf)) === f.sha;
+        } catch {
+          ok = false;
+        }
+        if (ok) {
+          done++;
+          bytesDone += f.bytes;
+        } else {
+          if (r) await opened[f.group].delete(f.url, { ignoreSearch: true });
+          bad.push(f);
+        }
+        if (done % 8 === 0 || done === total) await report('verify');
+      }
+      if (bad.length) await download(bad);
     }
-  }
-  return { cached, total: GROUPS[group].length, bytes, totalBytes: GROUPS[group].reduce((s, [, b]) => s + b, 0), error: lastError[group], busy: !!jobs[group], have: group === 'story' || group === 'core' ? have : undefined };
+    const complete = !last.error && last.missing + last.corrupt + last.failed === 0;
+    if (!complete && !last.error) last.error = last.failed ? 'network' : last.corrupt ? 'corrupt' : 'missing';
+    if (complete) {
+      try {
+        const meta = await caches.open(META);
+        await meta.put(MARKER, new Response(JSON.stringify({ build: BUILD, files: total, bytes: TOTAL_BYTES }), { headers: { 'Content-Type': 'application/json' } }));
+        await prune(); // only now: old media stayed usable until every replacement was verified
+      } catch (e) {
+        last.error = isQuota(e) ? 'quota' : 'storage';
+      }
+    } else if (marker && marker.build === BUILD) {
+      // This build was verified before, but files are gone or damaged now: it is no longer complete.
+      try {
+        await (await caches.open(META)).delete(MARKER);
+      } catch {
+        /* reported through status */
+      }
+    }
+    progress = null;
+    await broadcast({ type: 'SB_PROGRESS', phase: 'done', finished: true, done, total, bytesDone, bytesTotal: TOTAL_BYTES, result: { ...last, verified: complete && !last.error } });
+  })()
+    .catch(async (e) => {
+      last.error = isQuota(e) ? 'quota' : 'storage';
+      progress = null;
+      await broadcast({ type: 'SB_PROGRESS', phase: 'done', finished: true, result: { ...last, verified: false } });
+    })
+    .finally(() => (job = null));
+  return job;
 }
 
+/** What is saved right now (cheap: presence and checksum headers, no re-hashing). */
 async function status() {
-  const out = { build: BUILD };
-  for (const g of ['shell', 'core', 'story', 'audio']) out[g] = await groupStatus(g);
+  const out = { build: BUILD, busy: !!job, progress, last: { ...last }, totalBytes: TOTAL_BYTES, totalFiles: ALL.length };
+  try {
+    const opened = {};
+    for (const g of GROUP_NAMES) opened[g] = await openIf(CACHE[g]);
+    let good = 0;
+    let goodBytes = 0;
+    const have = [];
+    for (const g of GROUP_NAMES) {
+      let cached = 0;
+      let bytes = 0;
+      for (const [u, b, sha] of GROUPS[g]) {
+        const r = opened[g] && (await opened[g].match(abs(u), { ignoreSearch: true }));
+        if (!r) continue;
+        cached++; // present (a retained older-format copy still plays)
+        bytes += b;
+        have.push(u);
+        if (r.headers.get('X-SB-Sha256') === sha) {
+          good++;
+          goodBytes += b;
+        }
+      }
+      out[g] = { cached, total: GROUPS[g].length, bytes, totalBytes: GROUPS[g].reduce((s, [, b]) => s + b, 0) };
+    }
+    out.have = have;
+    out.good = good;
+    out.goodBytes = goodBytes;
+    const marker = await readMarker();
+    out.verifiedBuild = marker ? marker.build : null;
+    out.verified = !!marker && marker.build === BUILD && good === ALL.length;
+    // Verified once, files gone since (the browser evicted or removed them).
+    out.damaged = !!marker && marker.build === BUILD ? ALL.length - good : 0;
+    // Entries of ours this build doesn't reference (an older build's media/art, kept until this one is verified).
+    let retained = 0;
+    for (const name of await ownNames()) {
+      if (name === META || name === CACHE.shell) continue;
+      const group = GROUP_NAMES.find((g) => CACHE[g] === name);
+      const c = await caches.open(name);
+      for (const req of await c.keys()) {
+        const f = FILES.get(keyOf(req.url));
+        if (!group || !f || f.group !== group) retained++;
+      }
+    }
+    out.retained = retained;
+    out.storage = null;
+  } catch (e) {
+    out.storage = String((e && e.message) || e); // storage unavailable (private mode, blocked site data)
+  }
   return out;
 }
 
@@ -144,14 +366,46 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
       try {
-        await cacheShell();
+        // The shell is all-or-nothing: every file complete and checksum-verified (or adopted).
+        const shell = await caches.open(CACHE.shell);
+        const queue = ALL.filter((f) => f.group === 'shell');
+        const worker = async () => {
+          while (queue.length) {
+            const f = queue.shift();
+            if (!(await isGood(shell, f))) await ensure(f, shell);
+          }
+        };
+        await Promise.all([worker(), worker()]);
       } catch (e) {
         // Tell open pages why (e.g. storage full); the install fails and is retried on a later visit.
-        await broadcast({ type: 'SB_INSTALL_FAILED', error: isQuota(e) ? 'quota' : 'network' });
+        await broadcast({ type: 'SB_INSTALL_FAILED', error: isQuota(e) ? 'quota' : e && e.kind === 'missing' ? 'missing' : 'network' });
         throw e;
       }
-      // Only what Quick Play needs; Story files arrive per chapter or by the player's explicit download.
-      await cacheGroup('core');
+      // Quick Play's art and sounds, best effort; the rest arrives with the whole-game download.
+      try {
+        const core = await caches.open(CACHE.core);
+        const list = ALL.filter((f) => f.group === 'core');
+        let done = 0;
+        const queue = [...list];
+        const worker = async () => {
+          while (queue.length) {
+            const f = queue.shift();
+            try {
+              if (!(await isGood(core, f))) await ensure(f, core);
+              done++;
+            } catch (e) {
+              if (isQuota(e)) {
+                last.error = 'quota';
+                queue.length = 0;
+              }
+            }
+            await broadcast({ type: 'SB_PROGRESS', phase: 'install', done, total: list.length, bytesDone: 0, bytesTotal: 0 });
+          }
+        };
+        await Promise.all([worker(), worker()]);
+      } catch (e) {
+        last.error = isQuota(e) ? 'quota' : 'storage';
+      }
     })(),
   );
 });
@@ -159,74 +413,120 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
-      // Only this app's caches are ever deleted: old shells, and files no build references.
-      for (const name of await caches.keys()) {
-        if (ours(name) && name.startsWith(`${APP}:shell:`) && name !== CACHE.shell) await caches.delete(name);
-      }
-      for (const group of ['core', 'story', 'audio']) {
-        if (!(await caches.has(CACHE[group]))) continue; // never create a cache just to prune it
-        const c = await caches.open(CACHE[group]);
-        for (const req of await c.keys()) {
-          const f = FILES.get(keyOf(req.url));
-          if (!f || f.group !== group) await c.delete(req);
-        }
-      }
+      // Older shells are code for a build no page runs any more. Media and art are NOT pruned here:
+      // they stay usable until this build's whole pack is verified (see prune()).
+      for (const name of await ownNames()) if (name.startsWith(`${APP}:shell:`) && name !== CACHE.shell) await caches.delete(name);
       await self.clients.claim();
     })(),
   );
 });
 
-/** A cached full response, cut to the requested byte range (for <audio> elements). */
-async function ranged(res, range) {
-  const m = /bytes=(\d*)-(\d*)/.exec(range || '');
-  if (!m) return res;
-  const buf = await res.arrayBuffer();
-  const len = buf.byteLength;
-  const start = m[1] === '' ? Math.max(0, len - Number(m[2])) : Number(m[1]);
-  const end = m[1] !== '' && m[2] !== '' ? Math.min(len - 1, Number(m[2])) : len - 1;
-  if (start >= len || start > end) return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${len}` } });
-  return new Response(buf.slice(start, end + 1), {
+/** Parse a Range header against a length: null = serve the whole file, 'unsatisfiable' = 416. */
+function parseRange(h, len) {
+  if (!h) return null;
+  const m = /^bytes=(\d*)-(\d*)$/.exec(h.trim());
+  if (!m || (m[1] === '' && m[2] === '')) return null; // malformed or several ranges: ignore it, send 200
+  if (m[1] === '') {
+    const n = Number(m[2]);
+    return n === 0 || len === 0 ? 'unsatisfiable' : { start: Math.max(0, len - n), end: len - 1 };
+  }
+  const start = Number(m[1]);
+  if (m[2] !== '' && Number(m[2]) < start) return null; // invalid: ignore it
+  if (start >= len) return 'unsatisfiable';
+  return { start, end: m[2] === '' ? len - 1 : Math.min(len - 1, Number(m[2])) };
+}
+
+/** Answer from a stored copy with the right MIME type, honouring a byte range (200 / 206 / 416). */
+async function respond(hit, req, f) {
+  const head = req.method === 'HEAD';
+  const type = typeOf(f.url);
+  const base = { 'Content-Type': type, 'Accept-Ranges': 'bytes' };
+  const range = req.headers.get('range');
+  if (!range) {
+    const len = hit.headers.get('Content-Length');
+    return new Response(head ? null : hit.body, { status: 200, headers: len ? { ...base, 'Content-Length': len } : base });
+  }
+  const blob = await hit.blob();
+  const r = parseRange(range, blob.size);
+  if (r === null) return new Response(head ? null : blob, { status: 200, headers: { ...base, 'Content-Length': String(blob.size) } });
+  if (r === 'unsatisfiable') return new Response(null, { status: 416, headers: { ...base, 'Content-Range': `bytes */${blob.size}` } });
+  return new Response(head ? null : blob.slice(r.start, r.end + 1, type), {
     status: 206,
-    headers: { 'Content-Type': res.headers.get('Content-Type') || 'audio/mpeg', 'Content-Range': `bytes ${start}-${end}/${len}`, 'Content-Length': String(end - start + 1), 'Accept-Ranges': 'bytes' },
+    headers: { ...base, 'Content-Range': `bytes ${r.start}-${r.end}/${blob.size}`, 'Content-Length': String(r.end - r.start + 1) },
   });
+}
+
+/** This build's copy, or the same path held elsewhere by us (e.g. the retired audio cache). */
+async function lookup(f) {
+  const own = await openIf(CACHE[f.group]);
+  const hit = own && (await own.match(f.url, { ignoreSearch: true }));
+  if (hit) return hit;
+  for (const name of await ownNames()) {
+    if (name === META || name === CACHE[f.group]) continue;
+    const r = await (await caches.open(name)).match(f.url, { ignoreSearch: true });
+    if (r) return r;
+  }
+  return null;
+}
+
+/** "<dir>/<stem>-<8-char hash>.<ext>" → "<dir>/<stem>.<ext>": the same asset from another build. */
+const stemOf = (url) => {
+  const p = new URL(url).pathname;
+  const m = /^(.*\/[^/]*?)-[\w-]{8}\.(\w+)$/.exec(p);
+  return m ? `${m[1]}.${m[2]}` : null;
+};
+/** Offline only: an older build's copy of the same image/sound/video, kept until this build is verified. */
+async function olderVersion(f) {
+  if (!SUBSTITUTABLE.has(extOf(f.url))) return null;
+  const want = stemOf(f.url);
+  if (!want) return null;
+  for (const name of await ownNames()) {
+    if (name === META || name.startsWith(`${APP}:shell:`)) continue;
+    const c = await caches.open(name);
+    for (const req of await c.keys()) if (req.url !== f.url && stemOf(req.url) === want) return c.match(req);
+  }
+  return null;
 }
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
-  if (req.method !== 'GET' || !req.url.startsWith(SCOPE)) return; // not ours: untouched
+  if ((req.method !== 'GET' && req.method !== 'HEAD') || !req.url.startsWith(SCOPE)) return; // not ours: untouched
   const key = keyOf(req.url);
   if (req.mode === 'navigate') {
     if (key !== keyOf(SCOPE) && key !== keyOf(INDEX)) return;
     // Cache-first: the running build's HTML always matches its cached JS/CSS; updates wait for the player.
-    event.respondWith((async () => (await (await caches.open(CACHE.shell)).match(INDEX)) ?? fetch(req))());
-    return;
-  }
-  const f = FILES.get(key);
-  if (!f) return; // video and anything unlisted: network only
-  if (f.group === 'audio') {
-    // Optional offline audio: served from its cache only if the player downloaded it; never cached here.
     event.respondWith(
       (async () => {
-        const hit = await matchIn(CACHE.audio, f.url);
-        return hit ? ranged(hit, req.headers.get('range')) : fetch(req);
+        const shell = await openIf(CACHE.shell);
+        return (shell && (await shell.match(INDEX))) ?? fetch(req);
       })(),
     );
     return;
   }
+  const f = FILES.get(key);
+  if (!f) return; // unlisted: network only
   event.respondWith(
     (async () => {
-      const hit = await matchIn(CACHE[f.group], f.url, { ignoreSearch: true });
-      if (hit) return hit;
-      const res = await fetch(req);
-      if (res.ok && f.group !== 'shell') {
-        // Cache-on-fetch (images/SFX the game asked for): the current and prefetched next chapter stay available offline.
+      const hit = await lookup(f);
+      if (hit) return respond(hit, req, f);
+      let res;
+      try {
+        res = await fetch(req);
+      } catch (e) {
+        const old = await olderVersion(f);
+        if (old) return respond(old, req, f);
+        throw e;
+      }
+      if (res.status === 200 && req.method === 'GET' && !req.headers.get('range')) {
+        // Cache-on-fetch: what the game asked for is kept, if (and only if) it is complete and verified.
         const copy = res.clone();
         event.waitUntil(
           (async () => {
-            const blob = await copy.blob();
-            if (blob.size !== f.bytes) return; // never store a truncated file
-            await (await caches.open(CACHE[f.group])).put(f.url, new Response(blob, { headers: { 'Content-Type': copy.headers.get('Content-Type') || '' } }));
-          })().catch((e) => (lastError[f.group] = isQuota(e) ? 'quota' : 'network')),
+            const cache = await caches.open(CACHE[f.group]);
+            await putVerified(cache, f, await copy.arrayBuffer());
+          })().catch((e) => {
+            if (isQuota(e)) last.error = 'quota';
+          }),
         );
       }
       return res;
@@ -238,27 +538,23 @@ self.addEventListener('message', (event) => {
   const msg = event.data || {};
   const reply = (v) => event.ports[0]?.postMessage(v);
   if (msg.type === 'SB_SKIP_WAITING') {
-    self.skipWaiting();
+    self.skipWaiting(); // only ever sent by the page after the player chose "Update now"
   } else if (msg.type === 'SB_STATUS') {
     event.waitUntil(status().then(reply));
-  } else if (msg.type === 'SB_CACHE_GROUP' && ['core', 'story', 'audio'].includes(msg.group)) {
-    event.waitUntil(cacheGroup(msg.group).then(status).then(reply));
-  } else if (msg.type === 'SB_DROP_GROUP' && ['story', 'audio'].includes(msg.group)) {
-    event.waitUntil(caches.delete(CACHE[msg.group]).then(status).then(reply));
+  } else if (msg.type === 'SB_CACHE_ALL') {
+    event.waitUntil(runFull(false).then(status).then(reply));
   } else if (msg.type === 'SB_REPAIR') {
-    // Targeted repair: delete ONLY this app's caches, then download again what the player had chosen.
-    const keep = (msg.groups || []).filter((g) => ['story', 'audio'].includes(g));
+    // App-only repair: stale caches of ours and the marker go; every stored file is re-hashed and a bad
+    // copy replaced; what is missing downloads again. Saves and settings (localStorage) are never touched.
     event.waitUntil(
       (async () => {
-        for (const name of await caches.keys()) if (ours(name)) await caches.delete(name);
         try {
-          await cacheShell();
-          lastError.shell = null;
-        } catch (e) {
-          lastError.shell = isQuota(e) ? 'quota' : 'network';
+          const keep = new Set([...Object.values(CACHE), ...RETIRED]);
+          for (const name of await ownNames()) if (!keep.has(name)) await caches.delete(name);
+        } catch {
+          /* storage unavailable: status says so */
         }
-        await cacheGroup('core');
-        for (const g of keep) await cacheGroup(g);
+        await runFull(true);
         reply(await status());
       })(),
     );
