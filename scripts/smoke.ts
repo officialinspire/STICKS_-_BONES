@@ -5,6 +5,7 @@
  *  - The start screen loads from /STICKS_-_BONES/ with a clean console.
  *  - The manifest resolves inside the subpath; the service worker reaches
  *    "Quick Play is ready offline".
+ *  - Every menu page fits in portrait, landscape, tablet and desktop viewports.
  *  - A game vs the computer is dealt and played through one complete hand.
  *  - Offline (server down + browser offline), the app restarts from cache.
  */
@@ -13,6 +14,7 @@ import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { showMenuItem } from './lib/menu-navigation';
 
 type Page = import('playwright').Page;
 const require = createRequire(import.meta.url);
@@ -57,6 +59,66 @@ async function enterMenu() {
   await page.waitForSelector('[data-go="setup"]', { timeout: 30_000 });
 }
 
+async function checkMenu(label: string) {
+  const pager = page.locator('menu-pages:visible');
+  await pager.waitFor();
+  // ResizeObserver and loaded fonts can repartition the content before the next paint.
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  let pages = 0;
+  const next = pager.locator('[data-page-step="1"]');
+  do {
+    const overflow = await pager.evaluate((menu: HTMLElement) => {
+      const view = menu.querySelector<HTMLElement>('.menu-page-view')!;
+      const doc = document.documentElement;
+      return Math.max(doc.scrollWidth - innerWidth, doc.scrollHeight - innerHeight, view.scrollWidth - view.clientWidth, view.scrollHeight - view.clientHeight);
+    });
+    const box = await pager.boundingBox();
+    check(overflow <= 1 && !!box && box.y >= 0 && box.y + box.height <= (page.viewportSize()?.height ?? 0) + 1, `${label}, page ${++pages}: overflow ${overflow}px`);
+    if (!(await next.isVisible()) || await next.getAttribute('aria-disabled') === 'true') break;
+    await next.evaluate((button: HTMLButtonElement) => button.click());
+  } while (pages < 120);
+  check(pages < 120, `${label}: pagination never finished`);
+}
+
+async function navigate(selector: string) {
+  await showMenuItem(page, selector);
+  await page.click(selector);
+}
+
+async function checkMenuViewports() {
+  for (const [width, height] of [[320, 568], [568, 320], [390, 844], [844, 390], [768, 1024], [1024, 768], [1366, 768], [1920, 1080]] as const) {
+    await page.setViewportSize({ width, height });
+    const size = `${width}×${height}`;
+    await checkMenu(`Home ${size}`);
+    for (const section of ['setup', 'settings', 'rules', 'stats', 'achievements']) {
+      await navigate(`[data-go="${section}"]`);
+      await checkMenu(`${section} ${size}`);
+      await page.click('[data-act="home"]');
+      await page.locator('.home-nav').waitFor();
+    }
+    await navigate('[data-act="story"]');
+    await checkMenu(`Case file ${size}`);
+    await page.click('[data-act="story-home"]');
+    await page.locator('.home-nav').waitFor();
+  }
+
+  await page.setViewportSize({ width: 320, height: 568 });
+  await navigate('[data-go="setup-local"]');
+  await showMenuItem(page, 'input[name="mode"][value="partnership4"]');
+  await page.check('input[name="mode"][value="partnership4"]');
+  await showMenuItem(page, 'input[name="name1"]');
+  await page.fill('input[name="name1"]', 'Marisol');
+  await showMenuItem(page, 'select[name="seating"]');
+  await page.selectOption('select[name="seating"]', 'left');
+  await page.setViewportSize({ width: 568, height: 320 });
+  await showMenuItem(page, 'input[name="name1"]');
+  check(await page.inputValue('input[name="name1"]') === 'Marisol', 'player name was lost during rotation');
+  check(await page.inputValue('select[name="seating"]') === 'left', 'seating was lost during rotation');
+  await page.click('[data-act="home"]');
+  await page.locator('.home-nav').waitFor();
+  await page.setViewportSize({ width: 390, height: 844 });
+}
+
 try {
   await page.goto(`${ORIGIN}${APP}`);
   const manifest = await page.evaluate(async () => {
@@ -67,9 +129,17 @@ try {
   check(manifest.start === APP && manifest.scope === APP, `manifest outside the subpath: ${JSON.stringify(manifest)}`);
   await enterMenu();
   await page.waitForFunction(() => /Quick Play is ready offline/.test(document.querySelector('[data-region="offline-status"]')?.textContent ?? ''), null, { timeout: 90_000 }).catch(() => failures.push('offline status never became ready'));
-  await page.click('[data-go="setup"]');
+  await checkMenuViewports();
+  await navigate('[data-go="setup"]');
   await page.click('.btn-start');
   await page.waitForSelector('.table-screen');
+  await page.setViewportSize({ width: 568, height: 320 });
+  await page.click('[data-act="pause"]');
+  await checkMenu('Pause 568×320');
+  await showMenuItem(page, 'input[name="set-instant-text"]');
+  await page.check('input[name="set-instant-text"]');
+  await page.click('[data-act="pause-resume"]');
+  await page.setViewportSize({ width: 390, height: 844 });
   const until = Date.now() + 180_000;
   let finished = false;
   while (Date.now() < until && !finished) {
@@ -102,5 +172,5 @@ if (failures.length) {
   console.error(`SMOKE FAILED:\n  ${failures.join('\n  ')}`);
   process.exit(1);
 }
-console.log('Smoke passed: subpath load, offline-ready, one full hand vs the computer, offline restart, clean console.');
+console.log('Smoke passed: subpath load, paged menus across eight viewports, offline-ready, one full hand vs the computer, offline restart, clean console.');
 process.exit(0);

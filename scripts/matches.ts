@@ -14,6 +14,7 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
+import { showMenuItem } from './lib/menu-navigation';
 
 type Page = import('playwright').Page;
 type Ev = { name: string; [k: string]: unknown };
@@ -50,14 +51,25 @@ async function enterMenu(page: Page, reload = false) {
 }
 async function setup(page: Page, o: { mode: string; opponent: 'ai' | 'local'; difficulty?: string; seating?: string; seed: string; dbl?: boolean }) {
   await page.click('[data-go="setup"]');
-  await page.locator('details.dev-panel summary').click();
+  await showMenuItem(page, 'input[name="seed"]');
   await page.fill('input[name="seed"]', o.seed);
+  await showMenuItem(page, 'input[name="aiSeed"]');
   await page.fill('input[name="aiSeed"]', `${o.seed}-ai`);
+  await showMenuItem(page, 'input[name="fastAi"]');
   await page.check('input[name="fastAi"]');
+  await showMenuItem(page, `input[name="mode"][value="${o.mode}"]`);
   await page.check(`input[name="mode"][value="${o.mode}"]`);
+  await showMenuItem(page, `input[name="opponent"][value="${o.opponent}"]`);
   await page.check(`input[name="opponent"][value="${o.opponent}"]`);
-  if (o.difficulty && (await page.locator(`input[name="difficulty"][value="${o.difficulty}"]`).isVisible())) await page.check(`input[name="difficulty"][value="${o.difficulty}"]`);
-  if (o.seating) await page.selectOption('select[name="seating"]', o.seating);
+  if (o.difficulty && (await page.locator('[data-skill]:not([hidden])').count())) {
+    const skill = `input[name="difficulty"][value="${o.difficulty}"]`;
+    await showMenuItem(page, skill);
+    await page.check(skill);
+  }
+  if (o.seating) {
+    await showMenuItem(page, 'select[name="seating"]');
+    await page.selectOption('select[name="seating"]', o.seating);
+  }
   if (o.dbl) await page.locator('.btn-start').dblclick();
   else await page.click('.btn-start');
   await page.waitForSelector('.table-screen');

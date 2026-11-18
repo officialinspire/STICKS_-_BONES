@@ -32,6 +32,7 @@ import { createRequire } from 'node:module';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
+import { showMenuItem } from './lib/menu-navigation';
 
 type Page = import('playwright').Page;
 type BrowserContext = import('playwright').BrowserContext;
@@ -197,6 +198,7 @@ async function playHand(page: Page, label: string, budgetMs = 150_000) {
 }
 async function newGame(page: Page, opponent: 'ai' | 'local' = 'ai') {
   await page.click('[data-go="setup"]');
+  await showMenuItem(page, `input[name="opponent"][value="${opponent}"]`);
   await page.check(`input[name="opponent"][value="${opponent}"]`);
   await page.click('.btn-start');
   await page.waitForSelector('.table-screen');
@@ -290,9 +292,10 @@ try {
   await page.reload();
   await enterMenu(page);
   await page.click('[data-go="settings"]');
+  await showMenuItem(page, 'input[name="set-motion"][value="reduce"]');
   await page.check('input[name="set-motion"][value="reduce"]'); // a setting to preserve
   await axe(page, 'settings with the offline panel');
-  await page.locator('.offline-panel').scrollIntoViewIfNeeded();
+  await showMenuItem(page, '[data-act="offline-story"]');
   await page.screenshot({ path: join(out, 'settings-offline-panel.png') });
   // Both save slots must survive: a Quick Play save and the Story case progress (seeded here if absent).
   await page.evaluate(() => {
@@ -302,6 +305,7 @@ try {
   check('sticks-and-bones.story' in beforeRepair && 'sticks-and-bones.save' in beforeRepair, `repair: both save slots should exist before repair (${Object.keys(beforeRepair).join(', ')})`);
   // Plant a stale entry in our own cache, to see repair actually rebuild.
   await page.evaluate(async () => (await caches.open('inspire:sticks-and-bones:stale-test')).put('stale', new Response('x')));
+  await showMenuItem(page, '[data-act="repair"]');
   await page.click('[data-act="repair"]');
   const repaired = await waitStatus(page, /Quick Play is ready offline/);
   const afterRepair = await page.evaluate(() => Object.fromEntries(Object.keys(localStorage).sort().map((k) => [k, localStorage.getItem(k)])));
@@ -313,10 +317,12 @@ try {
   notes.push(`repair: only inspire:sticks-and-bones:* caches deleted and rebuilt → "${repaired}"; ${Object.keys(afterRepair).length} localStorage keys unchanged (saves/settings kept); other app's worker, 3 caches and storage intact`);
 
   // ---- 6b. Erase: only this app's keys; offline files kept -------------------------------
+  await showMenuItem(page, '[data-act="erase"]');
   await page.click('[data-act="erase"]');
   check((await page.locator('dialog.confirm[open]').count()) === 1, 'erase: no confirmation sheet');
   await page.click('dialog.confirm[open] [data-act="confirm-no"]');
   check(Object.keys(await page.evaluate(() => ({ ...localStorage }))).some((k: string) => k.startsWith('sticks-and-bones.')), 'erase: Cancel deleted data');
+  await showMenuItem(page, '[data-act="erase"]');
   await page.click('[data-act="erase"]');
   await Promise.all([page.waitForNavigation(), page.click('dialog.confirm[open] [data-act="confirm-yes"]')]);
   const keys = await page.evaluate(() => Object.keys(localStorage));
@@ -360,6 +366,7 @@ try {
     await page.reload();
     await enterMenu(page);
     await page.click('[data-go="settings"]');
+    await showMenuItem(page, '[data-act="repair"]');
     await page.click('[data-act="repair"]');
     const fixed = await waitStatus(page, /Quick Play is ready offline/);
     check(/ready offline/.test(fixed), `interrupted: repair did not complete — ${fixed}`);
@@ -537,6 +544,7 @@ try {
       new MutationObserver(() => (w.__sawProgress ||= !(el as HTMLProgressElement).hidden)).observe(el, { attributes: true });
     });
     let sawProgress = false;
+    await showMenuItem(page, '[data-act="offline-story"]');
     await page.click('[data-act="offline-story"]');
     const t0 = Date.now();
     let line = '';
@@ -552,6 +560,7 @@ try {
     const retryLabel = (await page.textContent('[data-act="offline-story"]')) ?? '';
     check(/Retry/.test(retryLabel), `story download: no Retry button ("${retryLabel}")`);
     state.cut.clear();
+    await showMenuItem(page, '[data-act="offline-story"]');
     await page.click('[data-act="offline-story"]');
     line = await (async () => {
       const t = Date.now();
@@ -571,9 +580,10 @@ try {
     const prefs = await page.evaluate(() => localStorage.getItem('sticks-and-bones.offline'));
     check(/"story":true/.test(prefs ?? ''), `story download: the choice was not remembered for Repair (${prefs})`);
     await axe(page, 'settings with story + audio offline controls');
-    await page.locator('.offline-panel').scrollIntoViewIfNeeded();
+    await showMenuItem(page, '[data-act="offline-story"]');
     await page.screenshot({ path: join(out, 'settings-story-offline.png') });
     // Repair keeps what the player chose: the whole story comes back.
+    await showMenuItem(page, '[data-act="repair"]');
     await page.click('[data-act="repair"]');
     await waitStatus(page, /Quick Play is ready offline/);
     const afterRepair = (await cacheReport(page)).find((c) => c.name.endsWith(':story:v1'));
@@ -615,6 +625,7 @@ try {
     const noMedia = (await cacheReport(page)).some((c) => c.urls.some((u) => u.endsWith('.mp3')));
     check(!noMedia, 'audio: music/ambience cached before the player asked');
     state.missing = new Set(['amb-terrace']);
+    await showMenuItem(page, '[data-act="offline-audio"]');
     await page.click('[data-act="offline-audio"]');
     let line = '';
     const t0 = Date.now();
@@ -625,6 +636,7 @@ try {
     }
     check(/1 audio file was unavailable and skipped/.test(line), `audio: missing optional file not reported — "${line}"`);
     state.missing.clear();
+    await showMenuItem(page, '[data-act="offline-audio"]');
     await page.click('[data-act="offline-audio"]'); // Retry fetches only the missing one
     const t1 = Date.now();
     while (Date.now() - t1 < 60_000) {
@@ -644,6 +656,7 @@ try {
     }, music);
     check(r.status === 206 && r.len === 1024 && /^bytes 100-1123\//.test(r.range ?? ''), `audio offline: range request ${JSON.stringify(r)}`);
     await goOffline(ctx, false);
+    await showMenuItem(page, '[data-act="offline-audio"]');
     await page.click('[data-act="offline-audio"]'); // now "Remove"
     await page.waitForTimeout(800);
     const gone = !(await cacheReport(page)).some((c) => c.name.endsWith(':audio:v1'));
@@ -662,6 +675,7 @@ try {
     await waitStatus(page, /Quick Play is ready offline/);
     await page.click('[data-go="settings"]');
     state.requests = [];
+    await showMenuItem(page, '[data-act="offline-story"]');
     await page.click('[data-act="offline-story"]');
     await page.waitForTimeout(800);
     const line = (await page.textContent('[data-region="offline-story"]')) ?? '';

@@ -19,6 +19,7 @@ import type { SceneId } from '../story/progress';
 import { ACHIEVEMENTS, BY_ID, CATEGORIES, progressOf, type AchievementDef, type Category, type Glyph } from '../app/achievements/catalog';
 import { AchievementTracker } from '../app/achievements/tracker';
 import { esc } from './svg';
+import { menuPages } from './menu-pages';
 
 export interface ServiceDeps {
   readonly store: KeyValueStore | null;
@@ -142,46 +143,40 @@ type Status = 'all' | 'unlocked' | 'progress' | 'locked';
 function renderPage(el: HTMLElement, tracker: AchievementTracker): void {
   let cat: Category | 'all' = 'all';
   let status: Status = 'all';
+  const p = tracker.progress;
+  const total = ACHIEVEMENTS.length;
+  const got = ACHIEVEMENTS.filter((a) => p.unlocked[a.id]).length;
+  const option = (value: string, label: string) => `<option value="${value}">${esc(label)}</option>`;
+  el.innerHTML = `
+    <div class="ach-overview">
+      <p class="ach-summary"><strong>${got}</strong> of ${total} unlocked</p>
+      <progress class="ach-total" max="${total}" value="${got}" aria-label="Achievements unlocked: ${got} of ${total}"></progress>
+    </div>
+    <div class="ach-filters">
+      <select aria-label="Category" data-cat>${option('all', 'All categories')}${CATEGORIES.map((c) => option(c.id, c.label)).join('')}</select>
+      <select aria-label="Status" data-status>${option('all', 'Any status')}${option('unlocked', 'Unlocked')}${option('progress', 'In progress')}${option('locked', 'Locked')}</select>
+    </div>
+    <div class="ach-pages"></div>`;
+  const pages = el.querySelector('.ach-pages')!;
   const draw = () => {
-    const p = tracker.progress;
-    const total = ACHIEVEMENTS.length;
-    const got = ACHIEVEMENTS.filter((a) => p.unlocked[a.id]).length;
     const list = ACHIEVEMENTS.filter((a) => {
       if (cat !== 'all' && a.category !== cat) return false;
       const on = !!p.unlocked[a.id];
-      const prog = progressOf(a, p.counts);
       if (status === 'unlocked') return on;
       if (status === 'locked') return !on;
-      if (status === 'progress') return !on && prog > 0;
+      if (status === 'progress') return !on && progressOf(a, p.counts) > 0;
       return true;
     });
-    const chip = (group: string, v: string, label: string, on: boolean) => `<button type="button" class="ach-chip" data-${group}="${v}" aria-pressed="${on}">${esc(label)}</button>`;
-    el.innerHTML = `
-      <p class="ach-summary"><strong>${got}</strong> of ${total} unlocked</p>
-      <progress class="ach-total" max="${total}" value="${got}" aria-label="Achievements unlocked: ${got} of ${total}"></progress>
-      <p class="note">Counted from Quick Play against the computer and first-time Story hands. Two-player games count finished shared matches only. Story replays and developer tools never count.</p>
-      <div class="ach-filters" role="group" aria-label="Category">${chip('cat', 'all', 'All', cat === 'all')}${CATEGORIES.map((c) => chip('cat', c.id, c.label, cat === c.id)).join('')}</div>
-      <div class="ach-filters" role="group" aria-label="Status">${(
-        [
-          ['all', 'Any status'],
-          ['unlocked', 'Unlocked'],
-          ['progress', 'In progress'],
-          ['locked', 'Locked'],
-        ] as const
-      )
-        .map(([v, l]) => chip('status', v, l, status === v))
-        .join('')}</div>
-      <p class="ach-count" role="status">${list.length} shown</p>
-      <ul class="ach-list" role="list">${list.map((a) => card(a, tracker)).join('') || '<li class="ach-empty">Nothing here yet.</li>'}</ul>`;
+    pages.innerHTML = menuPages('Achievement pages', [{
+      title: 'Achievements', layout: 'ach-list', list: 'ul',
+      html: list.map((a) => card(a, tracker)).join('') || '<li class="ach-empty">Nothing here yet.</li>',
+    }]);
   };
-  el.addEventListener('click', (e) => {
-    const b = (e.target as HTMLElement).closest<HTMLElement>('.ach-chip');
-    if (!b) return;
-    if (b.dataset.cat) cat = b.dataset.cat as Category | 'all';
-    if (b.dataset.status) status = b.dataset.status as Status;
-    const which = b.dataset.cat ? `[data-cat="${b.dataset.cat}"]` : `[data-status="${b.dataset.status}"]`;
+  el.addEventListener('change', (e) => {
+    const select = e.target as HTMLSelectElement;
+    if ('cat' in select.dataset) cat = select.value as Category | 'all';
+    if ('status' in select.dataset) status = select.value as Status;
     draw();
-    el.querySelector<HTMLElement>(`.ach-chip${which}`)?.focus();
   });
   draw();
 }

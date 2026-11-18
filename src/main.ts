@@ -1,3 +1,4 @@
+import './ui/menu-pages-element';
 import './styles.css';
 import { createWorkerRunner, inlineRunner, type AiRunner } from './ai/runner';
 import { TableController } from './app/controller';
