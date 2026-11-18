@@ -1935,6 +1935,8 @@ black → menu reveal).
 **Inspected:** the start prompt, the credit (letterboxed, controls clear) and the reveal at 390×844, 667×375 and
 1366×768.
 
+**Branch / commit:** `claude/inspiring-bardeen-4yfmu5` at `5bc2288`. Not merged or deployed.
+
 ### Commands run and results (Chromium)
 
 | Command | Result |
