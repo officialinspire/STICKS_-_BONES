@@ -10,11 +10,13 @@
  * such instead of pretending to work.
  */
 import { warm } from '../assets/warm';
+import { bindLoadFailure, retryable } from './lazy';
 import type { KeyValueStore } from '../app/storage';
 import type { Block, Scene } from '../story/parse';
 import { clearStory, newProgress, readStory, writeStory, type SceneId, type StoryHand, type StoryProgress } from '../story/progress';
 import type { HandSetup } from '../story/chapters';
 import { STAGING } from '../story/staging';
+import { reachedEvidence } from '../story/evidence';
 import type { StoryCue } from '../audio/manager';
 import { renderStoryRun } from './story-player';
 import type { Outcome } from '../story/chapters';
@@ -64,6 +66,8 @@ export function evidencePanelHtml(title: string, items: readonly string[], empty
   }</section>`;
 }
 
+const chapterLabel = (id: SceneId): string => (id.startsWith('chapter-') ? `Chapter ${id.slice(8)}` : id === 'prologue' ? 'Prologue' : 'Epilogue');
+
 export function notebookEntryHtml(s: Scene): string {
   const entry = s.blocks.find((b) => b.kind === 'notebook');
   if (!entry) return '';
@@ -74,9 +78,10 @@ export function notebookEntryHtml(s: Scene): string {
 interface ScriptJson {
   readonly scenes: readonly Scene[];
 }
-let scriptPromise: Promise<ScriptJson> | null = null;
 /** The script is a separate chunk, loaded only when Story opens (and precached for offline play). */
-export const loadScript = (): Promise<ScriptJson> => (scriptPromise ??= import('../story/script.json').then((m) => (m.default ?? m) as unknown as ScriptJson));
+// A failed load is forgotten (never cached), so Retry really fetches the script again.
+const scriptLoader = retryable(() => import('../story/script.json').then((m) => (m.default ?? m) as unknown as ScriptJson));
+export const loadScript = (): Promise<ScriptJson> => scriptLoader.get();
 
 /** Blocks the player shows in this stage: spoken lines and descriptive captions. */
 export const playable = (s: Scene): Block[] => s.blocks.filter((b) => b.kind === 'line' || b.kind === 'direction');
@@ -91,8 +96,8 @@ export interface StoryHandRequest {
   readonly host: HTMLElement;
   /** Compact cast portraits by seat (CSS background for a square face crop); seats without art keep their badges. */
   readonly faces?: Readonly<Partial<Record<number, string>>>;
-  /** The hand's backdrop (STAGING handEnv); omitted: the table's usual patio. */
-  readonly env?: RuntimeAssetId;
+  /** The hand's explicit backdrop (STAGING handEnv); null = drawn, no photo. */
+  readonly env: RuntimeAssetId | null;
   onSnapshot(h: StoryHand): void;
   /** The hand resolved (any result advances the story). */
   onResolved(winnerTeam: number | null, playerTeam: number): void;
@@ -111,6 +116,8 @@ export interface StoryDeps {
   prefs?(): { textScale: number; instantText: boolean };
   /** Storage refused a write: show persistent feedback (never claim it saved). */
   onSaveFailed(): void;
+  /** Per-record write health: every Story write's outcome, with a retry that writes that same progress. */
+  onSaveResult?(ok: boolean, retry: () => boolean): void;
   /** Mount a chapter hand at the table (main.ts: GameSession + TableController + TableScreen in story mode). */
   playHand(req: StoryHandRequest): void;
   /** Tear the table down again (after Continue the case / leaving). */
@@ -138,12 +145,20 @@ export interface StoryDeps {
   takeAutoContinue?(): boolean;
   /** Dev/test: fast AI timings. */
   readonly fast?: boolean;
+  /** False once the player has navigated away from the Story (a late load must not remount it). */
+  isCurrent?(): boolean;
+  /** Reload the app and come straight back to the Story (the browser keeps refusing a failed chunk). */
+  reload?(): void;
 }
+
+/** The player has left the Story since this work started. */
+export const storyGone = (d: StoryDeps): boolean => d.isCurrent?.() === false;
 
 /** Write progress; on refusal, report it (persistent banner) and return false. */
 export function save(d: StoryDeps, p: StoryProgress): boolean {
   const ok = writeStory(d.store, p);
-  if (!ok) d.onSaveFailed();
+  if (d.onSaveResult) d.onSaveResult(ok, () => writeStory(d.store, p));
+  else if (!ok) d.onSaveFailed();
   return ok;
 }
 
@@ -157,7 +172,16 @@ export async function renderStoryHome(d: StoryDeps, notice?: string): Promise<vo
   const nextId = (readStory(d.store).value?.sceneId ?? 'prologue') as SceneId;
   const nextEnv = STAGING[nextId].env;
   if (nextEnv) void warm([envKey(nextEnv)]);
-  const script = await loadScript();
+  let script: ScriptJson;
+  try {
+    script = await loadScript();
+  } catch {
+    if (storyGone(d)) return;
+    root.className = 'is-story';
+    root.innerHTML = '<div class="story-shell" data-region="story-load"></div>';
+    return bindLoadFailure(root.querySelector('[data-region="story-load"]') as HTMLElement, { title: 'The case file didn’t load', body: 'Check your connection and try again. Your place in the case is saved on this device.', back: 'Back to menu' }, { retry: () => void loadScript().then(() => renderStoryHome(d, notice), () => (d.reload ? d.reload() : void renderStoryHome(d, notice))), back: () => d.onBack() });
+  }
+  if (storyGone(d)) return; // the player left while the script loaded
   const nextScene = script.scenes.find((x) => x.id === nextId);
   if (nextScene) void warm(sceneAssets(nextScene));
   const read = readStory(d.store);
@@ -196,7 +220,7 @@ export async function renderStoryHome(d: StoryDeps, notice?: string): Promise<vo
       <section class="notebook" aria-labelledby="notebook-h">
         <h2 id="notebook-h" class="section-h">Case notebook</h2>
         ${completedChapters.length ? `<ol class="notebook-list">${completedChapters.map(notebookEntryHtml).join('')}</ol>` : `<p class="notebook-empty">Nothing written yet. Each completed chapter adds Roberto’s notes here.</p>`}
-        ${evidencePanelHtml('Evidence', [], 'No evidence collected yet.')}
+        ${evidencePanelHtml('Evidence', reachedEvidence(script.scenes, p).map((e) => `${chapterLabel(e.scene)}: ${e.text}`), 'No evidence collected yet. It appears here as the case uncovers it.')}
       </section>
     </div>`;
   const on = (act: string, fn: () => void) => root.querySelector(`[data-act="${act}"]`)?.addEventListener('click', fn);

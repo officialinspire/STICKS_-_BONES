@@ -39,6 +39,8 @@ export interface TrackerDeps {
   onUnlock(ids: readonly string[], retro: boolean): void;
   onSaveFailed(): void;
   onSaved?(): void;
+  /** Per-record write health: the outcome, and a retry that writes the tracker's LATEST progress. */
+  onSaveResult?(ok: boolean, retry: () => boolean): void;
 }
 
 export class AchievementTracker {
@@ -131,7 +133,9 @@ export class AchievementTracker {
   #commit(next: AchProgress, fresh: readonly string[], retro: boolean): void {
     if (next === this.#p) return;
     this.#p = next;
-    if (saveProgress(this.#d.store, next)) this.#d.onSaved?.();
+    const ok = saveProgress(this.#d.store, next);
+    if (this.#d.onSaveResult) this.#d.onSaveResult(ok, () => saveProgress(this.#d.store, this.#p));
+    else if (ok) this.#d.onSaved?.();
     else this.#d.onSaveFailed();
     if (fresh.length) this.#d.onUnlock(fresh, retro);
   }

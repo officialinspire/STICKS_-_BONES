@@ -500,8 +500,25 @@ The resort scenes now use the approved **corporate** resort art, not the leisure
   plus Chapter 7's executive confrontation and its hand. `STAGING` gives both scenes `env` and `handEnv` =
   `env.executive-terrace`. The table host takes the hand's backdrop from `setEnvBackdrop`
   (`src/assets/env.ts`), which records `data-env-id` so a rotation re-picks the same place. The patio
-  (Chapters 1–2, the epilogue, Quick Play), back alley, promenade, jungle and cave are unchanged; Chapter 6's
-  rest-area hand keeps the patio as before.
+  (Chapters 1–2, the epilogue, Quick Play), back alley, promenade, jungle and cave are unchanged.
+- **Every story hand's backdrop is now explicit** (hardening pass; superseding the note that Chapter 6 kept
+  the patio):
+
+  | Hand | Backdrop |
+  | --- | --- |
+  | Chapter 1 | patio |
+  | Chapter 2 | back alley |
+  | Chapters 3 and 7 | executive terrace |
+  | Chapter 4 | promenade |
+  | Chapter 5 | jungle camp |
+  | Chapter 6 | `null`: the modern rest area has no art, and the cave art is the ancient platform, so its table is drawn, with no photo |
+
+  - No story table falls back to the patio, and the rotation handler re-picks only elements that name their
+    place (it no longer defaults to the patio).
+  - A drawn backdrop sets `--env-image: none` explicitly; otherwise it would inherit the menu's patio from
+    `#app`, which the fault test caught.
+  - Tests: `src/story/staging.test.ts` (explicit, preloaded, offline-mapped, both derivatives) and `npm run
+    faults` § H (all seven tables in the browser).
 - **Focal point:** `x = 0.27` (was 0.5, which in portrait kept the open sea and cut away both façades).
   - Landscape: positioned at `27% 50%`.
   - Portrait: the 3:4 crop is re-derived at x = 98 (96 KB) and shows the lobby, canopy and tower.

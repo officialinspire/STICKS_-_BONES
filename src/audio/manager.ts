@@ -15,6 +15,10 @@
  *     backgrounding: no delayed ghost knocks.
  *   - play() rejections and missing files never throw: the scene goes quiet (or, for an SFX whose
  *     sample is not decoded yet, the synthesized placeholder plays).
+ *   - Failures are told apart: ABSENT files and BROKEN files are never retried; TRANSIENT failures
+ *     (offline, network, temporary HTTP status) are retried by recover() after a user gesture or a
+ *     reconnection, at most MAX_RECOVERIES times per track, with a cooldown. Recovery only re-applies
+ *     the CURRENT scene's music and bed: no sound effect or story cue is ever queued for replay.
  *   - The user's mute and levels are never undone by resume, focus, profiles or cues.
  *   - Silent caption changes never duck the music (there are no authored speech recordings).
  */
@@ -45,6 +49,13 @@ export type StoryCue = 'knock-three' | 'knock-beyond' | 'knock-motif' | 'knock-m
 export const STATE_CUES: ReadonlySet<StoryCue> = new Set(['ambience-off']);
 export const CAPTION_ONLY_CUES: ReadonlySet<StoryCue> = new Set(['whisper', 'speaker']);
 
+/** Why a music file failed: gone for good (absent), unusable (broken), or maybe only for now (transient). */
+export type MediaFailure = 'absent' | 'transient' | 'broken';
+/** Recovery attempts per music track after transient failures. */
+export const MAX_RECOVERIES = 3;
+/** Minimum time between two recovery passes (gestures and reconnections can come in bursts). */
+export const RECOVER_COOLDOWN_MS = 4000;
+
 export interface SfxHandle {
   stop(): void;
   /** Called once when the sound finishes or is stopped. */
@@ -74,7 +85,12 @@ export interface AudioBackend {
   /** Per-track gain fade (0..1, already including loudness normalisation). */
   fade(id: TrackId, to: number, sec: number): void;
   onEnded(id: TrackId, cb: () => void): void;
-  onError(id: TrackId, cb: () => void): void;
+  /** The track failed. `kind` is omitted by backends that can't tell (treated as broken). */
+  onError(id: TrackId, cb: (kind?: MediaFailure) => void): void;
+  /** Clear a recoverable media error so the next play() loads the file afresh. */
+  resetTrack?(id: TrackId): void;
+  /** Re-fetch samples/beds that failed transiently (bounded per file). True if anything was retried. */
+  retryTransient?(): boolean;
   /** Fetch and decode short samples (after unlock). Missing or broken files are remembered and skipped. */
   preloadSamples(ids: readonly string[]): void;
   playSfx(v: Voice): SfxHandle | null;
@@ -160,6 +176,10 @@ export class AudioManager {
   /** Track currently audible (or fading in). */
   #playing: TrackId | null = null;
   #broken = new Set<TrackId>();
+  /** Tracks down for a transient reason (not played until recover()), and attempts used per track. */
+  #down = new Set<TrackId>();
+  #recoveries = new Map<TrackId, number>();
+  #recoverCooldown = false;
   #timers = new Set<unknown>();
   /**
    * A track still fading out (audible until its fade timer pauses it). Nothing new
@@ -186,7 +206,7 @@ export class AudioManager {
     this.#gap = d.gapSec;
     for (const id of ['menu', 'gameplay'] as TrackId[]) {
       this.#b.onEnded(id, () => this.#onEnded(id));
-      this.#b.onError(id, () => this.#onError(id));
+      this.#b.onError(id, (kind) => this.#onError(id, kind ?? 'broken'));
     }
   }
 
@@ -212,7 +232,7 @@ export class AudioManager {
   /** True when the current scene wants music that is not playing (a later gesture may start it). */
   get wantsMusic(): boolean {
     const t = this.#mix().track;
-    return t !== null && this.#playing === null && !this.#broken.has(t) && this.#b.hasTrack(t);
+    return t !== null && this.#playing === null && !this.#broken.has(t) && !this.#down.has(t) && this.#b.hasTrack(t);
   }
   activeSfx(): number {
     return this.#active.length;
@@ -233,6 +253,41 @@ export class AudioManager {
     this.#unlocked = true;
     this.#applyLevels(0);
     if (!was || !this.#playing) this.#apply(this.#token);
+    return true;
+  }
+
+  /** Why a track is not playable right now (null = fine). Debug and tests. */
+  failure(id: TrackId): MediaFailure | null {
+    return this.#broken.has(id) ? 'broken' : this.#down.has(id) ? 'transient' : null;
+  }
+
+  /**
+   * After a user gesture or a reconnection: retry what failed for a temporary reason. Bounded (per track
+   * attempts, cooldown between passes) and current-scene only: the music and bed follow the scene on screen
+   * now; nothing that was meant to sound earlier is replayed. Returns true if anything was retried.
+   */
+  recover(): boolean {
+    if (this.#recoverCooldown) return false;
+    let any = false;
+    for (const id of [...this.#down]) {
+      const n = this.#recoveries.get(id) ?? 0;
+      this.#down.delete(id);
+      if (n >= MAX_RECOVERIES) {
+        this.#broken.add(id); // out of attempts: quiet for the rest of the session
+        continue;
+      }
+      this.#recoveries.set(id, n + 1);
+      this.#b.resetTrack?.(id);
+      any = true;
+    }
+    if (this.#b.retryTransient?.()) any = true;
+    if (!any) return false;
+    this.#recoverCooldown = true;
+    this.#sched.set(() => (this.#recoverCooldown = false), RECOVER_COOLDOWN_MS);
+    if (this.#unlocked && !this.#hidden) {
+      this.#lastBed = { bed: null, level: 0 }; // let the current bed be asked for again (it may have failed)
+      this.#apply(this.#token);
+    }
     return true;
   }
 
@@ -516,7 +571,7 @@ export class AudioManager {
     this.#applyBed(BED_FADE_SEC);
     // An old track is still fading out: its timer will re-apply the then-current scene.
     if (this.#fadingOut) return;
-    const want = mix.track && this.#b.hasTrack(mix.track) && !this.#broken.has(mix.track) ? mix.track : null;
+    const want = mix.track && this.#b.hasTrack(mix.track) && !this.#broken.has(mix.track) && !this.#down.has(mix.track) ? mix.track : null;
     const cur = this.#playing;
     if (cur && cur === want) {
       this.#b.fade(cur, mix.duck, 0.5);
@@ -570,8 +625,12 @@ export class AudioManager {
     });
   }
 
-  #onError(id: TrackId): void {
-    this.#broken.add(id);
+  #onError(id: TrackId, kind: MediaFailure): void {
     if (this.#playing === id) this.#playing = null;
+    if (kind === 'transient' && (this.#recoveries.get(id) ?? 0) < MAX_RECOVERIES) this.#down.add(id);
+    else {
+      this.#down.delete(id);
+      this.#broken.add(id); // absent or broken: never retried
+    }
   }
 }

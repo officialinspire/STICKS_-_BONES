@@ -25,7 +25,8 @@ import { STATE_CUES } from '../audio/manager';
 import { phaseEnd, phaseStart } from '../story/timing';
 import { castFrameFor, lineExpression, lineNumbers, robertoMood, type Character, type Expression } from '../story/expressions';
 import { dialogueSourceSize, HostView } from './host';
-import { chapterCardHtml, loadScript, renderStoryHome, save, speakerLabelHtml, speakerOf, type StoryDeps } from './story-ui';
+import { chapterCardHtml, loadScript, renderStoryHome, save, speakerLabelHtml, speakerOf, storyGone, type StoryDeps } from './story-ui';
+import { bindLoadFailure } from './lazy';
 import { playerCaption } from '../story/captions';
 import { esc } from './svg';
 import { castFace, castFrame, CAST_BY_SEAT_NAME, regionStyle, sceneAssets, sceneCast, speakerKey } from './story-assets';
@@ -408,7 +409,16 @@ export interface RunOptions {
 
 export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void> {
   const { root } = d;
-  const script = await loadScript();
+  let script: Awaited<ReturnType<typeof loadScript>>;
+  try {
+    script = await loadScript();
+  } catch {
+    if (storyGone(d)) return;
+    root.className = 'is-story';
+    root.innerHTML = '<div class="story-shell" data-region="story-load"></div>';
+    return bindLoadFailure(root.querySelector('[data-region="story-load"]') as HTMLElement, { title: 'This scene didn’t load', body: 'Check your connection and try again. Nothing was lost: your place is saved.', back: 'Back to the case file' }, { retry: () => void loadScript().then(() => renderStoryRun(d, o), () => (d.reload ? d.reload() : void renderStoryRun(d, o))), back: () => void renderStoryHome(d) });
+  }
+  if (storyGone(d)) return;
   let p: StoryProgress = o.replay ? { ...newProgress(Date.now()), sceneId: o.replay, completed: [] } : (readStory(d.store).value ?? newProgress(Date.now()));
   // Local analytics keys (never sent): this case, or this replay run.
   const caseKey = o.replay ? `replay:${o.replay}:${Date.now()}` : `case:${p.startedAt}`;
@@ -607,7 +617,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
         replay: !!o.replay,
         host,
         faces: tableFaces(HANDS[sceneId]!.seatNames),
-        env: STAGING[sceneId].handEnv ?? undefined,
+        env: STAGING[sceneId].handEnv ?? null,
         onSnapshot: (h) => {
           if (!o.replay && outcome === null) persist({ ...p, sceneId, part: 'hand', index: 0, hand: h });
         },

@@ -85,8 +85,26 @@ Normal vs Hard > 10%).
 ## Runtime safety (`src/app/session.ts`)
 
 - Decisions are computed in a **Web Worker** (`src/ai/worker.ts`). The inline
-  runner is used in tests, and also if the worker fails. E2E observes no
+  runner is used in tests and where workers are unavailable. E2E observes no
   main-thread long tasks during AI play.
+- **The worker runner never leaves a request hanging** (`src/ai/runner.ts`, hardening pass). Every
+  request settles exactly once:
+  - with the worker's answer, used only if it is well-formed AND legal for that observation
+    (`validDecision`: a listed legal play, or draw/pass exactly when the observation allows it, plus a
+    valid AI RNG state);
+  - otherwise with the **observation-only fallback** (`fallbackDecision`). This covers a worker `error`,
+    a `messageerror`, a malformed, illegal or `ok: false` answer, a `postMessage` failure (e.g.
+    DataCloneError), or no answer within 6 s.
+  - The fallback reads only the request's `AiObservation` and the AI's own RNG. It is cheap: forced moves,
+    Easy and Normal run their own policies, and Hard degrades to the one-ply Normal heuristic instead of
+    sampling worlds. It never blocks the UI, and it runs on a later task.
+  - A hung or crashed worker is terminated, and every request waiting on it falls back. It is replaced at
+    most twice; after that the runner stays on the fallback.
+  - A late or duplicate answer for a settled request is dropped and counted (`stats.lateIgnored`).
+  - `dispose()` rejects what is waiting and terminates the worker.
+  - The session ignores a rejection for a turn that is already stale. Otherwise it uses the same cheap
+    fallback and never runs Hard's full search on the main thread.
+  - Tests: `src/ai/runner.test.ts` (fake worker and clock) and `src/app/session.test.ts`.
 - Every request carries a token `{epoch, seq, seat}`. **Reset/exit** (dispose),
   **pause** (an open confirmation dialog or a hidden tab), **load** and **hand
   completion** bump the epoch or advance `seq`. A decision that arrives late is

@@ -25,6 +25,7 @@ export interface ServiceDeps {
   stats(): Stats | null;
   storyCompleted(): readonly SceneId[];
   onSaveFailed(): void;
+  onSaveResult?(ok: boolean, retry: () => boolean): void;
   reduceMotion(): boolean;
 }
 
@@ -120,6 +121,7 @@ export function createService(d: ServiceDeps): Service {
     store: d.store,
     now: () => Date.now(),
     onSaveFailed: d.onSaveFailed,
+    onSaveResult: d.onSaveResult,
     onUnlock: (ids, retro) => {
       if (retro) {
         notices.push(`<p class="ach-toast-k">Achievements</p><p class="ach-toast-t">${ids.length} earned from your earlier games</p>`);

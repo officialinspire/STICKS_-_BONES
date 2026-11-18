@@ -333,7 +333,9 @@ try {
 
   // ---- H. missing files ---------------------------------------------------------------------------------
   {
-    const { page, errors } = await newPage({ block: /(amb-cave|motif-knock-2|ui-select-1)[^/?]*\.(mp3|wav)$/ });
+    // Two kinds of failure: aborted requests (offline: transient) and a real 404 (absent: missing).
+    const { page, errors } = await newPage({ block: /(amb-cave|ui-select-1)[^/?]*\.(mp3|wav)$/ });
+    await page.route(/motif-knock-2[^/?]*\.(mp3|wav)$/, (r: { fulfill(o: { status: number; body: string }): Promise<void> }) => r.fulfill({ status: 404, body: '' }));
     await page.goto(BASE);
     await instrument(page);
     await clock(page);
@@ -349,11 +351,12 @@ try {
     await page.waitForTimeout(2500);
     const s = await audioState(page);
     check(s.bed.bed === null && s.bed.wanted === 'amb-cave', `H: blocked cave bed: ${JSON.stringify(s.bed)}`);
-    check(s.buffers['motif-knock-2'] === 'broken' && (s.bstats.synthFallback ?? 0) >= 1, `H: missing knock did not fall back (${s.buffers['motif-knock-2']}, fallback ${s.bstats.synthFallback})`);
+    check(s.buffers['motif-knock-2'] === 'missing' && (s.bstats.synthFallback ?? 0) >= 1, `H: missing knock did not fall back (${s.buffers['motif-knock-2']}, fallback ${s.bstats.synthFallback})`);
+    check(s.buffers['bed:amb-cave'] === 'transient', `H: an aborted bed should be transient (retryable), not ${s.buffers['bed:amb-cave']}`);
     const v = (await voices(page)).filter((x) => motifSamples.has(x.sample ?? ''));
     check(v.length === 3, 'H: the knock count changed when one file was missing');
     check(errors.length === 0, `H: page errors ${errors.join(' | ')}`);
-    notes.push(`H: blocked amb-cave / motif-knock-2 / ui-select-1 — bed silent (wanted ${s.bed.wanted}), knock 2 via synth placeholder (still 3 knocks), ${s.bstats.decodeFailed} decode failures, no page errors`);
+    notes.push(`H: amb-cave / ui-select-1 aborted (transient: retryable) and motif-knock-2 a 404 (absent: never retried) — bed silent (wanted ${s.bed.wanted}), knock 2 via synth placeholder (still 3 knocks), ${s.bstats.transient} transient, ${s.bstats.missing} missing, no page errors`);
     await page.close();
   }
 

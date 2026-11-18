@@ -37,6 +37,19 @@ const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
 await ctx.addInitScript('window.__name = (f) => f; window.__sbStoryFast = true;');
 const page = await ctx.newPage();
+/**
+ * The dialogue panel is permanent markup (Continue-only controls), so "the panel exists" says nothing about
+ * the line: wait until the scene is presenting and a line's text is actually placed, then read it.
+ */
+async function lineOnScreen(): Promise<string> {
+  // Presenting, with the panel shown: while leaving the hand the (hidden) panel still holds the last pre-hand line.
+  await page.waitForFunction(() => {
+    const d = (window as unknown as { __sbStory?: { director: { state: string } } }).__sbStory?.director;
+    const panel = document.querySelector('.dialogue-panel') as HTMLElement | null;
+    return d?.state === 'presenting' && !!panel && !panel.hidden && !!document.querySelector('.dialogue-body')?.textContent?.trim();
+  }, null, { timeout: 20_000 }).catch(() => undefined);
+  return (await page.textContent('.dialogue-panel').catch(() => '')) ?? '';
+}
 const errors: string[] = [];
 page.on('pageerror', (e: Error) => errors.push(e.message));
 
@@ -99,12 +112,12 @@ try {
         await page.locator('.story-stage:not([hidden])').first().waitFor({ timeout: 20_000 });
         afterHand = true;
         // The first line after the hand must be the insert that matches the real result.
-        await page.waitForTimeout(400);
-        const first = (await page.textContent('.dialogue-panel').catch(() => '')) ?? '';
+        const first = await lineOnScreen();
         const ins = run.outcome && seg.inserts[run.outcome] ? insertLines(seg.inserts[run.outcome]!)[0] : null;
         const want = ins ? (ins.kind === 'line' ? ins.text! : playerCaption(ins.raw) ?? '') : '';
         run.insertShown = !!ins && first.includes(want.replace(/^“|”$/g, '').slice(0, 30));
-        check(run.insertShown === true, `${id}: after a ${run.outcome} the first line was not the ${run.outcome} insert ("${first.slice(0, 80)}")`);
+        const diag = run.insertShown ? '' : await page.evaluate(() => JSON.stringify({ panels: document.querySelectorAll('.dialogue-panel').length, state: (window as unknown as { __sbStory?: { director: { state: string; index: number } } }).__sbStory?.director.state, idx: (window as unknown as { __sbStory?: { director: { index: number } } }).__sbStory?.director.index, curtain: document.querySelector('.st-curtain')?.className, pos: document.querySelector('.cine-pos')?.textContent, body: document.querySelector('.dialogue-body')?.textContent?.slice(0, 60), hidden: (document.querySelector('.dialogue-panel') as HTMLElement | null)?.hidden, stageHidden: (document.querySelector('.story-stage') as HTMLElement | null)?.hidden }));
+        check(run.insertShown === true, `${id}: after a ${run.outcome} the first line was not the ${run.outcome} insert ("${first.slice(0, 80)}") ${diag}`);
         continue;
       }
       const before = await page.evaluate(() => document.querySelector('.cine-pos')?.textContent ?? '');
@@ -144,10 +157,8 @@ try {
       await page.click('[data-act="story"]');
       await page.locator('[data-act="story-continue"]').first().waitFor();
       await page.click('[data-act="story-continue"]');
-      await page.locator('.dialogue-panel').first().waitFor({ timeout: 20_000 });
-      await page.waitForTimeout(300);
       const lines = insertLines(seg.inserts[o]!);
-      const first = (await page.textContent('.dialogue-panel')) ?? '';
+      const first = await lineOnScreen();
       const want = lines[0]!.kind === 'line' ? lines[0]!.text! : playerCaption(lines[0]!.raw) ?? '';
       check(first.includes(want.replace(/^“|”$/g, '').slice(0, 30)), `${id} ${o}: first line "${first.slice(0, 60)}" is not the ${o} insert`);
       const total = await page.evaluate(() => Number((document.querySelector('.cine-pos')?.textContent ?? '0 / 0').split('/')[1]));

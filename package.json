@@ -26,6 +26,7 @@
     "story:e2e": "tsx scripts/story.ts",
     "story:route": "tsx scripts/story-route.ts",
     "story:sweep": "tsx scripts/story-sweep.ts",
+    "faults": "tsx scripts/faults.ts",
     "audio": "tsx scripts/audio.ts",
     "pwa": "tsx scripts/pwa.ts",
     "matches": "tsx scripts/matches.ts",

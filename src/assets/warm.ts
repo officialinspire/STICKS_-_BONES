@@ -8,6 +8,12 @@
  * where supported), so its first on-screen use is a cache hit. Failures are
  * ignored: every image has a drawn fallback. Timings are recorded as
  * `performance` measures named `asset:<id>` for profiling.
+ *
+ * Every attempt has a DEADLINE (`WARM_DEADLINE_MS`) and completes exactly once: a stalled fetch or
+ * decode is abandoned (its download cancelled, its queue slot released, the id marked failed) instead
+ * of holding a slot forever. Each attempt carries its own number, so a late completion from an
+ * abandoned or forgotten attempt can never change the state of a newer attempt for the same id.
+ * A failed id is fetched again only on an explicit retry (`warmWithRetry`, `retryWarm`).
  */
 import { urlFor, type RuntimeAssetId, type WarmKey } from './index';
 import { envKey } from './env';
@@ -19,6 +25,13 @@ const waiters = new Map<WarmKey, Promise<boolean>>();
 const queue: WarmKey[] = [];
 let active = 0;
 let limit = 2;
+/** Longest one image may take to fetch + decode before its slot is released (it then counts as failed). */
+export const WARM_DEADLINE_MS = 15_000;
+let deadline = WARM_DEADLINE_MS;
+let attemptSeq = 0;
+/** The attempt currently allowed to settle each id. */
+const current = new Map<WarmKey, number>();
+export const warmStats = { timeouts: 0, lateIgnored: 0 };
 /**
  * Strong refs so decoded images are not collected before first use. Menu/table art is pinned; story
  * art (chapter backdrops, portrait crops, cast sheets) is kept for the most recent STORY_KEEP keys only,
@@ -38,6 +51,7 @@ function retain(id: WarmKey, img: HTMLImageElement): void {
     state.delete(k);
     waiters.delete(k);
     resolvers.delete(k);
+    current.delete(k);
   }
 }
 /** Decoded images currently held (tests and the leak check). */
@@ -61,12 +75,34 @@ function pump(): void {
     }
     active++;
     state.set(id, 'loading');
+    const attempt = ++attemptSeq;
+    current.set(id, attempt);
     const t0 = performance.now();
     const img = new Image();
     img.decoding = 'async';
     img.src = url;
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      warmStats.timeouts++;
+      done(false); // stalled: give the slot back; the drawn fallback shows meanwhile
+    }, deadline);
     const done = (ok: boolean) => {
+      if (settled) {
+        if (ok || current.get(id) !== attempt) warmStats.lateIgnored++;
+        return; // once only: the deadline already settled this attempt
+      }
+      settled = true;
+      clearTimeout(timer);
       active--;
+      if (current.get(id) !== attempt) {
+        // Forgotten or superseded meanwhile: this result belongs to nobody.
+        warmStats.lateIgnored++;
+        img.src = '';
+        pump();
+        return;
+      }
+      current.delete(id);
       state.set(id, ok ? 'ready' : 'failed');
       if (ok) retain(id, img);
       else img.src = '';
@@ -141,11 +177,18 @@ export async function warmWithRetry(
   return (await Promise.all(ids.map(one))).every(Boolean);
 }
 
-/** Drop a failed id so the next warm() fetches it again. */
+/** Drop a failed id so the next warm() fetches it again (an attempt still in flight can no longer settle it). */
 function forget(id: WarmKey): void {
   state.delete(id);
   waiters.delete(id);
   resolvers.delete(id);
+  current.delete(id);
+}
+
+/** Explicit retry (a Retry button): failed ids are fetched again; anything else is left as it is. */
+export function retryWarm(ids: readonly WarmKey[], opts: { front?: boolean } = {}): Promise<boolean[]> {
+  for (const id of ids) if (state.get(id) === 'failed') forget(id);
+  return warm(ids, opts);
 }
 /** Everything that may be warmed after the menu is up, in the order a first game needs them. */
 export const DEFERRED_ASSETS: readonly RuntimeAssetId[] = ['tile.atlas', 'table.weathered', 'fx.sheet', 'cousin.anim.slam'];
@@ -167,6 +210,13 @@ export function _resetWarm(): void {
   resolvers.clear();
   queue.length = 0;
   keep.clear();
+  current.clear();
   active = 0;
   limit = 2;
+  deadline = WARM_DEADLINE_MS;
+  warmStats.timeouts = warmStats.lateIgnored = 0;
+}
+/** Test hook: a shorter deadline. */
+export function _setWarmDeadline(ms: number): void {
+  deadline = ms;
 }

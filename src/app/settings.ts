@@ -113,8 +113,9 @@ export function loadSettings(store: SettingsStore | null): Settings {
   return loadSettingsResult(store).settings;
 }
 
-export function saveSettings(store: SettingsStore | null, s: Settings): void {
-  writeRecord(store, SETTINGS_SPEC, s); // storage unavailable: settings stay in memory
+/** True when stored; false when storage refused (the settings stay in memory, and the caller reports it). */
+export function saveSettings(store: SettingsStore | null, s: Settings): boolean {
+  return writeRecord(store, SETTINGS_SPEC, s);
 }
 
 /** Whether motion should be reduced, honouring the system preference when set to 'system'. */

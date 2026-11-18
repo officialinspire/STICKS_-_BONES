@@ -8,12 +8,20 @@
  * missing files report through onError or fall back (synth placeholder for SFX,
  * silence for beds).
  */
-import type { AudioBackend, Bus, SfxHandle, TrackId, Voice } from './manager';
+import type { AudioBackend, Bus, MediaFailure, SfxHandle, TrackId, Voice } from './manager';
 import { loopBounds } from './loop';
 import { bedUrl, sampleUrl, type BedId } from './sounds';
 import { synthSfx } from './synth';
 
-type Decoded = AudioBuffer | 'loading' | 'missing' | 'broken';
+/**
+ * missing   = absent (no URL, or HTTP 404/410): never fetched again.
+ * broken    = the file arrived but won't decode: never fetched again.
+ * transient = offline, network error or a temporary HTTP status: retried (bounded) by retryTransient().
+ */
+type Decoded = AudioBuffer | 'loading' | 'missing' | 'broken' | 'transient';
+/** How many times one sample/bed file may be re-fetched after transient failures. */
+export const MAX_FETCH_ATTEMPTS = 3;
+const ABSENT = new Set([404, 410]);
 interface BedVoice {
   id: BedId;
   src: AudioBufferSourceNode;
@@ -25,7 +33,8 @@ interface Track {
   gain: GainNode | null;
   dbGain: number;
   ended: (() => void) | null;
-  error: (() => void) | null;
+  error: ((kind: MediaFailure) => void) | null;
+  url: string;
 }
 
 export class WebAudioBackend implements AudioBackend {
@@ -39,8 +48,10 @@ export class WebAudioBackend implements AudioBackend {
   /** The bed currently sounding (or fading in) and the ones fading out (bounded to one). */
   #bed: BedVoice | null = null;
   #bedOut: BedVoice | null = null;
-  #wantBed: { id: BedId | null; level: number; gen: number } = { id: null, level: 0, gen: 0 };
-  readonly stats = { decoded: 0, decodeFailed: 0, missing: 0, synthFallback: 0, bedStarts: 0, bedLoops: [] as { id: string; start: number; end: number; length: number }[] };
+  #wantBed: { id: BedId | null; level: number; gen: number; fade: number } = { id: null, level: 0, gen: 0, fade: 0.01 };
+  /** Fetch attempts per sample/bed key (bounded by MAX_FETCH_ATTEMPTS). */
+  #attempts = new Map<string, number>();
+  readonly stats = { decoded: 0, decodeFailed: 0, missing: 0, transient: 0, retried: 0, synthFallback: 0, bedStarts: 0, bedLoops: [] as { id: string; start: number; end: number; length: number }[] };
 
   constructor(urls: Partial<Record<TrackId, string>>, gainDb: Partial<Record<TrackId, number>>) {
     this.#urls = urls;
@@ -48,9 +59,9 @@ export class WebAudioBackend implements AudioBackend {
       const el = new Audio();
       el.preload = 'none';
       el.src = url;
-      const t: Track = { el, gain: null, dbGain: gainDb[id] ?? 0, ended: null, error: null };
+      const t: Track = { el, gain: null, dbGain: gainDb[id] ?? 0, ended: null, error: null, url };
       el.addEventListener('ended', () => t.ended?.());
-      el.addEventListener('error', () => t.error?.());
+      el.addEventListener('error', () => void this.#classify(t).then((kind) => t.error?.(kind)));
       this.#tracks.set(id, t);
     }
   }
@@ -159,9 +170,63 @@ export class WebAudioBackend implements AudioBackend {
     if (t) t.ended = cb;
   }
 
-  onError(id: TrackId, cb: () => void): void {
+  onError(id: TrackId, cb: (kind: MediaFailure) => void): void {
     const t = this.#tracks.get(id);
     if (t) t.error = cb;
+  }
+
+  /**
+   * What a music element's error means. Network errors (and anything while offline) are transient; a decode
+   * error is a broken file; "source not supported" is checked with a HEAD request, since a 404 looks the same
+   * to the element as an unsupported format.
+   */
+  async #classify(t: Track): Promise<MediaFailure> {
+    const code = t.el.error?.code ?? 0;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return 'transient';
+    if (code === 2 /* MEDIA_ERR_NETWORK */ || code === 1 /* MEDIA_ERR_ABORTED */) return 'transient';
+    if (code === 3 /* MEDIA_ERR_DECODE */) return 'broken';
+    try {
+      const r = await fetch(t.url, { method: 'HEAD', cache: 'no-store' });
+      if (ABSENT.has(r.status)) return 'absent';
+      return r.ok ? 'broken' : 'transient';
+    } catch {
+      return 'transient';
+    }
+  }
+
+  /** Clear a recoverable media error: re-point the element at its file so the next play() loads it afresh. */
+  resetTrack(id: TrackId): void {
+    const t = this.#tracks.get(id);
+    if (!t) return;
+    try {
+      t.el.pause();
+      t.el.removeAttribute('src');
+      t.el.src = t.url;
+      t.el.load();
+    } catch {
+      /* the element refused: it stays failed until the next attempt */
+    }
+  }
+
+  /**
+   * Re-fetch samples and beds that failed for a temporary reason (bounded per file). Only the CURRENT bed is
+   * started again once it decodes; no sound effect or cue is replayed.
+   */
+  retryTransient(): boolean {
+    let any = false;
+    for (const [key, v] of [...this.#buffers]) {
+      if (v !== 'transient' || (this.#attempts.get(key) ?? 0) >= MAX_FETCH_ATTEMPTS) continue;
+      this.#buffers.delete(key);
+      this.stats.retried++;
+      any = true;
+      const bed = key.startsWith('bed:') ? (key.slice(4) as BedId) : null;
+      if (bed && this.#wantBed.id === bed && !this.#bed) {
+        const gen = this.#wantBed.gen;
+        this.#waiters.set(key, [() => this.#startBed(bed, gen)]);
+      }
+      this.#decode(key, bed ? bedUrl(bed) : sampleUrl(key));
+    }
+    return any;
   }
 
   /** Fetch + decode one file into the bounded buffer cache. Resolves when it is usable (or known unusable). */
@@ -174,21 +239,40 @@ export class WebAudioBackend implements AudioBackend {
       return;
     }
     this.#buffers.set(key, 'loading');
+    this.#attempts.set(key, (this.#attempts.get(key) ?? 0) + 1);
     const done = (v: Decoded) => {
       this.#buffers.set(key, v);
       for (const w of this.#waiters.get(key) ?? []) w();
       this.#waiters.delete(key);
     };
+    let stage: 'fetch' | 'decode' = 'fetch';
     fetch(url)
-      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((ab) => ctx.decodeAudioData(ab))
+      .then((r) => {
+        if (r.ok) return r.arrayBuffer();
+        // Absent files are remembered as missing; other statuses (5xx, 408, 429…) may pass.
+        return Promise.reject(Object.assign(new Error(`HTTP ${r.status}`), { absent: ABSENT.has(r.status) }));
+      })
+      .then((ab) => {
+        stage = 'decode';
+        return ctx.decodeAudioData(ab);
+      })
       .then((buf) => {
         this.stats.decoded++;
         done(buf);
       })
-      .catch(() => {
-        this.stats.decodeFailed++;
-        done('broken'); // never retried in a loop: the sound falls back for the rest of the session
+      .catch((e: { absent?: boolean }) => {
+        if (e?.absent) {
+          this.stats.missing++;
+          return done('missing');
+        }
+        if (stage === 'decode') {
+          this.stats.decodeFailed++;
+          return done('broken'); // the file itself is bad: never re-fetched
+        }
+        // Offline / network error / temporary status: the placeholder (SFX) or silence (bed) for now, and
+        // retryTransient() may fetch it again after a gesture or reconnection (bounded).
+        this.stats.transient++;
+        done('transient');
       });
   }
 
@@ -255,7 +339,7 @@ export class WebAudioBackend implements AudioBackend {
 
   ambience(bed: BedId | null, level: number, fadeSec: number): void {
     const gen = this.#wantBed.gen + 1;
-    this.#wantBed = { id: bed, level, gen };
+    this.#wantBed = { id: bed, level, gen, fade: Math.max(0.01, fadeSec) };
     const ctx = this.#ctx;
     const bus = this.#bus.get('ambience');
     if (!ctx || !bus) return;
@@ -282,28 +366,7 @@ export class WebAudioBackend implements AudioBackend {
     }
     if (!bed) return;
     const key = `bed:${bed}`;
-    const start = () => {
-      if (this.#wantBed.gen !== gen || !this.#ctx) return; // superseded while decoding: never start late
-      const buf = this.#buffers.get(key);
-      if (!(buf instanceof AudioBuffer)) return; // missing or broken: silence, not a placeholder
-      const c = this.#ctx;
-      const t = c.currentTime;
-      const src = c.createBufferSource();
-      src.buffer = buf;
-      src.loop = true;
-      const chans = Array.from({ length: buf.numberOfChannels }, (_, i) => buf.getChannelData(i));
-      const lb = loopBounds(chans, Math.floor(buf.sampleRate * 0.2));
-      src.loopStart = lb.start / buf.sampleRate;
-      src.loopEnd = lb.end / buf.sampleRate;
-      if (!this.stats.bedLoops.some((l) => l.id === bed)) this.stats.bedLoops.push({ id: bed, start: lb.start, end: lb.end, length: buf.length });
-      const g = c.createGain();
-      g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(this.#wantBed.level, t + fade);
-      src.connect(g).connect(bus);
-      src.start(t, src.loopStart);
-      this.#bed = { id: bed, src, gain: g };
-      this.stats.bedStarts++;
-    };
+    const start = () => this.#startBed(bed, gen);
     const cur = this.#buffers.get(key);
     if (cur instanceof AudioBuffer) start();
     else if (cur === 'loading') this.#waiters.set(key, [...(this.#waiters.get(key) ?? []), start]);
@@ -312,6 +375,32 @@ export class WebAudioBackend implements AudioBackend {
       this.#decode(key, bedUrl(bed));
       if (this.#buffers.get(key) === 'missing') this.#waiters.delete(key);
     }
+  }
+
+  /** Start the wanted bed once its buffer is ready; a superseded request (older gen) never starts late. */
+  #startBed(bed: BedId, gen: number): void {
+    const bus = this.#bus.get('ambience');
+    if (this.#wantBed.gen !== gen || this.#wantBed.id !== bed || !this.#ctx || !bus || this.#bed) return;
+    const buf = this.#buffers.get(`bed:${bed}`);
+    if (!(buf instanceof AudioBuffer)) return; // missing, broken or transient: silence, not a placeholder
+    const c = this.#ctx;
+    const t = c.currentTime;
+    const fade = this.#wantBed.fade;
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    const chans = Array.from({ length: buf.numberOfChannels }, (_, i) => buf.getChannelData(i));
+    const lb = loopBounds(chans, Math.floor(buf.sampleRate * 0.2));
+    src.loopStart = lb.start / buf.sampleRate;
+    src.loopEnd = lb.end / buf.sampleRate;
+    if (!this.stats.bedLoops.some((l) => l.id === bed)) this.stats.bedLoops.push({ id: bed, start: lb.start, end: lb.end, length: buf.length });
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(this.#wantBed.level, t + fade);
+    src.connect(g).connect(bus);
+    src.start(t, src.loopStart);
+    this.#bed = { id: bed, src, gain: g };
+    this.stats.bedStarts++;
   }
 
   #stopBed(b: BedVoice, afterSec: number): void {

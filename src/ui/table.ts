@@ -42,8 +42,8 @@ export interface TableCallbacks {
   readonly story?: {
     onContinue(): void;
     faces?: Readonly<Partial<Record<number, string>>>;
-    /** The scene's backdrop for this hand (Chapters 3 and 7: the corporate terrace); omitted: the patio. */
-    env?: RuntimeAssetId;
+    /** The chapter's explicit backdrop for this hand (STAGING handEnv); null = drawn, no photo. Never defaulted. */
+    env: RuntimeAssetId | null;
   };
   /** The player used a table tool (sort, zoom): exploration achievements. Presentation only. */
   explore?(what: 'sort' | 'zoom'): void;
@@ -229,7 +229,7 @@ export class TableScreen {
     this.#root.classList.toggle('reduce-motion', this.#reduce());
     this.#s.setThinkingSpeed(AI_SPEED_FACTOR[this.#cb.settings.get().aiSpeed]);
     // The 3:4 crop on portrait screens; a story hand may name its own scene (never inferred from art).
-    setEnvBackdrop(r, this.#cb.story?.env ?? 'env.neighborhood-patio');
+    setEnvBackdrop(r, this.#cb.story ? this.#cb.story.env : 'env.neighborhood-patio');
     const table = assetUrl('table.weathered');
     if (table) r.style.setProperty('--table-image', `url("${table}")`);
     this.render();

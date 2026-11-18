@@ -2685,3 +2685,17 @@ h1, h2, h3, .title, .chapter-title, .section-h, .score-val, .dest-title, .points
    letterboxes inside it in every orientation. */
 .intro-stage .intro-frame { position: absolute; inset: 0; width: auto; height: auto; }
 .intro-stage .intro-video { position: absolute; inset: 0; }
+
+/* A lazy chunk or the script failed to load: one honest panel with Retry and Back (src/ui/lazy.ts). */
+.load-failed { max-width: 34rem; margin: 12vh auto 0; display: grid; gap: 12px; }
+.load-failed h2 { margin: 0; }
+.load-failed p { margin: 0; }
+.load-failed-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* While the "Not saved" alert is up, the story stage and the table reserve its height at the bottom, so it
+   never covers Continue, the hand or the table's controls (main.ts sets --save-alert-h). */
+.has-save-alert .story-stage { padding-bottom: calc(max(12px, env(safe-area-inset-bottom)) + var(--save-alert-h, 0px)); }
+.has-save-alert .table-screen { padding-bottom: calc(max(6px, env(safe-area-inset-bottom)) + var(--save-alert-h, 0px)); }
+.has-save-alert .story-shell, .has-save-alert .scene { padding-bottom: calc(24px + var(--save-alert-h, 0px)); }
+.save-alert { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.save-alert p { flex: 1 1 14rem; }

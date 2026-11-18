@@ -157,6 +157,33 @@ describe('AI turn safety (stale decisions, reset, pause, load)', () => {
     expect(fresh.debugState().seq).toBe(freshSeq);
   });
 
+  it('a runner that gives up still lets the AI move once, via the cheap observation-only fallback', async () => {
+    const { sched, flush } = manualScheduler();
+    let calls = 0;
+    const rejecting: AiRunner = { kind: 'worker', decide: () => (calls++, Promise.reject(new Error('worker gone'))), dispose: () => {} };
+    const s = aiFirst({ sched, runner: rejecting });
+    const seq = s.debugState().seq;
+    await tick();
+    flush(); // the thinking delay
+    expect(s.debugState().seq).toBe(seq + 1);
+    expect(s.stats.aiDecisions).toBe(1);
+    expect(calls).toBeGreaterThanOrEqual(1); // the next AI seat may already be asking (and will fall back too)
+  });
+
+  it('a rejection for a turn that is already stale computes nothing and moves nothing', async () => {
+    const { sched, flush } = manualScheduler();
+    let reject: (e: Error) => void = () => {};
+    const runner: AiRunner = { kind: 'worker', decide: () => new Promise((_, rj) => (reject = rj)), dispose: () => {} };
+    const s = aiFirst({ sched, runner });
+    const before = s.debugState();
+    s.dispose();
+    reject(new Error('worker gone'));
+    await tick();
+    flush();
+    expect(s.debugState()).toBe(before);
+    expect(s.stats.aiDecisions).toBe(0);
+  });
+
   it('pause cancels thinking; resume re-asks and moves exactly once', async () => {
     const { sched, flush, pending } = manualScheduler();
     const d = deferredRunner();

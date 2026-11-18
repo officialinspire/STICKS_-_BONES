@@ -10,26 +10,47 @@ import type { TableController } from '../app/controller';
 import type { TableContext } from '../app/achievements/tracker';
 import type { SceneId } from '../story/progress';
 import type { Service, ServiceDeps } from './achievements';
+import { bindLoadFailure, retryable } from './lazy';
 
 let deps: ServiceDeps | null = null;
-let service: Promise<Service> | null = null;
+// A failed chunk load is forgotten, so the next use (or the page's Retry) loads it again.
+const service = retryable(() => import('./achievements').then((m) => m.createService(deps!)));
 
 export function configureAchievements(d: ServiceDeps): void {
   deps = d;
 }
 
-/** Load (once) and start the service; resolves when the tracker is ready. */
+/** Load (once) and start the service; resolves when the tracker is ready. Rejects (retryably) if the chunk failed. */
 export function achievementsReady(): Promise<Service> {
-  return (service ??= import('./achievements').then((m) => m.createService(deps!)));
+  return service.get();
 }
 
 const later = (fn: (s: Service) => void) => void achievementsReady().then(fn, () => undefined);
+
+/** The Achievements page: the list, or an honest failure with Retry and Back (never a stuck "Loading…"). */
+function renderPage(el: HTMLElement, back: () => void, reload?: () => void, attempt = 0): void {
+  achievementsReady().then(
+    (s) => el.isConnected && s.renderPage(el),
+    () => {
+      if (!el.isConnected) return; // the player already left the page
+      // A second failure means the browser keeps refusing this chunk: Retry reloads and returns here.
+      if (attempt > 0 && reload) return reload();
+      bindLoadFailure(el, { title: 'Achievements didn’t load', body: 'Check your connection and try again. Your progress is safe: it is kept on this device.', back: 'Back to menu' }, {
+        retry: () => {
+          el.innerHTML = '<p class="note" role="status">Loading achievements…</p>';
+          renderPage(el, back, reload, attempt + 1);
+        },
+        back,
+      });
+    },
+  );
+}
 
 export const achievements = {
   note: (counter: string) => later((s) => s.tracker.note(counter)),
   storyChapter: (scene: SceneId, outcome: 'win' | 'loss' | 'tie' | 'none', replay: boolean, caseKey: string) => later((s) => s.tracker.storyChapter(scene, outcome, replay, caseKey)),
   storyAssist: (caseKey: string) => later((s) => s.tracker.storyAssist(caseKey)),
-  renderPage: (el: HTMLElement) => later((s) => s.renderPage(el)),
+  renderPage,
   /** Follow a table from now on (events are buffered until the chunk has loaded). */
   watch(controller: TableController, ctx: TableContext): () => void {
     if (ctx.kind === 'none') return () => {};

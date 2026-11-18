@@ -162,9 +162,30 @@ change, reset and backgrounding. A second cue in the same beat replaces the firs
 mix-state cues (`STATE_CUES`, e.g. the bed going quiet) but never replays the knock of the beat
 you land on.
 
-**Missing or broken files:** a play() refusal or file error leaves the scene silent,
-without retrying a broken file. A missing bed is silence; a missing SFX sample uses the
-placeholder. Absent files resolve to no URL at build time.
+**Missing, broken and temporarily failing files** (hardening pass): failures are told apart.
+
+| Kind | How it's recognised | What happens |
+| --- | --- | --- |
+| **Absent** | No URL at build time, or HTTP 404/410 (a music element's "unsupported source" is checked with a HEAD request) | Never fetched again. A bed stays silent; an SFX uses its placeholder |
+| **Broken** | The file arrives but won't decode (or a media decode error) | Never fetched again |
+| **Transient** | Offline, a network error, an aborted load, or another HTTP status (5xx, 408, 429…) | Silence for now (an SFX uses its placeholder), then recovery |
+
+- **Recovery:** `AudioManager.recover()` runs after a user gesture (the app's existing gesture hook) and on
+  the window's `online` event.
+  - It resets a failed music element (re-points it at its file and reloads, clearing the media error).
+  - It re-fetches samples and beds that failed transiently.
+- **Bounds:**
+  - A track is recovered at most 3 times (`MAX_RECOVERIES`); after that it stays quiet for the session.
+  - A sample or bed file is fetched at most 3 times (`MAX_FETCH_ATTEMPTS`).
+  - Passes are at least 4 s apart, so a burst of gestures is one pass.
+- **Current scene only:** recovery re-applies the CURRENT scene's music and bed through the normal path, so
+  mute, levels, one-track exclusivity and the silent initialization and credits all still apply.
+  - Only the bed wanted now starts once it decodes; a superseded bed never starts late.
+  - No sound effect or story cue is queued or replayed.
+- **Tests:**
+  - `src/audio/manager.test.ts`, "bounded media recovery".
+  - `npm run faults` § G: an offline bed recovers on reconnection; a 404 bed is never re-fetched.
+  - `npm run faults` § I: offline menu music recovers, and only one track plays.
 
 **Focus and visibility:**
 

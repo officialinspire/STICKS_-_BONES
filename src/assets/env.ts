@@ -43,7 +43,15 @@ export function onViewportShape(cb: () => void): () => void {
  * Point an element's `--env-image` / `--env-pos` at an environment for THIS viewport, and remember which
  * environment it shows (`data-env-id`) so a rotation re-picks the same place, never a different one.
  */
-export function setEnvBackdrop(el: HTMLElement, id: RuntimeAssetId): void {
+export function setEnvBackdrop(el: HTMLElement, id: RuntimeAssetId | null): void {
+  if (id === null) {
+    // No photographic place (Chapter 6's rest area): the drawn backdrop only, and rotation leaves it alone.
+    el.dataset.envId = 'none';
+    // Explicitly none: a removed custom property would INHERIT an ancestor's image (the menu's patio).
+    el.style.setProperty('--env-image', 'none');
+    el.style.removeProperty('--env-pos');
+    return;
+  }
   const key = envKey(id);
   const url = urlFor(key);
   el.dataset.envId = id;

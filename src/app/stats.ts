@@ -111,8 +111,9 @@ export function loadStats(store: KeyValueStore | null): { stats: Stats; status: 
   return { stats: r.value ?? emptyStats(), status: r.status };
 }
 
-export function saveStats(store: KeyValueStore | null, s: Stats): void {
-  writeRecord(store, STATS_SPEC, s);
+/** True when stored; false when storage refused (the caller reports it and may retry). */
+export function saveStats(store: KeyValueStore | null, s: Stats): boolean {
+  return writeRecord(store, STATS_SPEC, s);
 }
 
 export function resetStats(store: KeyValueStore | null): Stats {

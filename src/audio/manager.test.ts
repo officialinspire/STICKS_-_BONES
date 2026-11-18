@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_AUDIO, type AudioSettings } from '../app/settings';
 import type { Scheduler } from '../app/session';
-import { AudioManager, MAX_SFX, SFX_LIMIT, STATE_CUES, type AudioBackend, type SfxHandle, type SfxId, type TrackId, type Voice } from './manager';
+import { AudioManager, MAX_RECOVERIES, MAX_SFX, SFX_LIMIT, STATE_CUES, type AudioBackend, type MediaFailure, type SfxHandle, type SfxId, type TrackId, type Voice } from './manager';
 import { MOTIF, VARIANTS, type BedId } from './sounds';
 
 /** Fake backend: records calls; play() resolution is controlled by the test. */
@@ -9,7 +9,8 @@ function fakeBackend(opts: { missing?: TrackId[]; reject?: boolean; unlock?: boo
   const log: string[] = [];
   const pendingPlays: { id: TrackId; resolve: (ok: boolean) => void }[] = [];
   const ended: Partial<Record<TrackId, () => void>> = {};
-  const errored: Partial<Record<TrackId, () => void>> = {};
+  const errored: Partial<Record<TrackId, (kind?: MediaFailure) => void>> = {};
+  let transientFiles = 0;
   const audible = new Set<TrackId>();
   const gains: Record<string, number> = {};
   const sfx: { id: Voice; end: () => void; stopped: boolean }[] = [];
@@ -62,12 +63,19 @@ function fakeBackend(opts: { missing?: TrackId[]; reject?: boolean; unlock?: boo
       return h;
     },
     preloadSamples: (ids) => void preloaded.push(...ids),
+    resetTrack: (id) => log.push(`reset:${id}`),
+    retryTransient: () => {
+      if (!transientFiles) return false;
+      log.push(`retry-files:${transientFiles}`);
+      transientFiles = 0;
+      return true;
+    },
     ambience: (bed, level) => {
       ambience = { bed, level };
       beds.push(bed);
     },
   };
-  return { b, log, pendingPlays, ended, errored, audible, gains, sfx, beds, preloaded, ambienceOn: () => ambience.bed !== null, ambience: () => ambience, resolveAll: (ok = true) => pendingPlays.splice(0).forEach((p) => p.resolve(ok)) };
+  return { failFilesTransiently: (n: number) => void (transientFiles = n), b, log, pendingPlays, ended, errored, audible, gains, sfx, beds, preloaded, ambienceOn: () => ambience.bed !== null, ambience: () => ambience, resolveAll: (ok = true) => pendingPlays.splice(0).forEach((p) => p.resolve(ok)) };
 }
 
 function manualScheduler() {
@@ -521,5 +529,95 @@ describe('AudioManager: story profiles, cues and the knock motif', () => {
     expect(fb.ambienceOn()).toBe(false);
     m.setScene('gameplay');
     expect(fb.ambience().bed).toBe('amb-cave');
+  });
+
+  describe('bounded media recovery', () => {
+    it('a transient music failure recovers after a gesture: the current scene only, once, with a cooldown', async () => {
+      const { m, fb, sc } = make();
+      await m.unlock();
+      m.setScene('menu');
+      fb.resolveAll();
+      await tick();
+      fb.errored.menu!('transient'); // e.g. the connection dropped mid-stream
+      expect(m.playing).toBeNull();
+      expect(m.failure('menu')).toBe('transient');
+      expect(m.wantsMusic).toBe(false);
+      m.setScene('gameplay'); // the player moved on while it was down
+      fb.resolveAll();
+      await tick();
+      const before = fb.log.length;
+      expect(m.recover()).toBe(true);
+      expect(fb.log.slice(before)).toContain('reset:menu');
+      // Only the scene on screen now (gameplay) plays; the menu track is NOT replayed.
+      expect(fb.log.slice(before).filter((l) => l === 'play:menu')).toHaveLength(0);
+      m.setScene('menu');
+      sc.flushAll();
+      expect(fb.log.filter((l) => l === 'play:menu').length).toBeGreaterThanOrEqual(2);
+      expect(m.recover()).toBe(false); // nothing left to retry
+    });
+
+    it('absent and broken files are never retried', async () => {
+      const { m, fb } = make();
+      await m.unlock();
+      m.setScene('menu');
+      fb.resolveAll();
+      await tick();
+      fb.errored.menu!('absent');
+      expect(m.failure('menu')).toBe('broken');
+      expect(m.recover()).toBe(false);
+      expect(fb.log.some((l) => l === 'reset:menu')).toBe(false);
+      fb.errored.gameplay!('broken');
+      expect(m.recover()).toBe(false);
+    });
+
+    it('attempts are bounded per track, and passes are throttled', async () => {
+      const { m, fb, sc } = make();
+      await m.unlock();
+      m.setScene('menu');
+      for (let i = 0; i < MAX_RECOVERIES; i++) {
+        fb.resolveAll();
+        await tick();
+        fb.errored.menu!('transient');
+        expect(m.recover()).toBe(true);
+        expect(m.recover()).toBe(false); // cooldown: a burst of gestures is one pass
+        sc.flushAll(); // the cooldown ends
+      }
+      fb.resolveAll();
+      await tick();
+      fb.errored.menu!('transient'); // one failure too many
+      expect(m.failure('menu')).toBe('broken');
+      expect(m.recover()).toBe(false);
+      expect(fb.log.filter((l) => l === 'reset:menu')).toHaveLength(MAX_RECOVERIES);
+    });
+
+    it('recovery keeps mute, never replays sound effects or cues, and stays silent during the credits', async () => {
+      const { m, fb } = make({ muted: true });
+      await m.unlock();
+      m.setScene('intro');
+      fb.failFilesTransiently(2);
+      const sfxBefore = fb.sfx.length;
+      expect(m.recover()).toBe(true);
+      expect(fb.log).toContain('retry-files:2');
+      expect(fb.log.some((l) => l.startsWith('play:'))).toBe(false); // the credit stays silent
+      expect(fb.sfx.length).toBe(sfxBefore);
+      expect(m.pendingCueVoices()).toBe(0);
+      expect(fb.gains.master).toBe(0); // still muted
+    });
+
+    it('a failed bed is asked for again on recovery (current profile only)', async () => {
+      const { m, fb, sc } = make();
+      await m.unlock();
+      m.setStoryProfile('chapter-6');
+      m.setScene('story');
+      const asked = fb.beds.filter((b) => b === 'amb-cave').length;
+      fb.failFilesTransiently(1);
+      expect(m.recover()).toBe(true);
+      expect(fb.beds.filter((b) => b === 'amb-cave').length).toBe(asked + 1);
+      sc.flushAll();
+      m.setStoryProfile('chapter-5');
+      fb.failFilesTransiently(1);
+      expect(m.recover()).toBe(true);
+      expect(fb.ambience().bed).toBe('amb-jungle'); // never the old scene's bed
+    });
   });
 });

@@ -66,7 +66,7 @@ export interface MenuHandlers {
   /** Offline/PWA status and actions (absent where unsupported, e.g. the dev server). */
   readonly pwa?: MenuPwa;
   /** Fill the Achievements page (loaded on demand). */
-  renderAchievements?(el: HTMLElement): void;
+  renderAchievements?(el: HTMLElement, back: () => void): void;
   /** A destination was opened (How to Play, Statistics): exploration achievements. */
   onExplore?(screen: MenuScreen): void;
 }
@@ -267,7 +267,8 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
       true,
     );
     wire();
-    h.renderAchievements?.(root.querySelector('[data-region="achievements"]') as HTMLElement);
+    // Back from a load failure is the page's own Back (same history handling).
+    h.renderAchievements?.(root.querySelector('[data-region="achievements"]') as HTMLElement, () => (root.querySelector('.ach-panel [data-act="home"]') as HTMLElement | null)?.click());
     return;
   }
   if (screen === 'settings') {

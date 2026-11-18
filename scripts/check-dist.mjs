@@ -33,7 +33,7 @@ const bytes = files.reduce((s, f) => s + statSync(f).size, 0);
 // raise it only on purpose, with a measurement, in the same change.
 const KB = 1024;
 export const BUDGET = {
-  codeKB: 320, // core JS + CSS + HTML, excluding the lazy Story chunks. Measured 310.3 KB after the startup stage (init progress/retries, text credit, reveal: +5 KB); 305 KB after menu polish; the inline wordmark SVGs are ~29 KB of it
+  codeKB: 330, // core JS + CSS + HTML, excluding the lazy Story chunks. 322 KB after the hardening pass (+8 KB: AI worker validation/fallback, media recovery, per-record save health, chunk-failure Retry/Back, image deadlines; these handle the lazy chunks' own failures, so they can't be lazy); 310.3 KB after the startup stage; the inline wordmark SVGs are ~29 KB of it
   achievementsKB: 45, // lazy achievements chunk (catalog, tracker, page, badges + its stylesheet), loaded after the menu is up: measured 35 KB
   storyKB: 130, // lazy Story chunks, loaded only when Story opens: the approved script (76 KB) + player/director/staging/cast frames (36 KB) = 112 KB measured
   fontsKB: 100, // self-hosted DM Sans + Bricolage Grotesque WOFF2 subsets (measured 82 KB)

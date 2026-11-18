@@ -383,7 +383,8 @@ export function consumeUpdatedFlag(): boolean {
 
 /** Where to return after an update reload: written once before the reload, consumed once after. */
 /** story: back to the case file, or (run) straight into the saved scene, line or hand. */
-export type ResumeTarget = { readonly to: 'story'; readonly run?: boolean } | { readonly to: 'quick' } | { readonly to: 'menu' };
+/** Where a reload returns to once (an update, or a Retry that had to reload a chunk the browser refused). */
+export type ResumeTarget = { readonly to: 'story'; readonly run?: boolean } | { readonly to: 'quick' } | { readonly to: 'menu' } | { readonly to: 'achievements' };
 const RESUME_KEY = 'sticks-and-bones.update-resume';
 export function setUpdateResume(t: ResumeTarget, ss: Pick<Storage, 'setItem'> | null = safeSession()): void {
   try {
@@ -397,7 +398,7 @@ export function consumeUpdateResume(ss: Pick<Storage, 'getItem' | 'removeItem'> 
     const raw = ss?.getItem(RESUME_KEY) ?? null;
     ss?.removeItem(RESUME_KEY); // once: a second reload never repeats it
     const v = raw ? (JSON.parse(raw) as ResumeTarget) : null;
-    return v && (v.to === 'story' || v.to === 'quick' || v.to === 'menu') ? v : null;
+    return v && (v.to === 'story' || v.to === 'quick' || v.to === 'menu' || v.to === 'achievements') ? v : null;
   } catch {
     return null;
   }

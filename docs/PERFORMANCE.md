@@ -55,7 +55,20 @@ How to read the error columns:
 ## Loading: essentials first, the rest warmed with bounded concurrency
 
 `src/assets/warm.ts` fetches **and decodes** images (`img.decode()`) through a
-queue of **at most 2 concurrent downloads**:
+queue of **at most 2 concurrent downloads**.
+
+**Deadlines** (hardening pass):
+- Every attempt has a 15 s deadline (`WARM_DEADLINE_MS`) and completes exactly once. A stalled fetch or decode
+  is abandoned: its download is cancelled, its slot released and the id marked failed (the drawn fallback
+  shows meanwhile).
+- Each attempt carries its own number, so a late completion from an abandoned or forgotten attempt can't
+  change a newer attempt's state.
+- A failed id is fetched again only on an explicit retry (`retryWarm`, `warmWithRetry`).
+- The scene itself never waits longer than the director's 4 s prepare timeout.
+- Tests: `src/assets/warm.test.ts`, and `npm run faults` § E (a backdrop that never answers: the scene
+  presents over the fallback and the cast still loads on the other slot).
+
+When images load:
 
 - **At the start screen:** only `ESSENTIAL_ASSETS`, which are the menu backdrop
   and Cousin's portrait.
@@ -186,6 +199,13 @@ The Story content is on-demand, so instead of raising the image budget, images a
 | story chunks | 130 KB (unchanged) | 113 KB | + the cast frame table |
 | service worker | **22 KB (was 16)** | 19 KB | per-file sizes for truncation checks and four groups |
 | total | **15,400 KB (was 13,900)** | 15,045 KB | + 1.46 MB of on-demand Story images, none at startup |
+
+**Hardening pass (2026-11-18):** code **330 KB (was 320)**, measured 322 KB.
+- The +8 KB is resilience code: worker answer validation and the observation-only fallback, media failure
+  classification and recovery, per-record save health with Try again, the Retry / Back panels for failed
+  chunks, and image deadlines.
+- It must be in the core bundle: it handles the failure of the lazy chunks themselves.
+- Startup and every other budget are unchanged.
 
 **Resort backdrop correction (2026-11-18):** Chapter 3 now downloads the executive terrace (its 3:4 crop is
 96 KB) instead of the retired leisure patio, and `resort-patio` is no longer bundled.

@@ -43,9 +43,10 @@ export interface SceneStaging {
   /** Cousin on stage from the first beat (otherwise he enters on a cue). */
   readonly cousin: boolean;
   /**
-   * Backdrop while this scene's hand is played. Omitted or null: the table's usual patio. Chapters 3 and 7
-   * name the corporate terrace (the hand is played where the scene is); Chapter 6's rest area has no art of
-   * its own, so it keeps the patio, never the ancient platform.
+   * Backdrop while this scene's hand is played: explicit for every chapter with a hand (tested), passed to the
+   * story table as-is; no table ever falls back to the patio. Each hand is played where the script puts it
+   * (its chapter's location). `null` = no photographic backdrop: Chapter 6's modern rest area has no art of
+   * its own, and it is never the ancient platform, so its table is drawn (gradient) instead.
    */
   readonly handEnv?: RuntimeAssetId | null;
   readonly handNote?: string;
@@ -68,6 +69,7 @@ export const STAGING: Readonly<Record<SceneId, SceneStaging>> = {
   },
   'chapter-1': {
     env: 'env.neighborhood-patio',
+    handEnv: 'env.neighborhood-patio',
     light: 'morning',
     focus: '50% 55%',
     establishing: 'pan-right',
@@ -81,6 +83,7 @@ export const STAGING: Readonly<Record<SceneId, SceneStaging>> = {
   },
   'chapter-2': {
     env: 'env.back-alley',
+    handEnv: 'env.back-alley',
     light: 'midday',
     focus: '45% 50%',
     establishing: 'pan-left',
@@ -110,6 +113,7 @@ export const STAGING: Readonly<Record<SceneId, SceneStaging>> = {
   },
   'chapter-4': {
     env: 'env.moonlit-promenade',
+    handEnv: 'env.moonlit-promenade',
     light: 'night',
     focus: '50% 60%',
     establishing: 'pan-left',
@@ -124,6 +128,7 @@ export const STAGING: Readonly<Record<SceneId, SceneStaging>> = {
   },
   'chapter-5': {
     env: 'env.jungle-camp',
+    handEnv: 'env.jungle-camp',
     light: 'jungle',
     focus: '50% 45%',
     establishing: 'push',

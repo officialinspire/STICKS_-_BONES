@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { _resetWarm, DEFERRED_ASSETS, essentialAssets, warm, warmState } from './warm';
+import { _resetWarm, _setWarmDeadline, DEFERRED_ASSETS, essentialAssets, retryWarm, warm, warmState, warmStats } from './warm';
 
 /** Fake Image: decode() resolves/rejects when the test says so. */
 const pending: { src: string; ok: (v?: unknown) => void; fail: (e: unknown) => void }[] = [];
@@ -114,5 +114,59 @@ describe('deferred set', () => {
     expect(deferredAssets({ reduceMotion: false, wide: false, hostAnimation: true })).toEqual(['tile.atlas', 'table.weathered', 'fx.sheet']);
     expect(deferredAssets({ reduceMotion: true, wide: true, hostAnimation: true })).toEqual(['tile.atlas', 'table.weathered']);
     expect(deferredAssets({ reduceMotion: false, wide: true, hostAnimation: false })).toEqual(['tile.atlas', 'table.weathered', 'fx.sheet']);
+  });
+
+  describe('deadlines and once-only completion', () => {
+    it('a stalled image releases its slot at the deadline; the queue keeps moving', async () => {
+      _setWarmDeadline(30);
+      const stalled = warm(['tile.atlas']);
+      const other = warm(['table.weathered']);
+      const third = warm(['fx.sheet']); // waits for a slot
+      expect(pending).toHaveLength(2);
+      pending[1]!.ok(); // table.weathered loads
+      await flush();
+      expect(pending).toHaveLength(3); // fx.sheet got the freed slot
+      pending[2]!.ok();
+      await new Promise((r) => setTimeout(r, 50)); // tile.atlas never answers
+      expect(await stalled).toEqual([false]);
+      expect(await other).toEqual([true]);
+      expect(await third).toEqual([true]);
+      expect(warmState('tile.atlas')).toBe('failed');
+      expect(warmStats.timeouts).toBe(1);
+      // The abandoned decode finally resolves: once only, ignored.
+      pending[0]!.ok();
+      await flush();
+      expect(warmState('tile.atlas')).toBe('failed');
+      expect(warmStats.lateIgnored).toBe(1);
+    });
+
+    it("an explicit retry fetches again, and the old attempt's late answer can't settle the new one", async () => {
+      _setWarmDeadline(10_000);
+      const first = warm(['tile.atlas']);
+      pending.shift()!.fail(new Error('offline'));
+      expect(await first).toEqual([false]);
+      expect(warmState('tile.atlas')).toBe('failed');
+      expect(await warm(['tile.atlas'])).toEqual([false]); // a plain warm() does not refetch a failure
+      const retry = retryWarm(['tile.atlas']);
+      expect(pending).toHaveLength(1);
+      expect(warmState('tile.atlas')).toBe('loading');
+      pending.shift()!.ok();
+      expect(await retry).toEqual([true]);
+      expect(warmState('tile.atlas')).toBe('ready');
+    });
+
+    it('a retry while the old attempt is still stuck: the old completion is dropped, the new one decides', async () => {
+      _setWarmDeadline(20);
+      void warm(['cousin.anim.slam']);
+      await new Promise((r) => setTimeout(r, 30)); // deadline: failed
+      const old = pending.shift()!;
+      const retry = retryWarm(['cousin.anim.slam']);
+      old.fail(new Error('late failure')); // the stuck first attempt fails now
+      await flush();
+      expect(warmState('cousin.anim.slam')).toBe('loading'); // unaffected
+      pending.shift()!.ok();
+      expect(await retry).toEqual([true]);
+      expect(warmState('cousin.anim.slam')).toBe('ready');
+    });
   });
 });

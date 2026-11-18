@@ -79,7 +79,9 @@ before you change anything.
 ## Before you finish a stage
 
 Run `npm run check`, plus `npm run e2e` for UI changes and `npm run qa` / `npm run a11y` for layout,
-input or accessibility changes, and `npm run matches` / `npm run smoke` before a release. CI
+input or accessibility changes, `npm run story:e2e` / `npm run story:sweep` for Story presentation changes,
+`npm run faults` for loading, media, storage or navigation changes, and `npm run matches` / `npm run smoke`
+before a release. CI
 (`.github/workflows/ci.yml`) runs check + smoke on every push. Update `docs/BUILD_STATUS.md` with the work you completed,
 the commands you ran and their results, known issues and the next stage. A
 feature only counts as complete when it has been exercised, not just compiled.

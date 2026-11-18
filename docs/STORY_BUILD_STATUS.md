@@ -91,7 +91,14 @@ v0.2, committed to `main` by the owner as 242ee60). The general project log stay
 | | Owner listening pass: SFX choices, bed seams (`/dev/audio-audition.html`), levels on headphones and speakers; mark `auditioned` / `final` | ☐ |
 | | Commissioned music (night bed, cave bed, stingers) and recorded domino foley | ☐ |
 | | Finish Hand with AI assistance, skip with recap, optional table banter in safe gaps | ☐ |
-| | Interrupted resilience items: update-time save retry, music recovery, AI worker timeouts | ☐ |
+| | Resilience: update-time save retry, music recovery, AI worker timeouts | ✅ Done in the hardening pass (below) |
+| **Hardening pass (2026-11-18)** | Dialogue reveal timers belong to their own beat (an early-finished line can't end the next line's reveal; Back, Skip, settle, cancel and exit retire it) | ✅ |
+| | AI worker: validated answers, observation-only cheap fallback on error, messageerror, malformed answer, postMessage failure or timeout; bounded restarts; late duplicates dropped; dispose settles | ✅ |
+| | Media: absent vs broken vs transient failures; bounded recovery after a gesture or reconnection (current scene only, never replays cues or SFX) | ✅ (Chromium; **not auditioned by ear**) |
+| | Loading: image deadlines and once-only completion; Story, script and achievement chunk failures show Retry / Back (Retry reloads into the same screen if the browser keeps refusing); a late chunk never remounts an abandoned screen | ✅ |
+| | Saves: per-record write health (one success never hides another failure), retries of the latest value, alert reserves its room | ✅ |
+| | Every story hand's backdrop explicit (Ch. 6 drawn rest area); no patio defaults, including rotation | ✅ |
+| | Evidence list: verbatim on-screen captions of six approved evidence beats, shown only once reached (no spoilers, no new save field) | ✅ |
 | | Version alignment (package vs release notes) | ☐ |
 | | Representative human playtest timing (target 90–110 min, under 120) | ☐ |
 

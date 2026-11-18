@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { RUNTIME_ASSET_URLS } from '../assets/urls';
+import { PORTRAIT_URLS, RUNTIME_ASSET_URLS } from '../assets/urls';
+import { HANDS } from './chapters';
 import type { Scene } from './parse';
 import { SCENE_IDS } from './progress';
 import { STAGING } from './staging';
@@ -78,3 +79,38 @@ function sceneAssetsFor(sc: Scene, portrait: boolean) {
     globalThis.matchMedia = mm;
   }
 }
+
+describe('every story hand has an explicit, mapped backdrop', () => {
+  const handScenes = SCENE_IDS.filter((id) => HANDS[id]);
+
+  it('each chapter with a hand names its table backdrop explicitly (no table falls back to the patio)', () => {
+    expect(handScenes).toHaveLength(7);
+    for (const id of handScenes) expect('handEnv' in STAGING[id], `${id} handEnv`).toBe(true);
+  });
+
+  it("each hand is played at its chapter's location; Chapter 6 at the drawn rest area, never the platform", () => {
+    for (const id of handScenes) {
+      const h = STAGING[id].handEnv;
+      if (id === 'chapter-6') expect(h).toBeNull();
+      else expect(h, id).toBe(STAGING[id].env);
+    }
+    expect(STAGING['chapter-3'].env).toBe('env.executive-terrace');
+    expect(STAGING['chapter-3'].handEnv).toBe('env.executive-terrace');
+    expect(STAGING['chapter-7'].handEnv).toBe('env.executive-terrace');
+  });
+
+  it('every hand backdrop is preloaded, offline-mapped and has both derivatives (full frame and 3:4 crop)', () => {
+    for (const id of handScenes) {
+      const h = STAGING[id].handEnv;
+      if (!h) continue;
+      expect(SCENE_IMAGES[id].env, id).toContain(h);
+      expect(RUNTIME_ASSET_URLS[h as keyof typeof RUNTIME_ASSET_URLS], h).toBeTruthy();
+      expect(PORTRAIT_URLS[`${h}@portrait` as keyof typeof PORTRAIT_URLS], h).toBeTruthy();
+    }
+  });
+
+  it('the retired leisure resort is referenced nowhere in staging, preload or offline data', () => {
+    const all = JSON.stringify({ STAGING, SCENE_IMAGES, urls: Object.keys(RUNTIME_ASSET_URLS) });
+    expect(all).not.toMatch(/resort-patio/);
+  });
+});

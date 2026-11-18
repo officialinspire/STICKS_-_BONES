@@ -12,8 +12,8 @@
  * a ghost tile or move twice.
  */
 import { buildObservation } from '../ai/observation';
-import { decide, toCommand } from '../ai/policy';
-import { inlineRunner, type AiRunner } from '../ai/runner';
+import { toCommand } from '../ai/policy';
+import { fallbackDecision, inlineRunner, type AiRunner } from '../ai/runner';
 import type { Decision, Difficulty } from '../ai/types';
 import type { Command, CommandError } from '../engine/commands';
 import { createMatchConfig, type MatchConfig } from '../engine/config';
@@ -354,7 +354,10 @@ export class GameSession {
         this.#tryApplyAi(pending);
       },
       () => {
-        pending.decision = decide(req.difficulty, req.obs, req.rng);
+        // The runner gave up (disposed, or its own fallback threw). Nothing to do for a stale turn; otherwise
+        // the cheap observation-only fallback, never Hard's full search on the main thread.
+        if (this.#pending !== pending || !this.#valid(pending.token)) return;
+        pending.decision = fallbackDecision(req);
         this.#tryApplyAi(pending);
       },
     );

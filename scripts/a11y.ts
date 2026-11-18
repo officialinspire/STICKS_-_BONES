@@ -206,7 +206,8 @@ try {
   {
     const page = await newPage();
     await page.goto(BASE);
-    await page.waitForSelector('.start-button');
+    // The button is shown disabled ("Loading…") during initialization and is focused once it is ready.
+    await page.waitForSelector('.start-button:not([disabled])');
     check(await activeIs(page, '.start-button'), 'keyboard: start button is not focused on load');
     await page.keyboard.press('Enter');
     await page.waitForSelector('[data-go="setup"]');

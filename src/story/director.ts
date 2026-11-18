@@ -79,12 +79,15 @@ export class SceneDirector<B> {
   #beats: readonly B[] = [];
   #index = 0;
   #revealing = false;
+  /** The current beat's reveal timer and its sequence number: a reveal callback only ever ends ITS beat's reveal. */
+  #revealTimer: unknown = null;
+  #revealSeq = 0;
   #lastAdvance = -Infinity;
   #handStarted = false;
   #timers = new Set<unknown>();
   /** Completion for the transition in flight (run by its timer or by settle()). */
   #pending: (() => void) | null = null;
-  readonly stats = { staleDropped: 0, ignoredInputs: 0, prepareTimeouts: 0 };
+  readonly stats = { staleDropped: 0, ignoredInputs: 0, prepareTimeouts: 0, staleReveals: 0 };
 
   constructor(
     private readonly view: StageView<B>,
@@ -128,6 +131,20 @@ export class SceneDirector<B> {
     this.#timers.add(h);
   }
 
+  /**
+   * End the current beat's reveal state (finished early, replaced by another beat, Back, Skip, settle,
+   * cancel or exit). Its timer is cleared and its sequence retired, so it can never touch a newer line.
+   */
+  #stopReveal(): void {
+    if (this.#revealTimer !== null) {
+      this.sched.clear(this.#revealTimer);
+      this.#timers.delete(this.#revealTimer);
+      this.#revealTimer = null;
+    }
+    this.#revealSeq++;
+    this.#revealing = false;
+  }
+
   /** Start a transition whose completion runs after `ms` (or immediately via settle()). */
   #transition(token: number, ms: number, done: () => void): void {
     const run = () => {
@@ -143,16 +160,16 @@ export class SceneDirector<B> {
   /** Invalidate everything in flight (reset, navigation, new scene, replay). */
   cancel(): void {
     this.#token++;
+    this.#stopReveal();
     this.#clear();
     this.#pending = null;
-    this.#revealing = false;
     this.#set('idle');
   }
 
   /** Complete the transition or reveal in flight right now (backgrounding, skip). Never leaves a blocker. */
   settle(): void {
     if (this.#revealing) {
-      this.#revealing = false;
+      this.#stopReveal();
       this.view.finishReveal();
     }
     const p = this.#pending;
@@ -172,15 +189,23 @@ export class SceneDirector<B> {
     this.#set('preparing');
     this.view.curtain('closed', 0);
     let timedOut = false;
+    let timeout: unknown = null;
     const ready = await Promise.race([
       this.view.prepare().catch(() => false),
-      new Promise<boolean>((resolve) =>
-        this.#after(token, this.timings.prepareTimeoutMs, () => {
+      new Promise<boolean>((resolve) => {
+        timeout = this.sched.set(() => {
+          this.#timers.delete(timeout);
           timedOut = true;
           resolve(false);
-        }),
-      ),
+        }, this.timings.prepareTimeoutMs);
+        this.#timers.add(timeout);
+      }),
     ]);
+    // Images ready first: the deadline is no longer needed (never left pending into the scene).
+    if (!timedOut && timeout !== null) {
+      this.sched.clear(timeout);
+      this.#timers.delete(timeout);
+    }
     if (token !== this.#token) return void this.stats.staleDropped++;
     if (timedOut) this.stats.prepareTimeouts++;
     void ready;
@@ -194,10 +219,8 @@ export class SceneDirector<B> {
   }
 
   #show(): void {
-    if (this.#index >= this.#beats.length) {
-      this.#revealing = false;
-      return;
-    }
+    this.#stopReveal(); // the previous beat's reveal (if any) is over, whatever its timer thinks
+    if (this.#index >= this.#beats.length) return;
     const beat = this.#beats[this.#index]!;
     const len = this.hooks.textOf(beat).length;
     const ms = Number.isFinite(this.timings.revealCps) ? Math.min(this.timings.revealMaxMs, Math.round((len / this.timings.revealCps) * 1000)) : 0;
@@ -206,17 +229,23 @@ export class SceneDirector<B> {
     if (ms > 0) {
       this.#revealing = true;
       const token = this.#token;
-      this.#after(token, ms, () => {
+      const seq = this.#revealSeq;
+      const h = this.sched.set(() => {
+        this.#timers.delete(h);
+        if (token !== this.#token || seq !== this.#revealSeq) return void this.stats.staleReveals++;
+        this.#revealTimer = null;
         this.#revealing = false;
-      });
-    } else this.#revealing = false;
+      }, ms);
+      this.#timers.add(h);
+      this.#revealTimer = h;
+    }
   }
 
   /** Player input (tap, click, Enter, →). One step at most. */
   advance(): void {
     if (this.#state !== 'presenting') return void this.stats.ignoredInputs++;
     if (this.#revealing) {
-      this.#revealing = false;
+      this.#stopReveal();
       this.view.finishReveal();
       return;
     }
@@ -278,9 +307,9 @@ export class SceneDirector<B> {
   /** Fade out and leave (next scene, case file, menu). */
   exit(): void {
     if (this.#state === 'exiting' || this.#state === 'idle') return;
+    this.#stopReveal();
     this.#clear();
     this.#pending = null;
-    this.#revealing = false;
     const token = this.#token;
     this.#set('exiting');
     this.view.curtain('closed', this.timings.sceneFadeMs);

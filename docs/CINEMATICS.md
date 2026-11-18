@@ -11,6 +11,7 @@ in-hand → leaving-hand → presenting → exiting → idle`.
 | Guarantee | How |
 | --- | --- |
 | Stale callbacks never act | Every async continuation (preload, fades, reveals) carries the director token. `cancel()` bumps it, and is called on reset, navigation, chapter replay and every new scene. |
+| A reveal belongs to its own beat | Each line's reveal timer has its own handle and sequence number. Finishing a line early, advancing, Back, Skip, `settle()`, `cancel()` and `exit()` clear it, so an old line's timer can never end a newer line's reveal (which would have let the next tap skip that line's reveal). The prepare deadline is cleared once images are ready. Regression: `director.test.ts` "reveal timers belong to their own beat" (fails on the previous director). |
 | No permanent input blocker | Every transitional state has a scheduled exit. `preparing` times out after 4 s and shows the fallback art. `settle()` completes any in-flight transition at once (backgrounding, Skip). |
 | Single-step input | The first input on a revealing line finishes the reveal; the next advances **one** beat. Inputs closer than 180 ms are ignored. Input during transitions or hands is ignored, never queued. |
 | No double hand start | `enterHand()` works only from `presenting` and once per scene, so a double-tapped "Deal the tiles" starts one hand. |

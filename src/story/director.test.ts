@@ -189,4 +189,83 @@ describe('SceneDirector', () => {
     expect(h.events.filter((e) => e === 'exit')).toHaveLength(1);
     expect(h.d.state).toBe('idle');
   });
+
+  describe('reveal timers belong to their own beat', () => {
+    // Long enough that each line reveals for the full revealMaxMs (900 ms at 70 cps).
+    const long = ['A'.repeat(200), 'B'.repeat(200), 'C'.repeat(200), 'D'.repeat(200)];
+    const enter = async () => {
+      const h = harness();
+      void h.d.load(long);
+      await flush();
+      await h.tick(DEFAULT_TIMINGS.sceneFadeMs);
+      expect(h.d.state).toBe('presenting');
+      expect(h.d.revealing).toBe(true);
+      return h;
+    };
+
+    it("an early-finished line's old timer never ends the NEXT line's reveal", async () => {
+      const h = await enter();
+      await h.tick(100);
+      h.d.advance(); // finish line A's reveal early
+      expect(h.d.revealing).toBe(false);
+      await h.tick(DEFAULT_TIMINGS.minBeatMs);
+      h.d.advance(); // advance to line B: it starts revealing (900 ms)
+      expect(h.d.index).toBe(1);
+      expect(h.d.revealing).toBe(true);
+      // Line A's original 900 ms would have fired here (it started 280 ms earlier).
+      await h.tick(DEFAULT_TIMINGS.revealMaxMs - 280 + 10);
+      expect(h.d.revealing).toBe(true); // still B's reveal
+      h.d.advance(); // so the next tap finishes B, it does not skip to C
+      expect(h.d.index).toBe(1);
+      expect(h.log.at(-1)).toBe('finish');
+      await h.tick(DEFAULT_TIMINGS.revealMaxMs);
+      expect(h.d.stats.staleReveals).toBe(0); // A's timer was cleared, not merely ignored
+    });
+
+    it('Back, Skip and settle retire the reveal in flight', async () => {
+      const h = await enter();
+      await h.tick(100);
+      h.d.advance();
+      await h.tick(DEFAULT_TIMINGS.minBeatMs);
+      h.d.advance(); // B revealing
+      await h.tick(50);
+      h.d.back(); // back to A: shown complete (settled)
+      expect(h.d.index).toBe(0);
+      expect(h.d.revealing).toBe(false);
+      await h.tick(DEFAULT_TIMINGS.revealMaxMs * 2);
+      expect(h.d.revealing).toBe(false);
+      await h.tick(DEFAULT_TIMINGS.minBeatMs);
+      h.d.advance(); // B again: a fresh reveal that no earlier timer can end
+      expect(h.d.index).toBe(1);
+      expect(h.d.revealing).toBe(true);
+      h.d.settle();
+      expect(h.d.revealing).toBe(false);
+      await h.tick(DEFAULT_TIMINGS.minBeatMs);
+      h.d.advance(); // C revealing
+      expect(h.d.revealing).toBe(true);
+      await h.tick(DEFAULT_TIMINGS.revealMaxMs - 10);
+      expect(h.d.revealing).toBe(true); // nothing from A or B ended C early
+      h.d.skipToEnd();
+      expect(h.d.revealing).toBe(false);
+      expect(h.events).toContain('end');
+      expect(h.pending()).toBe(0); // no reveal timer left behind
+    });
+
+    it('cancel and exit leave no reveal timer that could fire into the next scene', async () => {
+      const h = await enter();
+      h.d.cancel();
+      expect(h.d.revealing).toBe(false);
+      void h.d.load(long);
+      await flush();
+      await h.tick(DEFAULT_TIMINGS.sceneFadeMs);
+      expect(h.d.revealing).toBe(true);
+      await h.tick(DEFAULT_TIMINGS.revealMaxMs - 10);
+      expect(h.d.revealing).toBe(true);
+      h.d.exit();
+      expect(h.d.revealing).toBe(false);
+      await h.tick(DEFAULT_TIMINGS.sceneFadeMs + DEFAULT_TIMINGS.revealMaxMs);
+      expect(h.events).toContain('exit');
+      expect(h.pending()).toBe(0);
+    });
+  });
 });

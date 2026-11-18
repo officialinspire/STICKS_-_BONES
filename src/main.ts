@@ -2,6 +2,7 @@ import './styles.css';
 import { createWorkerRunner, inlineRunner, type AiRunner } from './ai/runner';
 import { TableController } from './app/controller';
 import { browserStore, clearSave, newMatchId, readSave, writeSave, type SavedGame } from './app/save';
+import { RECORD_LABEL, WriteHealth, type RecordName } from './app/write-health';
 import { secureSeed } from './app/seed';
 import { loadSettingsResult, reduceMotion, saveSettings, type Settings } from './app/settings';
 import { DEFAULT_TIMING, GameSession, realScheduler, type Timing } from './app/session';
@@ -18,9 +19,11 @@ import { AudioManager, type Scene, type SfxId } from './audio/manager';
 import { WebAudioBackend } from './audio/webaudio';
 import { haptic, type HapticCue } from './audio/haptics';
 import { showStart } from './ui/intro-screen';
-import { renderMenu, type MenuChoice, type ResumeOffer, type StoryOffer } from './ui/menu';
+import { renderMenu, type MenuChoice, type MenuScreen, type ResumeOffer, type StoryOffer } from './ui/menu';
 import { readStory } from './story/progress';
 import { achievements, achievementsReady, configureAchievements } from './ui/achievements-bridge';
+import { bindLoadFailure, retryable } from './ui/lazy';
+import { esc } from './ui/svg';
 import { TableScreen } from './ui/table';
 import { chaptersReady, consumeUpdatedFlag, consumeUpdateResume, describeAudio, describeOffline, describeStory, eraseLocalData, PwaController, setUpdateResume, type ResumeTarget } from './app/pwa';
 import { SCENE_IMAGES } from './story/scene-images';
@@ -31,6 +34,8 @@ const DEV = import.meta.env.DEV;
 document.documentElement.dataset.build = __SB_BUILD_TAG__; // support/diagnostics: which build is running
 const root = document.getElementById('app')!;
 const store = browserStore();
+/** Which records failed to save (per record; see write-health.ts). Rendered as the persistent "Not saved" alert. */
+const health = new WriteHealth((failing) => renderSaveAlert(failing));
 
 /** Messages for the next menu render (recovered or set-aside data). */
 const notices: string[] = [];
@@ -50,7 +55,7 @@ let settings: Settings = loadedSettings.settings;
 if (loadedSettings.status === 'migrated') {
   const kept = readStory(store).value?.textScale;
   if (kept && kept !== 1 && kept !== settings.storyTextScale) settings = { ...settings, storyTextScale: kept };
-  saveSettings(store, settings);
+  persistSettings();
 }
 const sn = noticeFor('settings', loadedSettings.status);
 if (sn) notices.push(sn);
@@ -74,7 +79,11 @@ const audio = new AudioManager({
 // Any later gesture re-unlocks if the browser suspended audio (iOS, focus loss).
 const regesture = () => {
   if (!audio.unlocked || (audio.wantsMusic && audio.scene !== 'intro' && audio.scene !== 'init')) void audio.unlock();
+  // A gesture is also the moment to retry media that failed for a temporary reason (bounded, current scene only).
+  else audio.recover();
 };
+// Back online: the same bounded recovery (music needs no new gesture once the context is unlocked).
+window.addEventListener('online', () => audio.recover());
 document.addEventListener('pointerdown', regesture, { capture: true, passive: true });
 document.addEventListener('keydown', regesture, { capture: true });
 document.addEventListener('visibilitychange', () => audio.setHidden(document.hidden));
@@ -82,10 +91,11 @@ document.addEventListener('visibilitychange', () => audio.setHidden(document.hid
 // Each element keeps the place it shows (data-env-id: the patio, or a story hand's own scene), so a
 // rotation never swaps the corporate terrace for the patio. One app-wide listener (never per screen).
 onViewportShape(() => {
-  const els = [...document.querySelectorAll<HTMLElement>('[style*="--env-image"]')];
-  const ids = [...new Set(els.map((el) => (el.dataset.envId ?? 'env.neighborhood-patio') as RuntimeAssetId))];
+  // Only elements that name their place; nothing is ever re-pointed at a default (patio or otherwise).
+  const els = [...document.querySelectorAll<HTMLElement>('[data-env-id]')].filter((el) => el.dataset.envId !== 'none');
+  const ids = [...new Set(els.map((el) => el.dataset.envId as RuntimeAssetId))];
   void warm(ids.map((id) => envKey(id)), { front: true }).then(() => {
-    for (const el of els) setEnvBackdrop(el, (el.dataset.envId ?? 'env.neighborhood-patio') as RuntimeAssetId);
+    for (const el of els) if (el.isConnected) setEnvBackdrop(el, el.dataset.envId as RuntimeAssetId);
   });
 });
 window.addEventListener('pagehide', () => audio.setHidden(true));
@@ -122,7 +132,7 @@ const settingsApi = {
   get: () => settings,
   set: (p: Partial<Settings>) => {
     settings = { ...settings, ...p };
-    saveSettings(store, settings);
+    persistSettings();
     audio.setLevels(settings.audio);
     achievements.note('explore.settings');
     if ('storyTextScale' in p || 'instantText' in p) achievements.note('explore.storyText');
@@ -236,13 +246,16 @@ function applyUpdate(force = false): void {
   let to: ResumeTarget = { to: 'menu' };
   const a = active;
   if (a && a.controller.session.opponent !== 'dev-both') {
-    saved = writeSave(store, a.controller.session, a.matchId);
+    saved = persistMatch(a.controller.session, a.matchId);
     to = { to: 'quick' };
   } else if (storyHooks) {
     saved = storyHooks.flush();
     to = { to: 'story', run: true };
   } else if (storyOpen) to = { to: 'story', run: false }; // on the case file: progress is already saved
-  setSaveHealth(saved);
+  // Best effort for anything else still unsaved (settings, statistics, achievements) before reloading.
+  health.retryAll();
+  // The stable point itself must be stored: a place that is still failing counts as unsaved.
+  if (to.to === 'story' && health.has('story')) saved = false;
   if (!saved && !force) return void confirmUnsavedUpdate();
   pwa.applyUpdate(() => {
     setUpdateResume(saved ? to : { to: 'menu' });
@@ -307,22 +320,38 @@ const tableUpdate = { ready: () => pwa.view.updateReady, apply: applyUpdate };
  * Shown whenever storage refuses a write (quota, private mode, blocked storage) and kept
  * on screen until a later write succeeds. The game never claims "saved" in that state.
  */
-let saveFailed = false;
-function setSaveHealth(ok: boolean): void {
-  if (ok === !saveFailed) return;
-  saveFailed = !ok;
+function renderSaveAlert(failing: readonly RecordName[]): void {
   let el = document.querySelector<HTMLElement>('.save-alert');
-  if (!ok) {
-    if (!el) {
-      el = document.createElement('div');
-      el.className = 'save-alert';
-      el.setAttribute('role', 'alert');
-      document.body.append(el);
-    }
-    el.innerHTML = '<p><strong>Not saved.</strong> This browser refused to store your progress (storage full or blocked). Keep this page open, or free some space.</p>';
-    el.hidden = false;
-  } else if (el) el.hidden = true;
+  const html = document.documentElement;
+  if (!failing.length) {
+    if (el) el.hidden = true;
+    html.classList.remove('has-save-alert');
+    html.style.removeProperty('--save-alert-h');
+    window.dispatchEvent(new Event('resize')); // the story stage re-measures its room
+    return;
+  }
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'save-alert';
+    el.setAttribute('role', 'alert');
+    document.body.append(el);
+    el.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).closest('[data-act="save-retry"]')) health.retryAll();
+    });
+  }
+  const what = failing.map((n) => RECORD_LABEL[n]);
+  const list = what.length > 1 ? `${what.slice(0, -1).join(', ')} and ${what.at(-1)}` : what[0]!;
+  el.innerHTML = `<p><strong>Not saved:</strong> ${esc(list)}. This browser refused to store it (storage full or blocked). It is kept on this page meanwhile.</p><button type="button" class="btn small" data-act="save-retry">Try again</button>`;
+  el.dataset.failing = failing.join(' ');
+  el.hidden = false;
+  // Reserve the alert's height so it never covers Continue or the table's controls.
+  html.style.setProperty('--save-alert-h', `${el.offsetHeight + 8}px`);
+  html.classList.add('has-save-alert');
+  window.dispatchEvent(new Event('resize'));
 }
+// Leaving or backgrounding the page is a last chance to store what is still unsaved.
+document.addEventListener('visibilitychange', () => document.hidden && health.retryAll());
+window.addEventListener('pagehide', () => health.retryAll());
 
 // ---- Story: NO REST FOR COUSIN (case file + scene player + chapter hands) ----------------
 /** A story hand's table: separate from Quick Play (no Quick Play save, no statistics, no analytics). */
@@ -347,9 +376,19 @@ function openStory(): void {
   active = null;
   audio.setScene('menu');
   const fast = DEV && Boolean((window as unknown as { __sbStoryFast?: boolean }).__sbStoryFast);
+  const nav = navSeq;
+  const isCurrent = () => nav === navSeq && storyOpen;
+  root.className = 'is-story';
+  root.innerHTML = '<div class="story-shell"><header class="story-head"><button type="button" class="btn-ghost back" data-act="story-load-back">← Menu</button></header><div data-region="story-load"><p class="note-dark" role="status">Opening the case file…</p></div></div>';
+  // The player may leave a slow load; the chunk arriving later then changes nothing (isCurrent).
+  root.querySelector('[data-act="story-load-back"]')?.addEventListener('click', () => showMenu(), { once: true });
   // The whole Story layer (player, director, staging, script) is a lazy chunk: nothing of it loads at startup.
-  void import('./ui/story-ui').then(({ renderStoryHome }) => renderStoryHome({
+  // A failed chunk shows Retry / Back (never a blank screen); a late one never remounts an abandoned screen.
+  storyUi.get().then(
+    ({ renderStoryHome }) => isCurrent() && void renderStoryHome({
     root,
+    isCurrent,
+    reload: () => reloadInto({ to: 'story' }),
     store,
     fast,
     onBack: () => {
@@ -361,7 +400,8 @@ function openStory(): void {
     },
     reduceMotion: () => reduceMotion(settings, matchMedia('(prefers-reduced-motion: reduce)').matches),
     prefs: () => ({ textScale: settings.storyTextScale, instantText: settings.instantText }),
-    onSaveFailed: () => setSaveHealth(false),
+    onSaveFailed: () => health.report('story', false, () => false),
+    onSaveResult: (ok, retry) => health.report('story', ok, retry),
     cue: (c) => void audio.cue(c),
     registerRun: (hooks) => (storyHooks = hooks),
     // Story analytics: separate events from Quick Play; disabled adapter until the owner's contract.
@@ -437,8 +477,19 @@ function openStory(): void {
       }
       if (DEV) (window as unknown as { __sb: unknown }).__sb = { session, controller, runnerKind: runner.kind, matchId: `story:${req.sceneId}`, stats: () => stats };
     },
-  }));
+  }),
+    () => {
+      if (!isCurrent()) return;
+      bindLoadFailure(root.querySelector('[data-region="story-load"]') as HTMLElement, { title: 'The Story didn’t load', body: 'Check your connection and try again. Your place in the case is saved on this device.', back: 'Back to menu' }, {
+        // Try again; if the browser still refuses the chunk, reload and come straight back to the Story.
+        retry: () => void storyUi.get().then(() => isCurrent() && openStory(), () => isCurrent() && reloadInto({ to: 'story' })),
+        back: () => showMenu(),
+      });
+    },
+  );
 }
+/** The Story chunk: a failed load is forgotten so Retry really loads again. */
+const storyUi = retryable(() => import('./ui/story-ui'));
 // ---- the active match ----------------------------------------------------------------
 interface Active {
   table: TableScreen;
@@ -468,7 +519,17 @@ document.addEventListener(
 
 function updateStats(next: Stats): void {
   stats = next;
-  saveStats(store, stats);
+  health.report('stats', saveStats(store, stats), () => saveStats(store, stats));
+}
+/** Settings write, reported per record; the retry writes whatever the settings are by then. */
+function persistSettings(): void {
+  health.report('settings', saveSettings(store, settings), () => saveSettings(store, settings));
+}
+/** The Quick Play save, reported per record; the retry writes this session's state as it is then. */
+function persistMatch(session: GameSession, matchId: string): boolean {
+  const ok = writeSave(store, session, matchId);
+  health.report('save', ok, () => writeSave(store, session, matchId));
+  return ok;
 }
 
 /** A match given up before its end counts as abandoned — never as a loss. */
@@ -477,7 +538,13 @@ function abandon(matchId: string, mode: ModeId): void {
 }
 
 /** Stop the current table: cancels AI work, timers, effects and sounds. */
+/**
+ * Navigation generation: bumped whenever the player leaves for another screen. Work started for an older
+ * screen (a lazy chunk, the script) checks it and never remounts a screen the player has abandoned.
+ */
+let navSeq = 0;
 function teardown(): void {
+  navSeq++;
   storyOpen = false;
   audio.reset();
   audio.setStoryProfile(null); // Quick Play, menus and the case file use the default mix
@@ -505,7 +572,16 @@ function storyOffer(): StoryOffer | null {
   return { label: `${at}${p.part === 'hand' ? ' · hand in play' : ''}`, closed: false };
 }
 
-function showMenu(): void {
+/**
+ * Retry for a chunk the browser refused: Chromium caches a failed dynamic import for the page's lifetime,
+ * so when a second attempt fails too, reload the app and come back (once) to the same screen.
+ */
+function reloadInto(t: ResumeTarget): void {
+  setUpdateResume(t);
+  location.reload();
+}
+
+function showMenu(screen?: MenuScreen): void {
   document.documentElement.classList.remove('table-lock');
   // Leaving Story: drop the scene player's handlers and backdrop.
   root.onclick = null;
@@ -530,6 +606,7 @@ function showMenu(): void {
   if (sv) notices.push(sv);
   audio.setScene('menu');
   renderMenu(root, last ?? {}, {
+    screen,
     dev: DEV,
     settings: settingsApi,
     resume: saved.value ? resumeOffer(saved.value) : null,
@@ -540,13 +617,14 @@ function showMenu(): void {
     onStart: (c) => void start(c),
     onResume: () => resume(),
     onStory: () => openStory(),
-    renderAchievements: (el) => achievements.renderPage(el),
+    renderAchievements: (el, back) => achievements.renderPage(el, back, () => reloadInto({ to: 'achievements' })),
     onExplore: (s) => achievements.note(`explore.${s}`),
     pwa: import.meta.env.PROD ? menuPwa : undefined,
     onDiscard: () => {
       const g = readSave(store).value;
       if (g) abandon(g.matchId, g.state.config.mode);
       clearSave(store);
+      health.resolve('save'); // removed on purpose: no pending retry may bring it back
       notices.push('Saved game discarded.');
       showMenu();
     },
@@ -558,7 +636,7 @@ function mount(controller: TableController, matchId: string, counted: boolean, o
   document.documentElement.classList.add('table-lock'); // no page scroll / rubber-band under the table
   const session = controller.session;
   const table = new TableScreen(root, controller, {
-    onMenu: showMenu, // the save is kept: Resume from the menu (not abandoned)
+    onMenu: () => showMenu(), // the save is kept: Resume from the menu (not abandoned)
     onRestart,
     settings: settingsApi,
     audio: audioApi,
@@ -582,7 +660,7 @@ function mount(controller: TableController, matchId: string, counted: boolean, o
     if (!events.length) return;
     // Autosave after every change (local only; see save.ts for what this is and isn't).
     // A refused write is surfaced persistently (never silently ignored).
-    if (session.opponent !== 'dev-both') setSaveHealth(writeSave(store, session, matchId));
+    if (session.opponent !== 'dev-both') persistMatch(session, matchId);
     // Analytics from applied engine events only (never from renders): the first accepted
     // command of a new match is its real start; a restored match never "starts" again.
     if (tracked) {
@@ -616,7 +694,8 @@ function mount(controller: TableController, matchId: string, counted: boolean, o
       );
     }
   });
-  writeSave(store, session, matchId);
+  // The initial save is checked like every other (a refused first write is reported, not ignored).
+  if (session.opponent !== 'dev-both') persistMatch(session, matchId);
   if (DEV) (window as unknown as { __sb: unknown }).__sb = { session, controller, runnerKind: runner.kind, matchId, stats: () => stats };
 }
 
@@ -635,6 +714,7 @@ async function start(c: MenuChoice, kind: StartKind = 'fresh'): Promise<void> {
   if (saved && saved.matchId !== active?.matchId) abandon(saved.matchId, saved.state.config.mode);
   teardown();
   clearSave(store);
+  health.resolve('save');
   setForceSvg(Boolean(c.devForceSvg));
   const timing = DEV && c.devFastAi ? FAST_TIMING : DEFAULT_TIMING;
   let session: GameSession;
@@ -732,6 +812,7 @@ function boot(): void {
         autoContinueOnce = resumeAfterUpdate.run === true;
         openStory();
       } else if (resumeAfterUpdate?.to === 'quick' && readSave(store).value) resume();
+      else if (resumeAfterUpdate?.to === 'achievements') showMenu('achievements');
       else showMenu();
     },
   });
@@ -743,7 +824,8 @@ configureAchievements({
   store,
   stats: () => stats,
   storyCompleted: () => readStory(store).value?.completed ?? [],
-  onSaveFailed: () => setSaveHealth(false),
+  onSaveFailed: () => health.report('achievements', false, () => false),
+  onSaveResult: (ok, retry) => health.report('achievements', ok, retry),
   reduceMotion: () => reduceMotion(settings, matchMedia('(prefers-reduced-motion: reduce)').matches),
 });
 boot();

@@ -1666,18 +1666,142 @@ each one.
 - **Transcript conflict:** still open for the owner (see the dialogue controls stage).
 - **Expression readings are this build's,** by visual inspection, for the owner to confirm.
 
+## Hardening pass (2026-11-18)
+
+I checked each reported finding against the code before changing it. All seven were real and are fixed,
+each with a focused regression.
+
+1. **Dialogue reveal race** (`src/story/director.ts`)
+   - **Confirmed:** reveal timers only checked the scene token. Finishing line A early, advancing to B, then
+     A's timer firing ended B's reveal, so the next tap skipped B's reveal.
+   - **Fix:** each beat's reveal has its own handle and sequence number. Early finish, advance, Back, Skip,
+     `settle()`, `cancel()` and `exit()` retire it. The prepare deadline is also cleared once images are ready.
+   - **Regression:** `director.test.ts` "reveal timers belong to their own beat". It was run against the old
+     director and failed, and passes now.
+2. **AI worker** (`src/ai/runner.ts`, `src/app/session.ts`)
+   - **Confirmed:** no `messageerror` handler and no timeout (a silent worker stalled the AI turn forever).
+     Answers were not validated. A `postMessage` throw made the session run the full policy, Hard included, on
+     the main thread. `dispose()` left promises unsettled.
+   - **Fix:** every request settles once, with a validated legal answer or the cheap observation-only fallback
+     (Hard degrades to the one-ply Normal heuristic). Fallbacks cover error, `messageerror`, malformed or
+     illegal answers, `postMessage` failure and a 6 s timeout.
+   - **Guards:** hung or crashed workers are replaced at most twice. Late or duplicate answers are dropped.
+     Dispose rejects. The session ignores rejections for stale turns, and the `{epoch, seq, seat}` guards are
+     unchanged.
+   - **Regression:** `runner.test.ts` (7, fake worker and clock) and `session.test.ts` (+2).
+3. **Audio and media** (`src/audio/manager.ts`, `src/audio/webaudio.ts`, `src/main.ts`)
+   - **Confirmed:** any sample or bed failure (404, offline or 5xx) was "broken" for the session. A music
+     element error added the track to `#broken` for good, and its media error was never reset.
+   - **Fix:** failures are classified as absent (404/410, or no URL), broken (won't decode) or transient
+     (offline, network error, temporary status).
+   - **Recovery:** after a gesture or the `online` event, bounded: 3 attempts per track and per file, at least
+     4 s between passes.
+   - **Scope:** only the current scene's music and bed are re-applied. Mute, one-track exclusivity, cue
+     cancellation and the silent init and credits are preserved. No SFX or cue is ever replayed.
+   - **Regression:** `manager.test.ts` (+5), faults § G and § I, audio § H (now asserting absent vs transient).
+4. **Loading and navigation** (`src/assets/warm.ts`, `src/ui/lazy.ts`, `src/main.ts`, `src/ui/story-ui.ts`,
+   `src/ui/story-player.ts`, `src/ui/achievements-bridge.ts`)
+   - **Confirmed:** a stalled image held its slot forever. Completion was not once-only, and a late completion
+     could resolve a newer attempt. Failed Story, script and achievements loads left a blank screen or a stuck
+     "Loading…", and their rejected promises were cached. A late Story chunk could remount over the menu.
+   - **Images:** 15 s deadlines with once-only completion, per-attempt numbers, and an explicit `retryWarm`.
+   - **Failed loads:** Retry / Back panels. Rejected loads are forgotten.
+     - Chromium caches a failed dynamic import for the page's lifetime, so when a second attempt also fails,
+       Retry reloads the app and returns once to the same screen.
+   - **Navigation:** a navigation token stops abandoned screens from remounting, and the loading state has a
+     Back button.
+   - **Regression:** `warm.test.ts` (+3), `lazy.test.ts` (3), faults § A–E.
+5. **Persistence** (`src/app/write-health.ts`, `src/main.ts`)
+   - **Confirmed:** one boolean covered every record, so a later successful match save hid a failed Story or
+     achievements write. Settings and statistics writes were unchecked, the first match save was unchecked,
+     and nothing was retried.
+   - **Fix:** per-record health for save, settings, stats, story and achievements, with retries of the latest
+     value. Retries run on Try again, on another record's success, before an update and on hide.
+   - **Alert:** it names what is unsaved, clears only when resolved, and reserves its own height so it never
+     covers Continue or the table. (The faults suite found the old alert covering Continue.)
+   - **Unchanged:** the update-time "Not now / Update anyway" choice and once-only progression.
+   - **Regression:** `write-health.test.ts` (6) and faults § F.
+6. **Scene consistency** (`src/story/staging.ts`, `src/ui/table.ts`, `src/assets/env.ts`, `src/main.ts`)
+   - **Confirmed:** Chapter 3 is the corporate terrace (last checkpoint). But story tables other than
+     Chapters 3 and 7 still defaulted to the patio, Chapter 6's rest-area hand showed the patio, and the
+     rotation handler defaulted to the patio.
+   - **Fix:** every chapter's `handEnv` is explicit and is passed to its table as-is. Chapter 6's is `null`,
+     a drawn rest area with no photo.
+   - **Rotation:** the handler re-picks only elements that name their place.
+   - **Bug found and fixed:** a removed `--env-image` inherited the menu's patio, so it is now set to `none`.
+   - **Regression:** `staging.test.ts` (+4: explicit, preloaded, offline-mapped, both derivatives, no retired
+     art) and faults § H (all seven tables in the browser).
+7. **Missing content**
+   - **Evidence:** the list was always empty. It now shows six approved evidence beats (`src/story/evidence.ts`)
+     as their on-screen captions, verbatim (the script's production notes are stripped by the existing,
+     tested caption list).
+     - Items appear only once the saved case position reaches them, so nothing is spoiled, and replays add
+       nothing.
+     - The list is derived from the existing Story record, so there is no new save field and no version bump.
+     - Regression: `evidence.test.ts` (6).
+   - **Media:** no intro video, music or foley has been supplied. `origin/main` has nothing new and the
+     working tree has no new media, so the honest fallbacks stay (the exact list is under "Next stage").
+
+**Also fixed (test races, not app defects):**
+- story:route read the first line during `leaving-hand`, when the hidden panel still held the last pre-hand
+  line.
+- a11y checked the start button's focus before initialization had enabled it.
+
+**Budget:** code 330 KB (was 320), measured 322 KB. The +8 KB is resilience code that has to live in the core
+bundle (see `docs/PERFORMANCE.md`). Every other budget is unchanged: startup 940 / 960 KB, story chunk
+123 / 130 KB.
+
+### Commands run and results (Chromium, this checkpoint's code)
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | pass: typecheck, lint, **507 unit tests** (was 468), assets verified, build and budgets |
+| `npm run faults` (new) | pass: § A–I |
+| `npm run story:e2e` | pass: § A–M |
+| `npm run story:sweep` | pass: 1,485 beats (all scenes and routes at 390×844; Chapters 3 and 7 at 7 viewports) |
+| `npm run story:route` | pass: all 21 chapter routes (7 × win/loss/tie) showed their own insert first; a full case through to the epilogue with completion recorded for all 9 scenes |
+| `npm run e2e` | pass: Quick Play and pass-and-play privacy (5 two-human arrangements through the cover with 0 flashes; hidden tab, rotation and pause re-cover); 400 rapid taps |
+| `npm run qa` | pass: 0 failures over 8 viewports (360×800 to 1920×1080); the 667×375 end-slot comfort warning is kept |
+| `npm run a11y` | pass (after the test-race fix) |
+| `npm run pwa` | pass: offline, update mid-match / mid-dialogue / mid-hand, storage refusing the update-time write, repair, whole-story download |
+| `npm run perf:story` | pass: 8 chapter visits; nodes, listeners, timers, workers and media flat |
+| `npm run audio` | pass (§ H now distinguishes absent from transient) |
+| `npm run matches` | pass: every arrangement completed full matches (fair AI, scoring) |
+| `npm run smoke` | pass: subpath, offline-ready, one hand vs the computer, offline restart |
+
+**Inspected:** the case-file Evidence list, the "Not saved" alert during a scene (Continue stays clear at all
+four sizes) and the Retry / Back panel at 390×844, 667×375, 768×1024 and 1366×768. The Chapter 6 drawn table
+was also checked.
+
+### Known limitations
+- **Chromium emulation only.** Firefox, WebKit / iOS Safari, Android Chrome, real safe-area insets, real
+  screen readers and real network drops were not tested.
+- **Audio by ear:** recovery was verified by state and request counts, never by ear. Nothing has been
+  auditioned.
+- **Retry needs a reload when a chunk keeps failing:** a reload is the only way to retry a chunk Chromium has
+  cached as failed. The player returns once to the same screen after the start tap.
+- **Owner decisions still open:** the expression readings and the transcript decision.
+
 ## Next stage
 
 The detailed list is in `docs/STORY_BUILD_STATUS.md`:
-- the interrupted resilience items: update-time save retry, bounded music recovery, AI worker
-  timeouts / `messageerror` / cancellation;
-- cast portraits once their expressions are labelled;
-- Finish Hand with AI assistance, skip with recap;
-- version alignment.
+- Finish Hand with AI assistance, and skip with recap;
+- version alignment (package vs release notes);
+- release reconciliation and the handoff document.
+
+Done since the last list: the resilience items (update-time save retry, bounded music recovery, AI worker
+timeouts / `messageerror` / cancellation), cast expressions, and the Evidence list.
 
 Still waiting on the owner:
-- the analytics contract;
-- enabling Pages and authorising the merge;
-- the intro video;
-- a listening pass on the selected sounds and bed seams; commissioned music; recorded domino foley;
-- real-device and Firefox/WebKit playtests.
+- **Analytics:** the analytics contract, or read access to `officialinspire/SPIRITBALL`.
+- **Merge:** enabling Pages and authorising the merge.
+- **Intro video:** `assets/video/inspiresoftwareintro.mp4` (the honest branded fallback runs meanwhile).
+- **Music:**
+  - commissioned original music: the night-investigation bed, the cave suspense bed, and the round and case
+    stingers (`docs/MUSIC_BRIEFS.md`);
+  - recorded domino foley (real double-six tiles on wood);
+  - a listening pass on the selected sounds and bed seams.
+- **Voices and portraits:** the contractor speaker's recording (if it should be voiced); portraits for
+  Worker, Representative and the contractor speaker.
+- **Confirmations:** the expression readings, and the transcript decision.
+- **Playtesting:** real devices, Firefox / WebKit, and representative first-time playtesters.

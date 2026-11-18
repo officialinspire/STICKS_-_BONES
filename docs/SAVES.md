@@ -24,6 +24,32 @@ destroyed, and the menu shows a notice ("Your saved game couldn't be read…",
 "…came from a different version…"). If storage is blocked entirely, the menu
 says games and settings last only until the page closes.
 
+### When a write is refused: per-record health (`src/app/write-health.ts`, hardening pass)
+
+Every write is checked and reported **per record**. This covers the match save (including a match's first
+save), settings, statistics, Story progress and achievements.
+- **Alert:** a failure shows the persistent "Not saved" alert naming the records that are failing, e.g. "Not
+  saved: your Story progress".
+- **One record never hides another:** the alert used to be a single flag, so a later successful match save
+  hid a failed Story write. Now a record clears only when that record is written, and the alert closes only
+  when no record is failing.
+- **Retries write the latest in-memory value** of their record, never an older one. They run:
+  - on the alert's **Try again**;
+  - when any other record is written successfully;
+  - before an update;
+  - when the page is hidden or closed.
+- **Records removed on purpose** (a discarded or replaced match save) drop their pending retry, so an old save
+  can't come back.
+- **Layout:** while the alert is up, the story stage and the table reserve its height, so it never covers
+  Continue, the hand or the table's controls.
+- **Update-time choices are unchanged.** An update first writes the stable place and retries anything else
+  pending. If the place still isn't stored (including a Story record that is still failing), the player
+  chooses "Not now — keep playing" or "Update anyway", and is never told it saved. Progression stays
+  once-only: a retry rewrites the same progress (completion included), never a new completion.
+- **Tests:** `src/app/write-health.test.ts`. `npm run faults` § F refuses only the Story record: another
+  record's success doesn't hide it, and once storage recovers, Try again stores the latest line and clears
+  the alert.
+
 ## Match saves (`src/app/save.ts`)
 
 **A save holds:**
