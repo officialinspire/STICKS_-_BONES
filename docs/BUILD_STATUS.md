@@ -2003,3 +2003,16 @@ game banner in its social preview. This request authorizes Pages enablement and 
   The existing deployment workflow runs its own complete check and production browser smoke before publication.
 - Pages was disabled when inspected. Publication is being completed using the existing deploy workflow;
   do not infer deployment success from this entry alone. The final response records the observed result.
+
+## Viewport-bound menus (2026-11-18)
+
+- Added section selectors and previous/next buttons to setup, rules, Settings, Statistics,
+  Achievements, the Story case file and the in-game pause menu. The home menu paginates when saved
+  games, notices or update controls take up the available space.
+- Pages fit using the measured viewport. Setup inputs stay mounted, so changing pages or rotating the
+  device retains the game, opponents, names, seat and score. Deal and pause actions stay in view.
+- Achievement filters and Story replay, notebook and evidence entries use the same paginator.
+- Added a production browser smoke sweep across eight viewport sizes, including 320 × 568 and
+  568 × 320, and checks for preserved setup choices after rotating. Individual cards that exceed the
+  viewport at extreme text sizes retain an accessible reading area.
+- The code and startup byte limits were adjusted for the shared pager and responsive menu styles.

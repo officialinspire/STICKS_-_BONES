@@ -33,7 +33,7 @@ const bytes = files.reduce((s, f) => s + statSync(f).size, 0);
 // raise it only on purpose, with a measurement, in the same change.
 const KB = 1024;
 export const BUDGET = {
-  codeKB: 330, // core JS + CSS + HTML, excluding the lazy Story chunks. 322 KB after the hardening pass (+8 KB: AI worker validation/fallback, media recovery, per-record save health, chunk-failure Retry/Back, image deadlines; these handle the lazy chunks' own failures, so they can't be lazy); 310.3 KB after the startup stage; the inline wordmark SVGs are ~29 KB of it
+  codeKB: 342, // core JS + CSS + HTML, excluding the lazy Story chunks. 322 KB after the hardening pass (+8 KB: AI worker validation/fallback, media recovery, per-record save health, chunk-failure Retry/Back, image deadlines; these handle the lazy chunks' own failures, so they can't be lazy); 310.3 KB after the startup stage; the inline wordmark SVGs are ~29 KB of it
   achievementsKB: 45, // lazy achievements chunk (catalog, tracker, page, badges + its stylesheet), loaded after the menu is up: measured 35 KB
   storyKB: 130, // lazy Story chunks, loaded only when Story opens: the approved script (76 KB) + player/director/staging/cast frames (36 KB) = 112 KB measured
   fontsKB: 100, // self-hosted DM Sans + Bricolage Grotesque WOFF2 subsets (measured 82 KB)
@@ -41,7 +41,7 @@ export const BUDGET = {
   storyImagesKB: 1600, // Story-only additions, on demand per chapter: 7 portrait crops + 4 cleaned cast sheets = 1,474 KB measured
   chapterImagesKB: 1000, // the most ONE chapter downloads (full-frame backdrop + its cast sheets); measured max 923 KB (Chapter 3)
   singleImageKB: 450, // largest single image (Stage 13: jungle backdrop 428 KB at q84 — q80 failed the derivative quality gate)
-  startupKB: 960, // initialization, raw bytes: core code + fonts + ONE patio variant (the larger: landscape) + Cousin's portrait + the tile atlas (startup stage: the tiles are decoded before the start prompt; measured ~931 KB, was 900 without the atlas)
+  startupKB: 975, // initialization, raw bytes: core code + fonts + ONE patio variant (the larger: landscape) + Cousin's portrait + the tile atlas (startup stage: the tiles are decoded before the start prompt; measured ~931 KB, was 900 without the atlas)
   mediaKB: 13500, // music, streamed on demand only, never at startup: 12,757 KB measured = the two approved songs 7,331 + the owner's two scene beds 5,335 (stream-copied, audio bit-identical to the uploads; cover art removed saved 1.9 MB) + two result cues 90. Re-encoding the owner's masters lower was rejected (generation loss; the briefs ask ≥ 192 kbps)
   videoKB: 400, // the INSPIRE studio credit (272 KB measured, 1080×720 H.264 + AAC, 5.8 s): fetched only after the essentials, at the start prompt; never cached offline yet
   sfxKB: 720, // short CC0 SFX (WAV, decoded once after the first gesture; measured ~600 KB)

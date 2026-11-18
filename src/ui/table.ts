@@ -24,8 +24,9 @@ import { opposite, rotationFor } from '../render/pips';
 import { Effects, preloadEffects } from './effects';
 import { wrapTab } from './focus-trap';
 import { HostView, hostFigureHtml, type Mood } from './host';
-import { rulesHtml } from './rules-summary';
-import { bindSettingsPanel, settingsPanelHtml, type SettingsApi } from './settings-panel';
+import { rulesPageItems } from './rules-summary';
+import { menuPages } from './menu-pages';
+import { bindSettingsPanel, settingsSections, type SettingsApi } from './settings-panel';
 import { esc } from './svg';
 
 
@@ -673,10 +674,13 @@ export class TableScreen {
     const rules = this.#s.rules;
     dlg.innerHTML = `<h2 id="pause-title">Paused</h2>
       <div class="pause-actions"><button type="button" class="btn" data-act="pause-resume">Resume</button><button type="button" class="btn-ghost dark" data-act="restart">Restart match</button><button type="button" class="btn-ghost dark" data-act="menu">Leave to menu</button></div>
-      <div class="update-banner" data-region="update" ${this.#cb.update?.ready() ? '' : 'hidden'}><p><strong>Update available.</strong> Your game is saved and the hands are hidden before the new version loads.</p><button type="button" class="btn-ghost dark" data-act="update-now">Update now</button></div>
-      <details class="pause-more"><summary>Rules</summary>${rulesHtml(rules)}</details>
-      <details class="pause-more"><summary>Settings</summary>${settingsPanelHtml(this.#cb.settings.get())}</details>`;
-    bindSettingsPanel(dlg.querySelector('.settings-panel') as HTMLElement, {
+      ${menuPages('Pause menu', [
+        { title: 'Match', html: `<div class="update-banner" data-region="update" ${this.#cb.update?.ready() ? '' : 'hidden'}><p><strong>Update available.</strong> Your game is saved and the hands are hidden before the new version loads.</p><button type="button" class="btn-ghost dark" data-act="update-now">Update now</button></div>
+          <p>Change your settings or review the rules while your match is paused.</p>` },
+        { title: 'Rules', html: rulesPageItems(rules), layout: 'rules-card' },
+        ...settingsSections(this.#cb.settings.get()),
+      ])}`;
+    bindSettingsPanel(dlg.querySelector('menu-pages') as HTMLElement, {
       get: () => this.#cb.settings.get(),
       set: (p) => {
         this.#cb.settings.set(p);

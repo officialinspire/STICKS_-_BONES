@@ -21,6 +21,7 @@ import { createServer } from 'vite';
 import { countBlobs } from './lib/raster.ts';
 import { getAsset } from '../src/assets/index.ts';
 import { bustBox, stageFor } from '../src/render/stage.ts';
+import { showMenuItem } from './lib/menu-navigation';
 
 type Page = import('playwright').Page;
 type Ctx = { message: string; type(): string; text(): string };
@@ -71,20 +72,49 @@ async function startMatch(
 ) {
   await enterMenu(page);
   await page.click('[data-go="setup"]');
-  await page.locator('details.dev-panel summary').click();
-  if (o.seed) await page.fill('input[name="seed"]', o.seed);
-  if (o.aiSeed) await page.fill('input[name="aiSeed"]', o.aiSeed);
-  if (o.fast) await page.check('input[name="fastAi"]');
-  if (o.svg) await page.check('input[name="forceSvg"]');
-  if (o.mode) await page.check(`input[name="mode"][value="${o.mode}"]`);
-  if (o.opponent) await page.check(`input[name="opponent"][value="${o.opponent}"]`);
+  if (o.seed) {
+    await showMenuItem(page, 'input[name="seed"]');
+    await page.fill('input[name="seed"]', o.seed);
+  }
+  if (o.aiSeed) {
+    await showMenuItem(page, 'input[name="aiSeed"]');
+    await page.fill('input[name="aiSeed"]', o.aiSeed);
+  }
+  if (o.fast) {
+    await showMenuItem(page, 'input[name="fastAi"]');
+    await page.check('input[name="fastAi"]');
+  }
+  if (o.svg) {
+    await showMenuItem(page, 'input[name="forceSvg"]');
+    await page.check('input[name="forceSvg"]');
+  }
+  if (o.mode) {
+    await showMenuItem(page, `input[name="mode"][value="${o.mode}"]`);
+    await page.check(`input[name="mode"][value="${o.mode}"]`);
+  }
+  if (o.opponent) {
+    await showMenuItem(page, `input[name="opponent"][value="${o.opponent}"]`);
+    await page.check(`input[name="opponent"][value="${o.opponent}"]`);
+  }
   if (o.names) {
+    await showMenuItem(page, 'input[name="name1"]');
     await page.fill('input[name="name1"]', o.names[0]);
+    await showMenuItem(page, 'input[name="name2"]');
     await page.fill('input[name="name2"]', o.names[1]);
   }
-  if (o.seating) await page.selectOption('select[name="seating"]', o.seating);
-  if (o.difficulty && (await page.locator(`input[name="difficulty"][value="${o.difficulty}"]`).isVisible())) await page.check(`input[name="difficulty"][value="${o.difficulty}"]`);
-  if (o.fixture) await page.click(`[data-fixture="${o.fixture}"]`);
+  if (o.seating) {
+    await showMenuItem(page, 'select[name="seating"]');
+    await page.selectOption('select[name="seating"]', o.seating);
+  }
+  if (o.difficulty && (await page.locator('[data-skill]:not([hidden])').count())) {
+    const skill = `input[name="difficulty"][value="${o.difficulty}"]`;
+    await showMenuItem(page, skill);
+    await page.check(skill);
+  }
+  if (o.fixture) {
+    await showMenuItem(page, `[data-fixture="${o.fixture}"]`);
+    await page.click(`[data-fixture="${o.fixture}"]`);
+  }
   else await page.click('.btn-start');
   await page.waitForSelector('.table-screen');
 }
@@ -336,8 +366,11 @@ try {
     const page = await newPage({ width: 320, height: 800 });
     await enterMenu(page);
     await page.click('[data-go="setup"]');
+    await showMenuItem(page, 'input[name="mode"][value="partnership4"]');
     await page.check('input[name="mode"][value="partnership4"]');
+    await showMenuItem(page, 'input[name="opponent"][value="local"]');
     await page.check('input[name="opponent"][value="local"]');
+    await showMenuItem(page, 'select[name="seating"]');
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     check(overflow <= 0 && (await page.locator('select[name="seating"]').isVisible()), `menu: two-player Partnership setup overflows at 320px (${overflow}px) or hides seating`);
     await page.context().close();
@@ -549,7 +582,7 @@ try {
     check(reasons.every((r: string) => r.trim().length > 0), 'controls: empty disabled reason');
     // Restart and leaving need confirmation (both live in the pause sheet).
     await page.click('[data-act="pause"]');
-    check((await page.locator('dialog.pause[open] details').count()) === 2, 'pause: rules and settings missing from the pause sheet');
+    check((await page.locator('dialog.pause select option').allTextContents()).includes('Rules') && (await page.locator('dialog.pause select option').allTextContents()).includes('Sound'), 'pause: rules and settings missing from the pause sheet');
     await page.click('dialog.pause [data-act="restart"]');
     check(await page.locator('dialog.confirm[open]').count() === 1, 'restart: no confirmation');
     await page.click('[data-act="confirm-no"]');
@@ -647,6 +680,7 @@ try {
     check(q.quip === 'Fuck that, we playing DOMINOES!', `opening line (explicit) was "${q.quip}"`);
     await enterMenu(page);
     await page.click('[data-go="settings"]');
+    await showMenuItem(page, 'input[name="set-language"][value="clean"]');
     await page.check('input[name="set-language"][value="clean"]');
     await page.click('[data-act="home"]');
     await startMatch(page, { mode: 'draw2', opponent: 'ai', seed: 'e2e-open', aiSeed: 'o' });
@@ -656,7 +690,7 @@ try {
     notes.push(`opening line: explicit and clean variants shown; live region matches the bubble`);
     // Banter off from the pause sheet: Cousin goes quiet, facts stay.
     await page.click('[data-act="pause"]');
-    await page.locator('dialog.pause details').nth(1).locator('summary').click();
+    await showMenuItem(page, 'dialog.pause input[name="set-banter"]');
     await page.uncheck('dialog.pause input[name="set-banter"]');
     await page.click('[data-act="pause-resume"]');
     for (let i = 0; i < 6; i++) {
@@ -676,11 +710,13 @@ try {
     const p2 = await newPage({ width: 390, height: 844 });
     await enterMenu(p2);
     await p2.click('[data-go="setup"]');
-    const drawRules = (await p2.textContent('.rules-preview')) ?? '';
+    const drawRules = (await p2.textContent('.modes .rules-card')) ?? '';
+    await showMenuItem(p2, 'input[name="mode"][value="partnership4"]');
     await p2.check('input[name="mode"][value="partnership4"]');
-    const p4Rules = (await p2.textContent('.rules-preview')) ?? '';
+    const p4Rules = (await p2.textContent('.modes .rules-card')) ?? '';
     check(/boneyard/.test(drawRules) && /6\|6/.test(p4Rules) && /two teams/.test(p4Rules), 'setup: mode rules not shown/updated before play');
-    const box = await p2.locator('.rules-preview').boundingBox();
+    await showMenuItem(p2, '.modes .rules-card h3');
+    const box = await p2.locator('.modes .rules-card').boundingBox();
     const start = await p2.locator('.btn-start').boundingBox();
     check(!!box && !!start && box.y < start.y, 'setup: rules should appear above the Deal button');
     notes.push('rules: selected mode’s rules shown on setup before dealing (Draw → Partnership updates)');
@@ -1473,6 +1509,7 @@ try {
     check((await atHome()) === 1, 'menu: ← Menu after history');
     await page.click('[data-go="setup"]');
     check((await page.textContent('#modes-heading'))?.trim() === 'Quick Play', 'setup: heading should start as Quick Play');
+    await showMenuItem(page, 'input[name="opponent"][value="local"]');
     await page.check('input[name="opponent"][value="local"]');
     check((await page.textContent('#modes-heading'))?.trim() === 'Two Players', 'setup: heading did not follow "Two players, one device"');
     await page.goBack();
@@ -1533,11 +1570,11 @@ try {
       badges: [...document.querySelectorAll('.ach-badge')].every((b) => b.getAttribute('role') === 'img' && /badge, (un)?locked/.test(b.getAttribute('aria-label') ?? '')),
     }));
     check(page1.cards === 100 && page1.first === 'unlocked' && page1.hidden === 6 && !page1.leak && page1.wide <= 0 && page1.badges, `achievements page: ${JSON.stringify(page1)}`);
-    await page.click('.ach-chip[data-status="unlocked"]');
+    await page.selectOption('select[data-status]', 'unlocked');
     const shown = await page.evaluate(() => [...document.querySelectorAll('.ach-card')].map((c) => (c as HTMLElement).dataset.state));
     check(shown.length >= 2 && shown.every((s: string | undefined) => s === 'unlocked'), `filter Unlocked: ${shown.join(',')}`);
-    await page.click('.ach-chip[data-cat="story"]');
-    await page.click('.ach-chip[data-status="all"]');
+    await page.selectOption('select[data-cat]', 'story');
+    await page.selectOption('select[data-status]', 'all');
     check((await page.locator('.ach-card').count()) === 14, 'filter Story: 14 cards');
     // Save failure: a refused write shows the persistent "Not saved" banner (never claims it saved).
     await page.evaluate(() => {

@@ -26,6 +26,7 @@ import type { RuntimeAssetId } from '../assets';
 import { wordmarkHtml } from './brand';
 import { esc } from './svg';
 import { confirmSheet } from './confirm';
+import { menuPages } from './menu-pages';
 
 // ---- speakers -----------------------------------------------------------------------
 const NAMES: Record<string, { label: string; tone: string }> = {
@@ -58,12 +59,6 @@ export function chapterCardHtml(s: Scene, status: ChapterStatus, opts: { compact
     ${s.hand ? `<p class="chapter-hand"><span class="chapter-hand-label">Hand</span> ${esc(s.hand)}</p>` : ''}
     <p class="chapter-badge">${badge}</p>
   </article>`;
-}
-
-export function evidencePanelHtml(title: string, items: readonly string[], empty: string): string {
-  return `<section class="evidence-panel" aria-label="${esc(title)}"><h3 class="evidence-title">${esc(title)}</h3>${
-    items.length ? `<ul class="evidence-list">${items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>` : `<p class="evidence-empty">${esc(empty)}</p>`
-  }</section>`;
 }
 
 const chapterLabel = (id: SceneId): string => (id.startsWith('chapter-') ? `Chapter ${id.slice(8)}` : id === 'prologue' ? 'Prologue' : 'Epilogue');
@@ -190,17 +185,16 @@ export async function renderStoryHome(d: StoryDeps, notice?: string): Promise<vo
   const status = (s: Scene): ChapterStatus => (p?.completed.includes(s.id as SceneId) ? 'completed' : p?.sceneId === s.id ? 'reading' : s.number === 1 && p?.completed.includes('prologue') ? 'next' : 'locked');
   const where = p ? script.scenes.find((s) => s.id === p.sceneId) : null;
   const completedChapters = chapters.filter((s) => p?.completed.includes(s.id as SceneId));
+  const evidence = reachedEvidence(script.scenes, p);
   root.className = 'is-story';
   root.innerHTML = `
-    <div class="story-shell">
+    <div class="story-shell case-menu">
       <header class="story-head">
         <button type="button" class="btn-ghost back" data-act="story-home">← Menu</button>
-        ${d.update ? `<div class="update-banner" data-region="update" ${d.update.ready() ? '' : 'hidden'}><p><strong>Update available.</strong> Your place in the case is saved first, and you come straight back to it.</p><button type="button" class="btn" data-act="update-now">Update now</button></div>` : ''}
         ${wordmarkHtml({ story: true, level: 'h1', className: 'is-story' })}
-        <p class="story-promise">A dominoes mystery in Puerto Rico.</p>
       </header>
-      ${notice ? `<p class="notice" role="status">${esc(notice)}</p>` : ''}
-      <section class="case-actions panel-dark" aria-label="Case">
+      ${menuPages('Case file', [
+        { title: 'Case', layout: 'case-actions panel-dark', html: `
         ${
           p
             ? `<button type="button" class="btn primary" data-act="story-continue">Continue Case</button>
@@ -211,17 +205,13 @@ export async function renderStoryHome(d: StoryDeps, notice?: string): Promise<vo
                <p class="case-where">Seven chapters, seven hands. Every win, loss or blocked tie moves the case forward.</p>`
         }
 
-      </section>
-      <section class="chapter-select" aria-labelledby="chapters-h">
-        <h2 id="chapters-h" class="section-h">Chapters</h2>
-        <p class="note-dark">Replay any completed chapter. Replays never change your case progress.</p>
-        <ol class="chapter-list">${chapters.map((s) => `<li>${chapterCardHtml(s, status(s), { compact: true })}${status(s) === 'completed' ? `<button type="button" class="btn-ghost small" data-act="story-replay" data-scene="${esc(s.id)}">Replay chapter ${s.number}</button>` : ''}</li>`).join('')}</ol>
-      </section>
-      <section class="notebook" aria-labelledby="notebook-h">
-        <h2 id="notebook-h" class="section-h">Case notebook</h2>
-        ${completedChapters.length ? `<ol class="notebook-list">${completedChapters.map(notebookEntryHtml).join('')}</ol>` : `<p class="notebook-empty">Nothing written yet. Each completed chapter adds Roberto’s notes here.</p>`}
-        ${evidencePanelHtml('Evidence', reachedEvidence(script.scenes, p).map((e) => `${chapterLabel(e.scene)}: ${e.text}`), 'No evidence collected yet. It appears here as the case uncovers it.')}
-      </section>
+          ${d.update ? `<div class="update-banner" data-region="update" ${d.update.ready() ? '' : 'hidden'}><p><strong>Update available.</strong> Your place in the case is saved first, and you come straight back to it.</p><button type="button" class="btn" data-act="update-now">Update now</button></div>` : ''}
+          ${notice ? `<p class="notice" role="status">${esc(notice)}</p>` : ''}
+        ` },
+        { title: 'Chapters', layout: 'chapter-list chapter-select', list: 'ol', html: '<li class="case-list-note note-dark">Replay completed chapters without changing your place in the case.</li>' + chapters.map((s) => `<li>${chapterCardHtml(s, status(s), { compact: true })}${status(s) === 'completed' ? `<button type="button" class="btn-ghost small" data-act="story-replay" data-scene="${esc(s.id)}">Replay chapter ${s.number}</button>` : ''}</li>`).join('') },
+        { title: 'Case notebook', layout: 'notebook-list notebook', list: 'ol', html: completedChapters.length ? completedChapters.map(notebookEntryHtml).join('') : '<li class="notebook-empty">Nothing written yet. Each completed chapter adds Roberto’s notes here.</li>' },
+        { title: 'Evidence', layout: 'evidence-list evidence-panel', list: 'ul', html: evidence.length ? evidence.map((e) => `<li>${esc(chapterLabel(e.scene))}: ${esc(e.text)}</li>`).join('') : '<li class="evidence-empty">No evidence collected yet. It appears here as the case uncovers it.</li>' },
+      ])}
     </div>`;
   const on = (act: string, fn: () => void) => root.querySelector(`[data-act="${act}"]`)?.addEventListener('click', fn);
   on('story-home', () => d.onBack());

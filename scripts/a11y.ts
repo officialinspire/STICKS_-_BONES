@@ -25,6 +25,7 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
+import { showMenuItem } from './lib/menu-navigation';
 
 type Page = import('playwright').Page;
 const require = createRequire(import.meta.url);
@@ -72,13 +73,24 @@ async function enterMenu(page: Page) {
 async function startMatch(page: Page, o: { mode?: string; opponent?: string; fixture?: string; seed?: string }) {
   await enterMenu(page);
   await page.click('[data-go="setup"]');
-  await page.locator('details.dev-panel summary').click();
+  await showMenuItem(page, 'input[name="seed"]');
   await page.fill('input[name="seed"]', o.seed ?? 'a11y');
+  await showMenuItem(page, 'input[name="aiSeed"]');
   await page.fill('input[name="aiSeed"]', 'a11y-ai');
+  await showMenuItem(page, 'input[name="fastAi"]');
   await page.check('input[name="fastAi"]');
-  if (o.mode) await page.check(`input[name="mode"][value="${o.mode}"]`);
-  if (o.opponent) await page.check(`input[name="opponent"][value="${o.opponent}"]`);
-  if (o.fixture) await page.click(`[data-fixture="${o.fixture}"]`);
+  if (o.mode) {
+    await showMenuItem(page, `input[name="mode"][value="${o.mode}"]`);
+    await page.check(`input[name="mode"][value="${o.mode}"]`);
+  }
+  if (o.opponent) {
+    await showMenuItem(page, `input[name="opponent"][value="${o.opponent}"]`);
+    await page.check(`input[name="opponent"][value="${o.opponent}"]`);
+  }
+  if (o.fixture) {
+    await showMenuItem(page, `[data-fixture="${o.fixture}"]`);
+    await page.click(`[data-fixture="${o.fixture}"]`);
+  }
   else await page.click('.btn-start');
   await page.waitForSelector('.table-screen');
 }
@@ -416,6 +428,7 @@ try {
     if (how === 'setting') {
       await enterMenu(page);
       await page.click('[data-go="settings"]');
+      await showMenuItem(page, 'input[name="set-motion"][value="reduce"]');
       await page.check('input[name="set-motion"][value="reduce"]');
     }
     await page.addInitScript(`window.__anims = 0; window.__fx = 0; window.__slam = 0;

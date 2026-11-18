@@ -45,8 +45,6 @@ export function rulesItems(r: ModeRules): string[] {
   ];
 }
 
-export function rulesHtml(r: ModeRules, headingLevel: 2 | 3 = 3): string {
-  return `<section class="rules-card" aria-label="${esc(r.name)} rules"><h${headingLevel}>${esc(r.name)}</h${headingLevel}><ul>${rulesItems(r)
-    .map((t) => `<li>${esc(t)}</li>`)
-    .join('')}</ul></section>`;
+export function rulesPageItems(r: ModeRules): string {
+  return `<h3>${esc(r.name)}</h3><p>${esc(r.summary)}</p>${rulesItems(r).map((t) => `<p>${esc(t)}</p>`).join('')}`;
 }

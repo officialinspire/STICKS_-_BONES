@@ -20,6 +20,7 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
+import { showMenuItem } from './lib/menu-navigation';
 
 type Page = import('playwright').Page;
 const require = createRequire(import.meta.url);
@@ -84,14 +85,29 @@ async function enterMenu(page: Page) {
 async function setup(page: Page, o: { mode?: string; opponent?: string; difficulty?: string; fixture?: string; seed?: string }) {
   await enterMenu(page);
   await page.click('[data-go="setup"]');
-  await page.locator('details.dev-panel summary').click();
+  await showMenuItem(page, 'input[name="seed"]');
   await page.fill('input[name="seed"]', o.seed ?? 'qa-seed');
+  await showMenuItem(page, 'input[name="aiSeed"]');
   await page.fill('input[name="aiSeed"]', 'qa-ai');
+  await showMenuItem(page, 'input[name="fastAi"]');
   await page.check('input[name="fastAi"]');
-  if (o.mode) await page.check(`input[name="mode"][value="${o.mode}"]`);
-  if (o.opponent) await page.check(`input[name="opponent"][value="${o.opponent}"]`);
-  if (o.difficulty && (await page.locator(`input[name="difficulty"][value="${o.difficulty}"]`).isVisible())) await page.check(`input[name="difficulty"][value="${o.difficulty}"]`);
-  if (o.fixture) await page.click(`[data-fixture="${o.fixture}"]`);
+  if (o.mode) {
+    await showMenuItem(page, `input[name="mode"][value="${o.mode}"]`);
+    await page.check(`input[name="mode"][value="${o.mode}"]`);
+  }
+  if (o.opponent) {
+    await showMenuItem(page, `input[name="opponent"][value="${o.opponent}"]`);
+    await page.check(`input[name="opponent"][value="${o.opponent}"]`);
+  }
+  if (o.difficulty && (await page.locator('[data-skill]:not([hidden])').count())) {
+    const skill = `input[name="difficulty"][value="${o.difficulty}"]`;
+    await showMenuItem(page, skill);
+    await page.check(skill);
+  }
+  if (o.fixture) {
+    await showMenuItem(page, `[data-fixture="${o.fixture}"]`);
+    await page.click(`[data-fixture="${o.fixture}"]`);
+  }
   else await page.click('.btn-start');
   await page.waitForSelector('.table-screen');
 }
@@ -314,13 +330,14 @@ try {
     await capture(vp, 'menu', page);
     for (const sub of ['stats', 'settings', 'achievements']) {
       await page.click(`[data-go="${sub}"]`);
-      await capture(vp, `menu-${sub}` as Screen, page, { pageMayScroll: true });
+      await capture(vp, `menu-${sub}` as Screen, page);
       await page.click('[data-act="home"]');
       await page.waitForSelector('[data-go="setup"]');
     }
     await page.click('[data-go="setup"]');
+    await showMenuItem(page, 'input[name="mode"][value="partnership4"]');
     await page.check('input[name="mode"][value="partnership4"]');
-    await capture(vp, 'setup', page, { pageMayScroll: true });
+    await capture(vp, 'setup', page);
 
     // Story: case file, then the Prologue scene player (real script text).
     await page.click('[data-act="home"]');
@@ -328,7 +345,7 @@ try {
     await page.evaluate(() => localStorage.removeItem('sticks-and-bones.story'));
     await page.click('[data-act="story"]');
     await page.waitForSelector('.story-shell');
-    await capture(vp, 'story-home', page, { pageMayScroll: true });
+    await capture(vp, 'story-home', page);
     await page.click('[data-act="story-new"]');
     await page.waitForSelector('.story-stage');
     for (let k = 0; k < 2; k++) await page.click('[data-act="story-next"]');
