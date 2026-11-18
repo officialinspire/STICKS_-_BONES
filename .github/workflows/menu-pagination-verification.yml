@@ -1,19 +1,21 @@
-name: Menu pagination verification
+name: Compare existing table QA
 on:
   push:
     branches: [codex/menu-pagination-verify]
 permissions:
   contents: read
 jobs:
-  verify:
+  comparison:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        suite: [e2e, qa, a11y, faults, matches, pwa, 'story:e2e', 'story:sweep']
+        rev: [4db06c2716a822a3af6143eeeea42da8dc2a3aa2, c8d3a8feab70ab389a537cafb71458b030ce4af1]
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.rev }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -21,10 +23,6 @@ jobs:
       - run: npm ci
       - run: npm install --no-save playwright@1.63.0
       - run: npx playwright install --with-deps chromium
-      - run: npm run ${{ matrix.suite }}
-      - if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: results-${{ strategy.job-index }}
-          path: test-results/
-          if-no-files-found: ignore
+      - run: npm run qa
+        env:
+          QA_ONLY: 667,text-scale
