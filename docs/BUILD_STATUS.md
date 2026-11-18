@@ -2057,3 +2057,22 @@ Still waiting on the owner:
   Worker, Representative and the contractor speaker.
 - **Confirmations:** the expression readings, and the transcript decision.
 - **Playtesting:** real devices, Firefox / WebKit, and representative first-time playtesters.
+
+
+## Social sharing artwork and Pages publication (2026-11-18)
+
+Owner requested all three approved campaign images in the repository and a live Pages link with the
+game banner in its social preview. This request authorizes Pages enablement and publication.
+
+- Preserved the wide, square Instagram and portrait Story PNG masters in `marketing/source/`.
+- Added `public/social/sticks-and-bones-og-v1.jpg`: 1200 × 630, 175,379 bytes, exported from the wide
+  master. Only this small derivative ships; campaign masters are not loaded or cached by the game.
+- Added static canonical, Open Graph and Twitter `summary_large_image` tags to `index.html`, including
+  absolute HTTPS image/page URLs, dimensions, MIME type, descriptive alternative text and story title.
+- Verified built HTML metadata and byte-identical JPEG copying into `dist/social/`.
+- Fresh checks: typecheck and lint pass; 524 tests in 44 files pass with `--maxWorkers=1`; asset
+  verification passes; production build and all budgets pass (startup 955 / 960 KB; total 20593 / 21000 KB).
+- Fresh local browser execution remains unavailable in this environment (Chromium socket restriction).
+  The existing deployment workflow runs its own complete check and production browser smoke before publication.
+- Pages was disabled when inspected. Publication is being completed using the existing deploy workflow;
+  do not infer deployment success from this entry alone. The final response records the observed result.
