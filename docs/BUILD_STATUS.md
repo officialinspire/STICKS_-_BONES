@@ -2005,7 +2005,7 @@ an optional download; the intro video never cached). `AGENTS.md`, `docs/PWA.md`,
   mid-match / mid-case, repair / erase isolation. `PWA_ONLY=…` runs a subset. `scripts/smoke.ts` now waits
   for "Full game ready offline".
 
-**Branch / commit:** `claude/inspiring-bardeen-4yfmu5` (see the follow-up commit). Not merged or deployed.
+**Branch / commit:** `claude/inspiring-bardeen-4yfmu5` at `3f74bca`. Not merged or deployed.
 
 ### Commands run and results (Chromium)
 
