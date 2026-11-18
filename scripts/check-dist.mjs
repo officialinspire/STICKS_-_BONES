@@ -72,7 +72,8 @@ if (files.filter(isAchievements).length !== 2) errors.push(`expected the lazy ac
 const fontsKB = sumKB(files.filter(isFont));
 if (files.filter(isStory).length !== 2) errors.push(`expected the two lazy Story chunks (script, story-ui), found ${files.filter(isStory).length}`);
 const isIcon = (f) => rel(f).startsWith('icons/');
-const images = files.filter((f) => isImage(f) && !isIcon(f));
+const isSocial = (f) => rel(f).startsWith('social/'); // link-preview image, never loaded by the game (counted in total only)
+const images = files.filter((f) => isImage(f) && !isIcon(f) && !isSocial(f));
 // Story-only images: the portrait crops and the cast sheets (src/assets/urls.ts PORTRAIT_URLS + cast.*).
 const isStoryImage = (f) => /-portrait-[\w-]{8}\.webp$/.test(f) || /\/cast-[a-z]+-[\w-]+\.webp$/.test(f);
 const coreImages = images.filter((f) => !isStoryImage(f));
@@ -106,7 +107,10 @@ const ambienceKB = sumKB(files.filter(isAmbience));
 // exact size and SHA-256, so the worker can store and verify complete copies of all of them.
 const pack = JSON.parse(readFileSync(join(dist, 'build.json'), 'utf8'));
 const listed = new Map(Object.entries(pack.groups).flatMap(([g, list]) => list.map(([u, b, sha]) => [u, { g, b, sha }])));
-const shipped = files.map(rel).filter((f) => f !== 'sw.js' && f !== 'build.json');
+// The social-sharing image is for link-preview crawlers only (vite.config.ts NOT_RUNTIME): shipped, never cached.
+const NOT_RUNTIME = /^social\/[\w.-]+\.(jpe?g|png|webp)$/;
+const shipped = files.map(rel).filter((f) => f !== 'sw.js' && f !== 'build.json' && !NOT_RUNTIME.test(f));
+if (!files.map(rel).filter((f) => NOT_RUNTIME.test(f)).every((f) => statSync(join(dist, f)).size <= 300 * KB)) errors.push('a social-sharing image is over 300 KB');
 for (const f of shipped) {
   const e = listed.get(f);
   if (!e) {

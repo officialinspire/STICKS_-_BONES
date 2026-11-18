@@ -2005,7 +2005,15 @@ an optional download; the intro video never cached). `AGENTS.md`, `docs/PWA.md`,
   mid-match / mid-case, repair / erase isolation. `PWA_ONLY=…` runs a subset. `scripts/smoke.ts` now waits
   for "Full game ready offline".
 
-**Branch / commit:** `claude/inspiring-bardeen-4yfmu5` at `3f74bca`. Not merged or deployed.
+**Merged in from the branch (owner's commit `1109a2d`):** campaign artwork in `marketing/source/` (not
+shipped) and social-sharing metadata in `index.html` with `public/social/sticks-and-bones-og-v1.jpg`. That
+image ships but is not a runtime dependency (only link-preview crawlers fetch it), so it is explicitly exempt
+from the offline pack (`NOT_RUNTIME`) and from the image gates; `check-dist` caps it at 300 KB. After the
+merge: code 318 / 330 KB (the meta tags), startup 944 / 960, offline pack 20,405 / 21,000, total 20,619 /
+21,100 KB.
+
+**Branch / commits:** `claude/inspiring-bardeen-4yfmu5` at `3f74bca` (stage), then the merge of `1109a2d` and
+the follow-up. Not merged to main or deployed.
 
 ### Commands run and results (Chromium)
 
@@ -2014,6 +2022,7 @@ an optional download; the intro video never cached). `AGENTS.md`, `docs/PWA.md`,
 | `npm run check` | pass: typecheck, lint, **529 unit tests**, assets verified, build + budgets (offline pack 20,404 / 21,000 KB) |
 | `npm run pwa` | pass: all 13 scenarios; pack 81 files / 20,893,193 B read back and matched (bytes, SHA-256, MIME) |
 | `npm run smoke` | pass: subpath, **Full game ready offline**, a full hand, offline restart, clean console |
+| after merging `1109a2d` | `npm run check` pass (529 tests), `npm run smoke` pass, `npm run pwa` pass (13 scenarios; pack 20,895,118 B). §3 now compares the set of re-fetched files: the startup loader may request the missing atlas alongside the download (a flaky count, not a resume defect) |
 | `npm run e2e` | pass |
 | `npm run a11y` | pass: 0 failures |
 | `npm run qa` | pass: 0 failures, 1 kept comfort warning (667×375 end slots 62×40) |

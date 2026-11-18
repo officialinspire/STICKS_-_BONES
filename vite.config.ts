@@ -38,6 +38,12 @@ function slug(name: string): string {
  * build works under any subpath. BUILD is a hash of every shipped file, so any change yields a new shell.
  */
 export type OfflineGroup = 'shell' | 'core' | 'story' | 'media';
+/**
+ * Shipped but NOT runtime dependencies: the social-sharing image (public/social/) is fetched only by
+ * link-preview crawlers through the absolute og:image URL; the game never loads it, so it is not saved
+ * offline. Anything else unlisted still fails the build.
+ */
+export const NOT_RUNTIME = /^social\/[\w.-]+\.(jpe?g|png|webp)$/;
 const CORE_IMAGE = /^assets\/(neighborhood-patio(-portrait)?|cousin-|double-six|weathered-tabletop|effects-sheet)/;
 const CORE_SOUND = /^assets\/(ui-|tile-|pass-knock-|result-)/;
 export function offlineGroup(file: string): OfflineGroup | null {
@@ -84,7 +90,7 @@ export function pwaPlugin(): Plugin {
     // writeBundle, not generateBundle: Vite's own post plugins still rewrite chunks (preload lists) after
     // generateBundle, so the sizes and checksums are taken from the files exactly as written.
     writeBundle(_options, bundle) {
-      const files = [...new Set([...Object.keys(bundle), ...publicFiles()])].filter((f) => f !== 'sw.js' && f !== 'build.json').sort();
+      const files = [...new Set([...Object.keys(bundle), ...publicFiles()])].filter((f) => f !== 'sw.js' && f !== 'build.json' && !NOT_RUNTIME.test(f)).sort();
       const pngs = files.filter((f) => /\.png$/.test(f) && !/^icons\//.test(f));
       if (pngs.length) this.error(`a PNG source sheet would ship (${pngs.join(', ')}); only WebP derivatives may`);
       if (!files.includes('index.html')) this.error('index.html missing from the bundle');

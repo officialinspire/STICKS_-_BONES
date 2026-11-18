@@ -70,6 +70,7 @@ cast sheets, ambience, result cues, SFX, the lazy Story chunk and fonts, and gat
 | `inspire:sticks-and-bones:story:v1` | Chapter backdrops (landscape + portrait), the four cast sheets, story sounds — **21 files, 2.86 MB** | The whole-game download (and, before that, cache-on-fetch as chapters are played) |
 | `inspire:sticks-and-bones:media:v1` | The four songs/scene beds, the five ambience beds and **the INSPIRE intro video** — **10 files, 14.62 MB** | The whole-game download |
 | `inspire:sticks-and-bones:meta:v1` | One entry: the build whose pack was last **verified** | Written only after verification |
+| — | **Shipped, not cached:** `social/sticks-and-bones-og-v1.jpg` (171 KB), the link-preview image, fetched only by crawlers through the absolute `og:image` URL; the game never loads it (`NOT_RUNTIME` in `vite.config.ts`, gated ≤ 300 KB by `check-dist`) | — |
 | — | **Never shipped or cached:** PNG source sheets, the audio originals and other source masters (`assets/art/`, `assets/audio/originals/`), duplicate uploads (e.g. the second, identical "Round Win Stinger Alt" copy) | — |
 
 **Whole game: 81 files, 19.92 MB (20,892,477 B)** per `dist/build.json`; `check-dist` gates it at 21,000 KB.

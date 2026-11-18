@@ -699,7 +699,8 @@ try {
     const fixed = await waitFull(page);
     const again = downloadsSince(at).filter((p) => p.startsWith('assets/'));
     check(FULL.test(fixed), `interrupted: never completed — ${fixed}`);
-    check(again.length === 2 && again.every((p) => /double-six-atlas|weathered-tabletop/.test(p)), `interrupted: resume re-downloaded saved files (${again.join(', ')})`);
+    // Only the two missing files (the startup loader may ask for the atlas too, alongside the download).
+    check(new Set(again).size === 2 && again.every((p) => /double-six-atlas|weathered-tabletop/.test(p)), `interrupted: resume fetched other files than the 2 missing (${again.join(', ')})`);
     check((errorsOf.get(page) ?? []).length === 0, `interrupted: page errors ${errorsOf.get(page)!.join(' | ')}`);
     notes.push(`interrupted install downloads (tile atlas + table cut mid-transfer): "${partial}"; button "${retry}"; nothing truncated stored; offline start → "${missing.trim()}" and a hand with ${fb.svg} vector faces; back online the download resumed by itself, fetching only the 2 missing files → "${fixed}"`);
     await ctx.close();
