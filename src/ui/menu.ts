@@ -189,6 +189,7 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
           <li><button type="button" class="dest dest-quick btn-start" data-go="setup"><span class="dest-title">Quick Play</span><span class="dest-sub">You against Cousin: Draw, Block or Partnership</span></button></li>
           <li><button type="button" class="dest dest-two" data-go="setup-local"><span class="dest-title">Two Players</span><span class="dest-sub">Share one device, hands kept private</span></button></li>
         </ul>
+        ${h.notices?.length ? `<div class="notice" role="status">${h.notices.map((note) => `<p>${esc(note)}</p>`).join('')}</div>` : ''}
         <div class="home-row">
           <button type="button" class="btn-ghost dark" data-go="rules">How to Play</button>
           <button type="button" class="btn-ghost dark" data-go="settings">Settings</button>
@@ -196,7 +197,6 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
           <button type="button" class="btn-ghost dark" data-go="achievements">Achievements</button>
         </div>
         ${updateBanner(h.pwa)}
-        ${(h.notices ?? []).map((n) => `<p class="notice" role="status">${esc(n)}</p>`).join('')}
         ${offlineLine(h.pwa)}
         ` }])}
       </nav>`,
