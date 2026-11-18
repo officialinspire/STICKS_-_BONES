@@ -1769,6 +1769,8 @@ bundle (see `docs/PERFORMANCE.md`). Every other budget is unchanged: startup 940
 | `npm run matches` | pass: every arrangement completed full matches (fair AI, scoring) |
 | `npm run smoke` | pass: subpath, offline-ready, one hand vs the computer, offline restart |
 
+**Branch / commit:** `claude/inspiring-bardeen-4yfmu5` at `b6a0035`. Not merged or deployed.
+
 **Inspected:** the case-file Evidence list, the "Not saved" alert during a scene (Continue stays clear at all
 four sizes) and the Retry / Back panel at 390×844, 667×375, 768×1024 and 1366×768. The Chapter 6 drawn table
 was also checked.
