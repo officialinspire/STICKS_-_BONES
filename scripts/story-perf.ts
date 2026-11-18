@@ -49,7 +49,7 @@ const LIMITS = {
 };
 
 const INIT = `
-  window.__ev = [];
+  window.__ev = []; window.__sbIntroVideo = null; // the credit is tested in e2e § 7
   try { new PerformanceObserver((l) => l.getEntries().forEach((e) => __ev.push({ n: e.name, d: e.duration, t: e.startTime }))).observe({ type: 'event', durationThreshold: 16, buffered: true }); } catch {}
   // Live timers: created and not yet fired/cleared (intervals count until cleared).
   window.__timers = new Map();

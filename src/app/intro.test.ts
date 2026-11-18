@@ -185,3 +185,137 @@ describe('intro: backgrounding', () => {
     expect(finished).toEqual(['rejected']);
   });
 });
+
+/** A port with mute + fade: play() refuses with sound (per test) and the fade resolves when the test says. */
+function richVideo(o: { refuseSound?: boolean; refuseMuted?: boolean } = {}) {
+  const log: string[] = [];
+  let muted = false;
+  let endFade: () => void = () => {};
+  const handlers: Record<string, (() => void)[]> = {};
+  const port: VideoPort = {
+    play: () => {
+      log.push(muted ? 'play:muted' : 'play');
+      return (muted ? o.refuseMuted : o.refuseSound) ? Promise.reject(new Error('NotAllowedError')) : Promise.resolve();
+    },
+    pause: () => void log.push('pause'),
+    release: () => void log.push('release'),
+    on: (e, cb) => {
+      (handlers[e] ??= []).push(cb);
+      return () => (handlers[e] = (handlers[e] ?? []).filter((x) => x !== cb));
+    },
+    durationSec: () => 5.8,
+    mute: () => {
+      muted = true;
+      log.push('mute');
+    },
+    fadeOut: (ms) => {
+      log.push(`fade:${ms}`);
+      return new Promise<void>((r) => (endFade = () => (log.push('faded'), r())));
+    },
+  };
+  return { port, log, endFade: () => endFade(), emit: (e: string) => (handlers[e] ?? []).slice().forEach((h) => h()) };
+}
+
+describe('intro: refused sound, soundtrack fade and release before the menu', () => {
+  function rich(v: ReturnType<typeof richVideo>, fadeOutMs = 380) {
+    const sc = sched();
+    const finished: { r: IntroEnd; released: Promise<void> }[] = [];
+    let mutedFallback = 0;
+    const c = new IntroController({ video: v.port, scheduler: sc.s, fadeOutMs, onFinish: (r, released) => finished.push({ r, released }), onMutedFallback: () => mutedFallback++ });
+    return { c, sc, finished, mutedFallback: () => mutedFallback };
+  }
+
+  it('a refused play() with sound is retried once muted, and the credit plays on', async () => {
+    const v = richVideo({ refuseSound: true });
+    const { c, finished, mutedFallback } = rich(v);
+    c.start();
+    await tick();
+    await tick();
+    expect(v.log).toEqual(['play', 'mute', 'play:muted']);
+    expect(mutedFallback()).toBe(1);
+    expect(finished).toEqual([]);
+    v.emit('ended');
+    expect(finished.map((f) => f.r)).toEqual(['ended']);
+  });
+
+  it('refused even muted → the menu, once (no third attempt)', async () => {
+    const v = richVideo({ refuseSound: true, refuseMuted: true });
+    const { c, finished } = rich(v);
+    c.start();
+    await tick();
+    await tick();
+    expect(finished.map((f) => f.r)).toEqual(['rejected']);
+    expect(v.log.filter((l) => l.startsWith('play'))).toHaveLength(2);
+    expect(v.log.at(-1)).toBe('release'); // nothing to fade: released at once
+  });
+
+  it('Skip fades the soundtrack, THEN releases; the menu waits for the release', async () => {
+    const v = richVideo();
+    const { c, finished } = rich(v);
+    c.start();
+    await tick();
+    c.skip();
+    expect(finished.map((f) => f.r)).toEqual(['skip']);
+    let released = false;
+    void finished[0]!.released.then(() => (released = true));
+    await tick();
+    expect(v.log.at(-1)).toBe('fade:380');
+    expect(released).toBe(false); // still fading: no menu (and no menu music) yet
+    v.endFade();
+    await tick();
+    expect(v.log.slice(-2)).toEqual(['faded', 'release']);
+    expect(released).toBe(true);
+    c.skip(); // late input after the end: nothing
+    expect(finished).toHaveLength(1);
+    expect(v.log.filter((l) => l === 'release')).toHaveLength(1);
+  });
+
+  it('a fade that never finishes is cut off by its timer: released once, the menu is never held hostage', async () => {
+    const v = richVideo();
+    const { c, sc, finished } = rich(v);
+    c.start();
+    await tick();
+    c.skip();
+    sc.fire((ms) => ms === 380 + 150);
+    await tick();
+    expect(v.log.at(-1)).toBe('release');
+    v.endFade(); // the stuck fade resolves late: no second release
+    await tick();
+    expect(v.log.filter((l) => l === 'release')).toHaveLength(1);
+    let released = false;
+    await finished[0]!.released.then(() => (released = true));
+    expect(released).toBe(true);
+  });
+
+  it('a natural end, a media error or a cancel release at once (no fade over silence or a broken file)', async () => {
+    for (const end of ['ended', 'error', 'cancelled'] as const) {
+      const v = richVideo();
+      const { c } = rich(v);
+      c.start();
+      await tick();
+      if (end === 'cancelled') c.finish('cancelled');
+      else v.emit(end);
+      expect(v.log.at(-1), end).toBe('release');
+      expect(v.log.some((l) => l.startsWith('fade')), end).toBe(false);
+    }
+  });
+
+  it('backgrounding during a pending play() (AbortError) does not end the credit', async () => {
+    let rejectFirst: (e: Error) => void = () => {};
+    const v = richVideo();
+    const port: VideoPort = { ...v.port, play: () => (v.log.push('play'), v.log.length === 1 ? new Promise<void>((_, rj) => (rejectFirst = rj)) : Promise.resolve()) };
+    const sc = sched();
+    const finished: IntroEnd[] = [];
+    const c = new IntroController({ video: port, scheduler: sc.s, onFinish: (r) => finished.push(r) });
+    c.start();
+    c.suspend(); // pause() makes the pending play() reject
+    rejectFirst(new Error('AbortError'));
+    await tick();
+    expect(finished).toEqual([]);
+    c.resume();
+    await tick();
+    expect(finished).toEqual([]);
+    v.emit('ended');
+    expect(finished).toEqual(['ended']);
+  });
+});

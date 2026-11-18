@@ -200,6 +200,14 @@ The Story content is on-demand, so instead of raising the image budget, images a
 | service worker | **22 KB (was 16)** | 19 KB | per-file sizes for truncation checks and four groups |
 | total | **15,400 KB (was 13,900)** | 15,045 KB | + 1.46 MB of on-demand Story images, none at startup |
 
+**Startup polish stage (2026-11-18):** a separate **video budget, 400 KB**; the studio credit measures 272 KB.
+It no longer counts as music.
+- **When it loads:** it is fetched only once the essentials are in, at the start prompt (`preload="auto"`
+  then), so it never competes with initialization. It is not cached offline yet; that is the next stage.
+- **Totals:** total 20,418 / 21,000 KB; code 327 / 330 KB (the skip guard, the muted retry and the
+  soundtrack fade).
+- **Startup:** startup stays within 960 KB; the video is not part of it.
+
 **Owner audio stage (2026-11-18):** music **13,500 KB (was 8,000)**, measured 12,757 KB; total **21,000 KB (was
 15,400)**, measured 20,147 KB.
 - **What grew:** the owner's two scene beds (5,335 KB, stream-copied with cover art removed, which saved

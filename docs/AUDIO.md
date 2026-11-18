@@ -4,8 +4,8 @@
 
 ```
 initialization ──ready──► start prompt ──tap / click / Enter──► studio credit ──► fade through black ──► menu reveal
- (progress, retries)                                            video if supplied, else a text card
-                                                                Skip · Esc · ended · error · timeouts · play() refused
+ (progress, retries)                                            the INSPIRE video (local); a text card if it's missing
+                                                                Skip · Esc (once armed) · ended · error · timeouts · play() refused (muted retry)
 ```
 
 - **Initialization:** loads what the first menu and the first table need, before the start prompt is
@@ -21,15 +21,38 @@ initialization ──ready──► start prompt ──tap / click / Enter──
     start now".
   - Later scenes stay lazy: Story art per chapter, gameplay music when a table opens.
 - **Start gesture:** a touch, click or key press (Enter is shown). It unlocks audio (the AudioContext
-  is created inside the gesture) and plays **no sound of its own**. Double clicks and key repeats can't
-  start twice.
-- **Intro video:** the owner's `assets/video/inspiresoftwareintro.mp4` is used **if present**. It is
-  **not in the repository yet**. The file is picked up by a build-time glob, so adding it later needs
-  no code change.
+  is created inside the gesture) and plays **no sound of its own**.
+  - Double clicks can't start twice.
+  - An auto-repeating key never starts anything: a key held down since the prompt was still loading
+    starts nothing; the player releases and presses again.
+- **Intro video:** the INSPIRE studio credit, `assets/video/inspiresoftwareintro.mp4`.
+  - **Provenance:** copied byte-for-byte from `officialinspire/Inspire-card-parlor` at `cdc789b`
+    (`public/assets/video/inspiresoftwareintro.mp4`).
+    - Verified there: git blob `66ff2ca8…`, 278,774 bytes, SHA-256 `8a6ce01d…`, and a clean full decode.
+    - Recorded in `INTRO_VIDEO` (`src/assets/audio-manifest.ts`) and checked by `npm run assets:verify`,
+      which also confirms the MP4 index comes before the media (fast start).
+  - **The file:** H.264 High 1080×720 at 30 fps, 5.83 s, with AAC-LC stereo at −21 LUFS.
+    - It opens on black (0.33 s) and ends on black (from 5.33 s), so the fade through black is seamless.
+  - **Served locally:** it is bundled from the repository under a hashed, base-path-safe URL. There is
+    never a runtime external URL.
   - It's buffered (`preload="auto"`) only once initialization has finished, so it never competes with
     the essentials.
   - It plays inline (`playsinline`) with an accessible **Skip intro** button (focused, Esc also
     skips) and a **Mute** toggle (persisted).
+  - **Skip guard:** Skip and Mute arm only after the starting input is released (the tap's pointerup or
+    the key's keyup) and at least 400 ms have passed, or after 1.5 s at most.
+    - So the start gesture's own trailing click, or a held or repeating Enter, can never skip the credit
+      by accident.
+    - While guarded they carry `aria-disabled="true"`, and the stage has `data-skip="guarded"` /
+      `"armed"`.
+    - Repeated Enter/Space never activate anything.
+  - **Volume:** it plays at the menu-music level (master × music) and respects the saved mute.
+  - **Refused sound:** if the browser refuses playback with sound, it is retried **muted** once and plays
+    on. The Mute button then reads "Unmute" (unmuting is a gesture). The player's saved mute is not
+    changed. Only a second refusal ends the credit.
+  - **Skip fades the soundtrack:** the audio fades out over 380 ms (120 ms under reduced motion) with the
+    picture's fade to black. The menu, and its music, start only once the media is released. A stuck fade
+    is cut off by a timer.
   - The service worker never caches it (`docs/PWA.md`).
 - **Fallback credit (no video):** a short typeset card, "INSPIRE / presents", in the game's fonts on
   black.
@@ -38,12 +61,15 @@ initialization ──ready──► start prompt ──tap / click / Enter──
 - **One guarded transition:** `IntroController.finish(reason)` handles Skip, ended, error, a start
   timeout (6 s), a stall timeout (5 s), an overall cap (duration + 3 s, max 45 s), play() refusal and a
   missing file. The first one wins.
-  - Later signals are ignored, listeners and timers are removed, and the video is paused and released
-    (`src` removed) before the fade.
+  - Later signals are ignored and listeners and timers are removed.
+  - The video is released (`src` removed): straight away after a natural end, an error, a refusal or a
+    cancel; after the soundtrack fade on Skip or a timeout.
+  - `onFinish` receives a promise that settles on release, and the menu waits for it.
   - So the credit's audio can never overlap menu music, and the menu is entered exactly once.
 - **Backgrounding:** hiding the app mid-credit calls `suspend()`, which pauses the video and clears
   every timer, so nothing can time out and no menu can open while hidden. Returning calls `resume()`,
-  which plays on with fresh timers (a refused play() ends the credit once). The text card holds the
+  which plays on with fresh timers (a refused play() is retried muted, then ends the credit once). The
+  AbortError that a pause gives a pending play() is not treated as a refusal. The text card holds the
   same way.
 - **Menu reveal:** the menu mounts under black, then the black lifts, so the decoded backdrop appears
   first.

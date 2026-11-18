@@ -1877,9 +1877,92 @@ merged into `main` or deployed.
 - **Tile foley is partial:** only the slam and the deal are real recordings.
 - **Chromium only:** decoding of the 48 kHz MP3 cues was not tested on WebKit / Safari.
 
+## Startup polish stage: the INSPIRE studio credit (2026-11-18)
+
+The existing initialization and intro controllers were extended (`src/app/intro.ts`, `src/ui/intro-screen.ts`);
+no new manager was added.
+
+**The video.**
+- **Source:** `public/assets/video/inspiresoftwareintro.mp4` from `officialinspire/Inspire-card-parlor`, branch
+  `main`, verified commit `cdc789bad27a01e546135d26c0fc3278b4519635`.
+- **Fetch:** fetched by git at exactly that commit (no LFS) and copied to `assets/video/inspiresoftwareintro.mp4`.
+- **Verified:**
+  - git blob `66ff2ca8b4344840cd6170dd4ed63a573251d486` (re-hashed locally);
+  - 278,774 bytes, SHA-256 `8a6ce01d…cbcb88`;
+  - a clean full decode with ffmpeg;
+  - H.264 High 1080×720 at 30 fps, 5.83 s, with AAC-LC 44.1 kHz stereo (5.87 s, −21 LUFS, peak −6.1 dBFS);
+  - `moov` before `mdat` (fast start);
+  - black at the head (0.33 s) and from 5.33 s.
+- **Recorded:** in `INTRO_VIDEO` (`src/assets/audio-manifest.ts`). `npm run assets:verify` checks the bytes, the
+  hash and the fast-start layout. The "video missing" entry was removed from `MISSING_ASSETS`.
+- **Served locally:** the video is bundled under a hashed, base-path-safe URL, never a runtime external URL. It has
+  its own budget (400 KB, measured 272 KB) instead of counting as music, and is not cached offline yet (next stage).
+
+**Polish of the existing flow** (initialization → Touch/Click/Enter to Start → skippable credit → fade through
+black → menu reveal).
+- **Skip guard:** Skip and Mute arm only after the starting input is released (pointerup or keyup) and at least
+  400 ms have passed, or after 1.5 s at most.
+  - While guarded they are `aria-disabled`, and auto-repeating Enter/Space never activate anything.
+  - A key held since the prompt was still loading starts nothing.
+  - A keyboard-generated click waits for its key's release.
+  - **Found by the new test:** a repeating Enter could activate the start button and arm Skip while still held.
+    It is fixed.
+- **No credit / menu overlap:** Skip and timeouts fade the soundtrack (380 ms, or 120 ms with reduced motion)
+  with the picture's fade, then release the media. The menu, and its music, wait for that release, and a stuck
+  fade is cut off by a timer.
+- **Refused playback:** a refused play() with sound is retried once muted; the credit plays muted, Mute reads
+  "Unmute", and the saved mute is unchanged. A pause's AbortError during backgrounding no longer ends the credit.
+- **Kept:** one gesture unlocks audio and plays no sound of its own; duplicate starts are impossible; the
+  start / stall / overall timeouts remain; it pauses in the background and resumes on return; mute and reduced
+  motion are respected; essentials load through the bounded loader with truthful progress and Try again; the
+  video buffers only once the essentials are in; the text credit remains the fallback if the file is missing;
+  the layout letterboxes at any orientation.
+
+**Tests.**
+- **Unit:** `intro.test.ts` 10 → 16: the muted retry, a double refusal, fade-then-release ordering, a stuck fade
+  cut off, immediate release on end / error / cancel, and AbortError while backgrounded.
+- **Browser:** e2e § 7 keeps its fixture routes (ok, 404, hang, refused, missing → the text credit, background,
+  rotation, mobile tap). The new § 7k uses the real video:
+  - it decodes and plays locally at 1080×720 / 5.87 s;
+  - the start press released over Skip, plus a quick second tap, does nothing;
+  - Skip fades out → black → menu once, with at most one media source;
+  - Enter held from loading starts nothing, and held Enter after ready can't skip;
+  - with sound refused it plays muted and the music returns;
+  - played out at 844×390 with reduced motion and the player's mute: menu once, no reveal.
+- **Other suites:** suites that only pass through startup use the text credit (`__sbIntroVideo = null`, dev
+  only); the others wait for the armed Skip; smoke plays the real credit in the production build.
+
+**Inspected:** the start prompt, the credit (letterboxed, controls clear) and the reveal at 390×844, 667×375 and
+1366×768.
+
+### Commands run and results (Chromium)
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | pass: typecheck, lint, **524 unit tests**, assets verified (intro video bytes / hash / fast start), build and budgets (code 327 / 330, video 272 / 400, total 20,418 / 21,000 KB) |
+| `npm run e2e` | pass, including § 7k (real video) |
+| `npm run a11y` | pass |
+| `npm run qa` | pass: 0 failures, 1 kept comfort warning |
+| `npm run pwa` | pass: offline reload starts from cache and reaches the menu (the credit isn't cached yet; its error path enters the menu), 0 page errors |
+| `npm run smoke` | pass: the production build plays the real credit through to the menu |
+| `npm run faults` | pass |
+| `npm run story:e2e` | pass |
+| `npm run audio` | pass |
+| `npm run matches` | pass |
+| `npm run perf:story` | pass |
+| `npm run story:route` | pass |
+
+### Known limitations
+- **Offline:** the credit is not cached yet (next stage); offline it plays only if the HTTP cache still holds it.
+- **Codec support:** H.264/AAC playback was exercised in this Chromium build only. Safari, iOS, Android and
+  Firefox were not tested, though they generally support H.264 MP4.
+- **Volume on iOS:** iOS ignores `volume`, so the soundtrack fade there ends with the release, at the end of the
+  picture fade, instead of ramping.
+
 ## Next stage
 
 The detailed list is in `docs/STORY_BUILD_STATUS.md`:
+- **Offline caching of the studio credit** (next, as planned): it is not cached yet;
 - Finish Hand with AI assistance, and skip with recap;
 - version alignment (package vs release notes);
 - release reconciliation and the handoff document.
@@ -1890,7 +1973,6 @@ timeouts / `messageerror` / cancellation), cast expressions, and the Evidence li
 Still waiting on the owner:
 - **Analytics:** the analytics contract, or read access to `officialinspire/SPIRITBALL`.
 - **Merge:** enabling Pages and authorising the merge.
-- **Intro video:** `assets/video/inspiresoftwareintro.mp4` (the honest branded fallback runs meanwhile).
 - **Music:**
   - the case-complete cue (and the optional chapter-card cue); edited loops / endings for the Chapter 4 and 6
     beds (`docs/MUSIC_BRIEFS.md`); the night bed, the cave bed and the round cues are delivered and wired;

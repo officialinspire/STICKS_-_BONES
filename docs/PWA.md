@@ -63,7 +63,7 @@ Reading the status never creates a cache.
 | `inspire:sticks-and-bones:assets:v1` (core) | What Quick Play needs: both patio variants, Cousin's portrait and slam, tile atlas, tabletop, effects, UI/table/pass sounds — **30 files, 1.80 MB** | After the shell, best effort (the name is unchanged so existing installs stay valid) |
 | `inspire:sticks-and-bones:story:v1` | Chapter backdrops (full + portrait), the four cast sheets, story accents — **23 files, 3.20 MB** | **Per chapter as it is played** (cache-on-fetch: the current chapter and the prefetched next one), and **in full only when the player chooses "Download the whole story"** |
 | `inspire:sticks-and-bones:audio:v1` | Music (the two songs and the owner's Chapter 4 / Chapter 6 beds), the two result cues and the five ambience beds — **11 files, 15.1 MB** (9.15 MB before the owner audio stage) | **Optional, only when the player turns on offline audio** (size shown first). Served with byte ranges (206) for `<audio>` |
-| — | **Never cached:** PNG source sheets (the build fails if one is bundled), the studio intro video, the 512-px icons | Network only |
+| — | **Never cached:** PNG source sheets (the build fails if one is bundled), the studio intro video (272 KB; offline caching for it is the next stage: until then an offline start plays the credit only if the browser's HTTP cache still holds it, otherwise its error path enters the menu), the 512-px icons | Network only |
 
 **Policy change, deliberate and narrow:** music and ambience used to be "never cached". They are now cached
 **only** in `audio:v1`, **only** after the player's explicit choice, with the size disclosed beforehand, and

@@ -59,9 +59,10 @@ async function enterMenu(page: Page, reload = false) {
   if (reload) await page.reload();
   else await page.goto(BASE);
   await page.click('.start-button');
-  const skip = page.locator('[data-act="intro-skip"]');
-  if (await skip.count()) await tryClick(skip);
-  await page.waitForSelector('[data-go="setup"]');
+  // The studio credit: Skip arms once the start gesture is released (the gesture itself can't skip).
+  const skip = page.locator('[data-skip="armed"] [data-act="intro-skip"]');
+  await skip.waitFor({ timeout: 2500 }).then(() => tryClick(skip), () => undefined);
+  await page.waitForSelector('[data-go="setup"]', { timeout: 15000 });
 }
 
 async function startMatch(
@@ -847,8 +848,8 @@ try {
         const w = window as unknown as { __rej: string[]; __maxMedia: number; __menus: number; __sbAudio: { audio: { scene: string; playing: string | null; unlocked: boolean; levels: { muted: boolean }; activeSfx(): number; activeSfxIds(): string[] }; backend: { playingCount(): number } } };
         return { rej: w.__rej, maxMedia: w.__maxMedia, menus: w.__menus, scene: w.__sbAudio.audio.scene, playing: w.__sbAudio.audio.playing, count: w.__sbAudio.backend.playingCount(), muted: w.__sbAudio.audio.levels.muted, sfx: w.__sbAudio.audio.activeSfx(), sfxIds: w.__sbAudio.audio.activeSfxIds(), unlocked: w.__sbAudio.audio.unlocked };
       });
-    const intro = async (route: 'ok' | '404' | 'hang' | 'none' | 'reject', vp = { width: 390, height: 844 }, mobile = false) => {
-      const ctx = await browser.newContext({ viewport: vp, ...(mobile ? { isMobile: true, hasTouch: true } : {}) });
+    const intro = async (route: 'ok' | '404' | 'hang' | 'none' | 'reject' | 'real' | 'real-sound-refused', vp = { width: 390, height: 844 }, mobile = false, reduced = false) => {
+      const ctx = await browser.newContext({ viewport: vp, reducedMotion: reduced ? 'reduce' : 'no-preference', ...(mobile ? { isMobile: true, hasTouch: true } : {}) });
       await ctx.addInitScript('window.__name = (f) => f;'); // tsx wraps named inner functions in page callbacks
       const page = await ctx.newPage();
       page.on('pageerror', (e: { message: string }) => failures.push(`page error: ${e.message}`));
@@ -856,7 +857,14 @@ try {
         if (m.type() === 'error' && !(route !== 'ok' && /Failed to load resource|404/.test(m.text()))) failures.push(`console error: ${m.text()}`);
       });
       await page.addInitScript(INSTRUMENT);
-      if (route !== 'none') await page.addInitScript(() => ((window as unknown as { __sbIntroVideo: string }).__sbIntroVideo = './e2e-intro.webm'));
+      // 'real': the bundled INSPIRE credit (assets/video/inspiresoftwareintro.mp4). 'none': the video is missing.
+      if (route === 'none') await page.addInitScript(() => ((window as unknown as { __sbIntroVideo: null }).__sbIntroVideo = null));
+      else if (!route.startsWith('real')) await page.addInitScript(() => ((window as unknown as { __sbIntroVideo: string }).__sbIntroVideo = './e2e-intro.webm'));
+      // Autoplay policy refusing SOUND only: muted playback is allowed (the credit then plays muted).
+      if (route === 'real-sound-refused')
+        await page.addInitScript(
+          `(() => { const orig = HTMLMediaElement.prototype.play; HTMLMediaElement.prototype.play = function () { return this instanceof HTMLVideoElement && !this.muted ? Promise.reject(new DOMException('sound blocked', 'NotAllowedError')) : orig.call(this); }; })();`,
+        );
       // Simulate the browser refusing to play the credit (autoplay policy); music elements keep the real play().
       if (route === 'reject')
         await page.addInitScript(
@@ -920,7 +928,7 @@ try {
       {
         const { ctx, page } = await intro('ok');
         await page.dblclick('.start-button');
-        await page.waitForSelector('[data-act="intro-skip"]');
+        await page.waitForSelector('[data-skip="armed"] [data-act="intro-skip"]');
         await page.click('[data-act="intro-mute"]');
         await page.click('[data-act="intro-skip"]');
         await page.click('[data-act="intro-skip"]', { timeout: 500 }).catch(() => {});
@@ -947,7 +955,7 @@ try {
       {
         const { ctx, page } = await intro('ok', { width: 390, height: 844 }, true);
         await page.tap('.start-button');
-        await page.waitForSelector('[data-act="intro-skip"]');
+        await page.waitForSelector('[data-skip="armed"] [data-act="intro-skip"]');
         await page.tap('[data-act="intro-skip"]');
         await page.waitForSelector('[data-go="setup"]');
         await page.waitForTimeout(1500);
@@ -997,6 +1005,7 @@ try {
       const page = await ctx.newPage();
       page.on('pageerror', (e: { message: string }) => failures.push(`page error: ${e.message}`));
       await page.addInitScript(INSTRUMENT);
+      await page.addInitScript(() => ((window as unknown as { __sbIntroVideo: null }).__sbIntroVideo = null)); // the text credit
       await page.goto(BASE);
       await page.click('.start-button');
       await page.waitForSelector('.credit-card');
@@ -1051,7 +1060,7 @@ try {
         // 7j. Rotation during the credit: the video and its controls stay on screen.
         const rot = await intro('ok');
         await rot.page.click('.start-button');
-        await rot.page.waitForSelector('[data-act="intro-skip"]');
+        await rot.page.waitForSelector('[data-skip="armed"] [data-act="intro-skip"]');
         for (const vp of [{ width: 844, height: 390 }, { width: 390, height: 844 }]) {
           await rot.page.setViewportSize(vp);
           await rot.page.waitForTimeout(150);
@@ -1066,6 +1075,119 @@ try {
         check((await probe(rot.page)).menus === 1, 'rotation: menu not entered once');
         notes.push('rotation during the credit (390×844 ↔ 844×390): video, Skip and Mute stay on screen; Skip → menu once');
         await rot.ctx.close();
+      }
+    }
+
+    // 7k. The real INSPIRE credit (assets/video/inspiresoftwareintro.mp4, bundled locally).
+    {
+      const videoState = (page: Page) =>
+        page.evaluate(() => {
+          const v = document.querySelector('video');
+          return v ? { src: v.currentSrc, ready: v.readyState, w: v.videoWidth, h: v.videoHeight, dur: v.duration, t: v.currentTime, paused: v.paused, muted: v.muted, volume: v.volume, err: v.error?.code ?? 0 } : null;
+        });
+      // (a) It decodes and plays from the app's own origin; the start tap's own click on Skip does nothing;
+      //     a deliberate Skip later fades it out → black → menu once, never overlapping menu music.
+      {
+        const { ctx, page } = await intro('real');
+        const box = (await page.locator('.start-button').boundingBox())!;
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.down();
+        await page.waitForSelector('[data-act="intro-skip"]');
+        const skipBox = (await page.locator('[data-act="intro-skip"]').boundingBox())!;
+        // The same press, released over Skip (the classic accidental instant skip).
+        await page.mouse.move(skipBox.x + skipBox.width / 2, skipBox.y + skipBox.height / 2);
+        await page.mouse.up();
+        await page.click('[data-act="intro-skip"]', { timeout: 300 }).catch(() => undefined); // and a quick second tap
+        await page.waitForFunction(() => { const v = document.querySelector('video'); return !!v && v.currentTime > 0.6; }, null, { timeout: 8000 }).then((h: { dispose(): unknown }) => h.dispose(), () => undefined);
+        const playing = await videoState(page);
+        const guarded = await page.evaluate(() => ({ credit: !!document.querySelector('.intro-stage'), menu: !!document.querySelector('[data-go="setup"]') }));
+        check(guarded.credit && !guarded.menu, `real credit: the start gesture skipped it (${JSON.stringify(guarded)})`);
+        check(!!playing && /\/assets\/video\/inspiresoftwareintro/.test(playing.src) && !/^https?:\/\/(?!localhost)/.test(playing.src) && playing.ready >= 2 && playing.w === 1080 && playing.h === 720 && Math.abs(playing.dur - 5.87) < 0.1 && !playing.paused && playing.err === 0, `real credit: not decoding/playing locally ${JSON.stringify(playing)}`);
+        const during = await probe(page);
+        check(during.scene === 'intro' && during.count === 0, `real credit: menu music during the credit (${JSON.stringify(during)})`);
+        await page.waitForSelector('[data-skip="armed"]');
+        await page.click('[data-act="intro-skip"]');
+        await page.waitForTimeout(150);
+        const fading = await videoState(page);
+        await page.waitForSelector('[data-go="setup"]', { timeout: 6000 });
+        await page.waitForTimeout(1800);
+        const r = await probe(page);
+        check(r.menus === 1 && r.maxMedia <= 1 && r.playing === 'menu' && r.count === 1 && r.rej.length === 0 && (await page.locator('video').count()) === 0, `real credit Skip → menu: ${JSON.stringify(r)}`);
+        notes.push(`real credit: ${playing?.w}×${playing?.h}, ${playing?.dur.toFixed(2)} s from ${new URL(playing?.src ?? 'http://x/').pathname} (local); the start press released over Skip and a quick second tap did nothing; Skip faded the soundtrack (volume ${fading ? fading.volume.toFixed(2) : 'released'} 150 ms in) → black → menu once; max media sources ${r.maxMedia}`);
+        await ctx.close();
+      }
+      // (b) A held / repeating Enter: pressed during loading it starts nothing (only fresh presses count); pressed
+      //     once ready it starts the credit once and can't skip it; Escape after arming skips.
+      {
+        const { ctx, page } = await intro('real');
+        // Deterministic: hold one essential back 1.5 s, so the press surely begins while the prompt is disabled.
+        await page.route('**/double-six-atlas*.webp', async (r: { continue(): Promise<void> }) => {
+          await new Promise((res) => setTimeout(res, 1500));
+          await r.continue();
+        });
+        await page.reload();
+        await page.waitForSelector('.start-button[disabled]');
+        await page.keyboard.down('Enter');
+        const until = Date.now() + 3500;
+        while (Date.now() < until) {
+          await page.waitForTimeout(80);
+          await page.keyboard.down('Enter'); // auto-repeat, held through the moment the prompt becomes ready
+        }
+        const early = await page.evaluate(() => ({ credit: !!document.querySelector('.intro-stage'), ready: !(document.querySelector('.start-button') as HTMLButtonElement | null)?.disabled }));
+        await page.keyboard.up('Enter');
+        check(early.ready && !early.credit, `Enter held from loading must not start the game: ${JSON.stringify(early)}`);
+        await page.unroute('**/double-six-atlas*.webp');
+        await page.waitForSelector('.start-button:not([disabled])');
+        await page.keyboard.down('Enter');
+        for (let i = 0; i < 4; i++) {
+          await page.waitForTimeout(60);
+          await page.keyboard.down('Enter'); // auto-repeat while held
+        }
+        await page.waitForTimeout(500);
+        const held = await page.evaluate(() => ({ credit: !!document.querySelector('.intro-stage'), armed: document.querySelector('.intro-stage')?.getAttribute('data-skip') }));
+        await page.keyboard.up('Enter');
+        await page.waitForSelector('[data-skip="armed"]', { timeout: 2000 });
+        check(held.credit && held.armed === 'guarded', `held Enter: ${JSON.stringify(held)}`);
+        await page.keyboard.press('Escape');
+        await page.waitForSelector('[data-go="setup"]', { timeout: 6000 });
+        await page.waitForTimeout(800);
+        const r = await probe(page);
+        check(r.menus === 1 && r.rej.length === 0, `held Enter then Escape: ${JSON.stringify(r)}`);
+        notes.push(`real credit: Enter held from loading started nothing (credit ${early.credit}); a deliberate held Enter started it once, Skip stayed guarded until the key was released; Escape then skipped → menu once`);
+        await ctx.close();
+      }
+      // (c) Sound refused by the autoplay policy: it plays muted (button says Unmute), the saved mute is untouched.
+      {
+        const { ctx, page } = await intro('real-sound-refused');
+        await page.click('.start-button');
+        await page.waitForFunction(() => { const v = document.querySelector('video'); return !!v && !v.paused && v.currentTime > 0.3; }, null, { timeout: 8000 }).then((h: { dispose(): unknown }) => h.dispose(), () => undefined);
+        const v = await videoState(page);
+        const btn = await page.evaluate(() => { const b = document.querySelector('[data-act="intro-mute"]'); return { pressed: b?.getAttribute('aria-pressed'), text: b?.textContent }; });
+        const saved = await probe(page);
+        check(!!v && v.muted && !v.paused && btn.pressed === 'true' && btn.text === 'Unmute' && saved.muted === false, `sound refused → muted credit: ${JSON.stringify({ v, btn, savedMuted: saved.muted })}`);
+        await page.waitForSelector('[data-go="setup"]', { timeout: 12000 }); // plays out
+        await page.waitForTimeout(1500);
+        const r = await probe(page);
+        check(r.menus === 1 && r.playing === 'menu' && !r.muted && r.rej.length === 0, `muted credit → menu (music not muted): ${JSON.stringify(r)}`);
+        notes.push('real credit with sound refused: retried muted and played (Mute reads "Unmute"; saved mute unchanged) → menu once with music');
+        await ctx.close();
+      }
+      // (d) Played out with reduced motion: menu once, no reveal animation, no overlap; the player's mute is honoured.
+      {
+        const { ctx, page } = await intro('real', { width: 844, height: 390 }, false, true);
+        await page.evaluate(() => localStorage.setItem('sticks-and-bones.settings', JSON.stringify({ format: 'sticks-and-bones/settings', version: 3, data: { audio: { master: 0.8, music: 0.6, sfx: 0.8, voice: 0.9, ambience: 0.5, muted: true, ambienceOn: true } } })));
+        await page.reload();
+        await page.waitForSelector('.start-button:not([disabled])');
+        await page.click('.start-button');
+        await page.waitForSelector('video');
+        const v = await videoState(page);
+        await page.waitForSelector('[data-go="setup"]', { timeout: 12000 });
+        const reveal = await page.locator('.scene.is-reveal').count();
+        await page.waitForTimeout(1200);
+        const r = await probe(page);
+        check(!!v && v.muted && r.muted && reveal === 0 && r.menus === 1 && r.maxMedia <= 1 && r.rej.length === 0, `reduced motion + muted, played out: ${JSON.stringify({ v, reveal, r })}`);
+        notes.push('real credit, 844×390, reduced motion, muted by the player: played muted to the end → menu once, no reveal animation, max media sources ' + r.maxMedia);
+        await ctx.close();
       }
     }
 

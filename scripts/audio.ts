@@ -45,7 +45,7 @@ const browser = await chromium.launch();
 
 /** Records every buffer source on the audio clock, and every voice the backend is asked for. */
 const INIT = `
-window.__name = (f) => f; window.__sbStoryFast = true;
+window.__name = (f) => f; window.__sbStoryFast = true; window.__sbIntroVideo = null; // the credit is tested in e2e § 7
 window.__nodes = [];
 const P = AudioBufferSourceNode.prototype, s0 = P.start, t0 = P.stop;
 P.start = function (when = 0, ...a) {

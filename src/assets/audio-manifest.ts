@@ -128,8 +128,31 @@ export const MUSIC: readonly MusicTrack[] = [
   },
 ];
 
-/** Intro video: used only if the owner supplies this exact file. */
+/** The INSPIRE studio credit, played inline after the start gesture (local file; never a runtime external URL). */
 export const INTRO_VIDEO_PATH = 'assets/video/inspiresoftwareintro.mp4';
+
+/**
+ * Provenance and measured metadata for the studio credit. Copied byte-for-byte from the studio's own repository
+ * (verified: git blob hash, size, SHA-256, a clean full decode with ffmpeg). `npm run assets:verify` checks bytes,
+ * hash and that the MP4 index (moov) precedes the media (mdat), so playback can start before the download ends.
+ */
+export const INTRO_VIDEO = {
+  path: INTRO_VIDEO_PATH,
+  bytes: 278774,
+  sha256: '8a6ce01dde56350a8e13aa09b194a4205ca13e1e826d34e71381896a20cbcb88',
+  source: {
+    repository: 'officialinspire/Inspire-card-parlor',
+    branch: 'main',
+    commit: 'cdc789bad27a01e546135d26c0fc3278b4519635',
+    path: 'public/assets/video/inspiresoftwareintro.mp4',
+    gitBlob: '66ff2ca8b4344840cd6170dd4ed63a573251d486',
+  },
+  container: 'MP4 (isom/iso2/avc1/mp41), moov before mdat (fast start)',
+  video: { codec: 'H.264 High', width: 1080, height: 720, fps: 30, frames: 175, durationSec: 5.833, pixelFormat: 'yuv420p', bitRateKbps: 243 },
+  audio: { codec: 'AAC-LC', sampleRate: 44100, channels: 2, durationSec: 5.869, integratedLufs: -21.0, samplePeakDbfs: -6.1, bitRateKbps: 128 },
+  /** Measured with ffmpeg blackdetect: the credit opens and closes on black, so the fade through black is seamless. */
+  black: { headSec: 0.333, tailFromSec: 5.333 },
+} as const;
 
 /**
  * Sound effects and ambience: NO files have been supplied. The game uses small

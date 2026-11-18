@@ -39,7 +39,8 @@ const browser = await chromium.launch();
 
 async function newPage(o: { width?: number; height?: number } = {}) {
   const ctx = await browser.newContext({ viewport: { width: o.width ?? 390, height: o.height ?? 844 } });
-  await ctx.addInitScript('window.__name = (f) => f; window.__sbStoryFast = true;');
+  // These are fault tests after startup: the text credit (__sbIntroVideo = null) keeps them short; e2e § 7 tests the video.
+  await ctx.addInitScript('window.__name = (f) => f; window.__sbStoryFast = true; window.__sbIntroVideo = null;');
   const page = await ctx.newPage();
   const errors: string[] = [];
   page.on('pageerror', (e: Error) => errors.push(e.message));
@@ -57,8 +58,7 @@ async function afterRetry(page: Page): Promise<void> {
   await page.waitForTimeout(600);
   if (await page.locator('.start-button').count()) {
     await page.click('.start-button');
-    const skip = page.locator('[data-act="intro-skip"]');
-    if (await skip.count()) await skip.click().catch(() => undefined);
+    await page.locator('[data-skip="armed"] [data-act="intro-skip"]').click({ timeout: 2500 }).catch(() => undefined);
   }
 }
 const until = async (fn: () => Promise<boolean>, ms = 10_000) => {

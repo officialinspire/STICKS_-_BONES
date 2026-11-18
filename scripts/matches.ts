@@ -33,7 +33,7 @@ const browser = await chromium.launch();
 
 async function newPage() {
   const ctx = await browser.newContext({ viewport: { width: 1024, height: 768 } });
-  await ctx.addInitScript('window.__name = (f) => f;');
+  await ctx.addInitScript('window.__name = (f) => f; window.__sbIntroVideo = null;'); // the credit is tested in e2e § 7
   const page = await ctx.newPage();
   const consoleErrors: string[] = [];
   page.on('console', (m: { type(): string; text(): string }) => (m.type() === 'error' || m.type() === 'warning') && consoleErrors.push(`${m.type()}: ${m.text()}`));
@@ -44,8 +44,8 @@ async function enterMenu(page: Page, reload = false) {
   if (reload) await page.reload();
   else await page.goto(BASE);
   await page.click('.start-button');
-  const skip = page.locator('[data-act="intro-skip"]');
-  if (await skip.count()) await skip.click().catch(() => undefined);
+  const skip = page.locator('[data-skip="armed"] [data-act="intro-skip"]');
+  await skip.click({ timeout: 2500 }).catch(() => undefined);
   await page.waitForSelector('[data-go="setup"]');
 }
 async function setup(page: Page, o: { mode: string; opponent: 'ai' | 'local'; difficulty?: string; seating?: string; seed: string; dbl?: boolean }) {

@@ -72,6 +72,8 @@ async function run(i: number) {
   const resStart = (await page.evaluate(RES)) as Res[];
   const t1 = Date.now();
   await page.click('.start-button');
+  // The studio credit (5.8 s): skipped as soon as Skip is armed, like a returning player, so tMenu measures the app.
+  await page.locator('[data-skip="armed"] [data-act="intro-skip"]').click({ timeout: 3000 }).catch(() => undefined);
   await page.waitForSelector('[data-go="setup"]', { timeout: 120_000 });
   const tMenu = Date.now() - t1;
   const resMenu = (await page.evaluate(RES)) as Res[];

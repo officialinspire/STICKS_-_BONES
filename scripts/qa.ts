@@ -76,8 +76,8 @@ async function tryClick(loc: { click(o: { timeout: number }): Promise<void> }): 
 async function enterMenu(page: Page) {
   await page.goto(BASE);
   await page.click('.start-button');
-  const skip = page.locator('[data-act="intro-skip"]');
-  if (await skip.count()) await tryClick(skip);
+  const skip = page.locator('[data-skip="armed"] [data-act="intro-skip"]');
+  await skip.waitFor({ timeout: 2500 }).then(() => tryClick(skip), () => undefined);
   await page.waitForSelector('[data-go="setup"]');
 }
 
@@ -308,8 +308,8 @@ try {
     await page.waitForSelector('.start-button');
     await capture(vp, 'startup', page);
     await page.click('.start-button');
-    const skip = page.locator('[data-act="intro-skip"]');
-    if (await skip.count()) await tryClick(skip);
+    const skip = page.locator('[data-skip="armed"] [data-act="intro-skip"]');
+    await skip.waitFor({ timeout: 2500 }).then(() => tryClick(skip), () => undefined);
     await page.waitForSelector('[data-go="setup"]');
     await capture(vp, 'menu', page);
     for (const sub of ['stats', 'settings', 'achievements']) {
@@ -354,7 +354,7 @@ try {
     });
     await page.reload();
     await page.click('.start-button');
-    await page.locator('[data-act="intro-skip"]').click().catch(() => undefined);
+    await page.locator('[data-skip="armed"] [data-act="intro-skip"]').click({ timeout: 2500 }).catch(() => undefined);
     await page.waitForSelector('[data-act="story"]');
     await page.click('[data-act="story"]');
     await page.click('[data-act="story-continue"]');

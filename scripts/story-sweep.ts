@@ -84,7 +84,7 @@ const probe = (page: Page) => page.evaluate(PROBE) as Promise<Probe>;
 
 async function newPage(vp: { width: number; height: number }) {
   const ctx = await browser.newContext({ viewport: vp, deviceScaleFactor: 1 });
-  await ctx.addInitScript('window.__name = (f) => f; window.__sbStoryFast = true;');
+  await ctx.addInitScript('window.__name = (f) => f; window.__sbStoryFast = true; window.__sbIntroVideo = null;');
   // Instant text (the player's own Settings choice) so each Continue is one beat with no reveal step.
   await ctx.addInitScript(`try { localStorage.setItem('sticks-and-bones.settings', JSON.stringify({ format: 'sticks-and-bones/settings', version: 3, data: { instantText: true } })); } catch {}`);
   const page = await ctx.newPage();

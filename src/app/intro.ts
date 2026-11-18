@@ -5,6 +5,12 @@
  * signal (a late 'ended', an error after Skip, a timer firing after the
  * end) is ignored, so the menu is entered exactly once and no stale callback
  * can act after the intro is gone.
+ *
+ * - A refused play() (autoplay policy) is retried ONCE muted, since browsers allow muted playback; only a
+ *   second refusal ends the credit.
+ * - Skip and timeouts fade the credit's soundtrack out before the element is released. `onFinish` gets a
+ *   promise that settles once the media is released (bounded by a timer even if the fade stalls), and the
+ *   menu waits for it, so the credit's audio can never overlap menu music.
  */
 import type { Scheduler } from './session';
 
@@ -19,12 +25,21 @@ export interface VideoPort {
   release(): void;
   on(event: 'ended' | 'error' | 'playing' | 'waiting' | 'stalled' | 'loadedmetadata', cb: () => void): () => void;
   durationSec(): number | null;
+  /** Ramp the soundtrack to silence over `ms` (resolves when done). */
+  fadeOut?(ms: number): Promise<void>;
+  /** Mute the element (the muted retry after a refused play()). */
+  mute?(): void;
 }
 
 export interface IntroOptions {
   video: VideoPort | null;
   scheduler: Scheduler;
-  onFinish(reason: IntroEnd): void;
+  /** `released` settles once the video is stopped and released (enter the menu only after it). */
+  onFinish(reason: IntroEnd, released: Promise<void>): void;
+  /** play() with sound was refused and the credit now plays muted. */
+  onMutedFallback?(): void;
+  /** Soundtrack fade before release on Skip / timeout (0 = cut at once). */
+  fadeOutMs?: number;
   /** Max wait for playback to actually start. */
   startTimeoutMs?: number;
   /** Max time stuck buffering mid-play. */
@@ -34,7 +49,8 @@ export interface IntroOptions {
 }
 
 export class IntroController {
-  #o: Required<Omit<IntroOptions, 'video'>> & { video: VideoPort | null };
+  #o: Required<Omit<IntroOptions, 'video' | 'onMutedFallback'>> & { video: VideoPort | null; onMutedFallback?: () => void };
+  #mutedTried = false;
   #done = false;
   #started = false;
   #suspended = false;
@@ -44,7 +60,7 @@ export class IntroController {
   reason: IntroEnd | null = null;
 
   constructor(o: IntroOptions) {
-    this.#o = { startTimeoutMs: 6000, stallTimeoutMs: 5000, maxMs: 45000, ...o };
+    this.#o = { startTimeoutMs: 6000, stallTimeoutMs: 5000, maxMs: 45000, fadeOutMs: 0, ...o };
   }
 
   get done(): boolean {
@@ -76,7 +92,19 @@ export class IntroController {
     );
     this.#timer('start', this.#o.startTimeoutMs, () => this.finish('timeout'));
     this.#timer('max', this.#o.maxMs, () => this.finish('timeout'));
-    v.play().catch(() => this.finish('rejected'));
+    this.#play(v);
+  }
+
+  /** play(); a refusal is retried once muted (allowed by autoplay policies); a second refusal ends the credit. */
+  #play(v: VideoPort): void {
+    v.play().catch(() => {
+      if (this.#done || this.#suspended) return;
+      if (this.#mutedTried || !v.mute) return this.finish('rejected');
+      this.#mutedTried = true;
+      v.mute();
+      this.#o.onMutedFallback?.();
+      v.play().catch(() => this.finish('rejected'));
+    });
   }
 
   skip(): void {
@@ -103,7 +131,7 @@ export class IntroController {
     if (!v) return;
     this.#timer('start', this.#o.startTimeoutMs, () => this.finish('timeout'));
     this.#timer('max', this.#o.maxMs, () => this.finish('timeout'));
-    v.play().catch(() => this.finish('rejected'));
+    this.#play(v);
   }
 
   /** The single guarded transition. Idempotent. */
@@ -115,8 +143,34 @@ export class IntroController {
     this.#timers.clear();
     for (const off of this.#offs) off();
     this.#offs = [];
-    this.#o.video?.release();
-    this.#o.onFinish(reason);
+    this.#o.onFinish(reason, this.#release(reason));
+  }
+
+  /**
+   * Stop the credit's media. Skip and timeouts fade the soundtrack first (if the port can); everything else
+   * (natural end, errors, refusal, cancel) releases at once. Released exactly once; a stuck fade is cut off
+   * by a timer, so the menu is never held hostage.
+   */
+  #release(reason: IntroEnd): Promise<void> {
+    const v = this.#o.video;
+    if (!v) return Promise.resolve();
+    const ms = this.#o.fadeOutMs;
+    if (!(ms > 0 && v.fadeOut && (reason === 'skip' || reason === 'timeout'))) {
+      v.release();
+      return Promise.resolve();
+    }
+    return new Promise<void>((resolve) => {
+      let once = false;
+      const done = () => {
+        if (once) return;
+        once = true;
+        this.#o.scheduler.clear(cap);
+        v.release();
+        resolve();
+      };
+      const cap = this.#o.scheduler.set(done, ms + 150);
+      v.fadeOut!(ms).then(done, done);
+    });
   }
 
   #timer(key: string, ms: number, fn: () => void): void {

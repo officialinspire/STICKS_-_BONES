@@ -14,7 +14,7 @@ import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PNG } from 'pngjs';
 import { IMAGE_ASSETS, MISSING_ASSETS } from '../src/assets/manifest.ts';
-import { MUSIC } from '../src/assets/audio-manifest.ts';
+import { INTRO_VIDEO, MUSIC } from '../src/assets/audio-manifest.ts';
 import { RUNTIME_ASSET_URLS } from '../src/assets/urls.ts';
 import { measureFrames, rectsEqual, rectWithin } from './lib/measure.ts';
 import sharp from 'sharp';
@@ -330,7 +330,24 @@ for (const m of MUSIC) {
   if (createHash('sha256').update(buf).digest('hex') !== m.sha256) errors.push(`[music:${m.id}] sha256 changed — the approved file was altered or replaced`);
   if (m.loop.candidates.some((c) => c.auditioned)) notes.push(`[music:${m.id}] has an auditioned loop candidate — runtime still uses restart-after-ending until the policy is changed`);
 }
-if (!existsSync(join(repoRoot, 'assets/video/inspiresoftwareintro.mp4'))) notes.push('intro video assets/video/inspiresoftwareintro.mp4 not supplied — start screen fades straight to the menu');
+// The studio credit: exactly the verified file, and laid out for fast start (moov before mdat).
+{
+  const full = join(repoRoot, INTRO_VIDEO.path);
+  if (!existsSync(full)) errors.push(`[video.intro] missing ${INTRO_VIDEO.path} — the start screen would fall back to the text credit`);
+  else {
+    const buf = readFileSync(full);
+    if (buf.length !== INTRO_VIDEO.bytes || createHash('sha256').update(buf).digest('hex') !== INTRO_VIDEO.sha256) errors.push(`[video.intro] bytes/sha256 differ from the verified copy of ${INTRO_VIDEO.source.repository}@${INTRO_VIDEO.source.commit.slice(0, 7)}`);
+    const atoms: string[] = [];
+    for (let i = 0; i + 8 <= buf.length; ) {
+      const size = buf.readUInt32BE(i);
+      atoms.push(buf.toString('latin1', i + 4, i + 8));
+      if (size < 8) break;
+      i += size;
+    }
+    if (atoms[0] !== 'ftyp' || atoms.indexOf('moov') < 0 || atoms.indexOf('moov') > atoms.indexOf('mdat')) errors.push(`[video.intro] not a fast-start MP4 (top-level atoms: ${atoms.join(', ')})`);
+    else notes.push(`intro video ${INTRO_VIDEO.path}: ${INTRO_VIDEO.video.width}×${INTRO_VIDEO.video.height} ${INTRO_VIDEO.video.durationSec} s, ${buf.length} B, fast start, from ${INTRO_VIDEO.source.repository}@${INTRO_VIDEO.source.commit.slice(0, 7)}`);
+  }
+}
 
 for (const m of MISSING_ASSETS) notes.push(`missing (${m.kind}) ${m.id}: fallback = ${m.fallback}`);
 

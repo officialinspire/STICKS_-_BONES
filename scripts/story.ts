@@ -40,7 +40,7 @@ const browser = await chromium.launch();
 
 async function newPage(o: { width?: number; height?: number; reduce?: boolean; blockImages?: boolean } = {}) {
   const ctx = await browser.newContext({ viewport: { width: o.width ?? 390, height: o.height ?? 844 }, reducedMotion: o.reduce ? 'reduce' : 'no-preference', deviceScaleFactor: 2 });
-  await ctx.addInitScript('window.__name = (f) => f; window.__sbStoryFast = true;');
+  await ctx.addInitScript('window.__name = (f) => f; window.__sbStoryFast = true; window.__sbIntroVideo = null;');
   const page = await ctx.newPage();
   const errors: string[] = [];
   page.on('pageerror', (e: Error) => errors.push(e.message));

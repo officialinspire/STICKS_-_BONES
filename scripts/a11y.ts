@@ -63,8 +63,9 @@ async function tryClick(loc: { click(o: { timeout: number }): Promise<void> }) {
 async function enterMenu(page: Page) {
   await page.goto(BASE);
   await page.click('.start-button');
-  const skip = page.locator('[data-act="intro-skip"]');
-  if (await skip.count()) await tryClick(skip);
+  // The studio credit: Skip is armed once the start gesture is released (it can't skip by accident).
+  const skip = page.locator('[data-skip="armed"] [data-act="intro-skip"]');
+  await skip.waitFor({ timeout: 2500 }).then(() => tryClick(skip), () => undefined);
   await page.waitForSelector('[data-go="setup"]');
 }
 

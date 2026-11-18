@@ -35,7 +35,7 @@ const server = await createServer({ root, logLevel: 'error', server: { port: 520
 await server.listen();
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
-await ctx.addInitScript('window.__name = (f) => f; window.__sbStoryFast = true;');
+await ctx.addInitScript('window.__name = (f) => f; window.__sbStoryFast = true; window.__sbIntroVideo = null;');
 const page = await ctx.newPage();
 /**
  * The dialogue panel is permanent markup (Continue-only controls), so "the panel exists" says nothing about

@@ -131,8 +131,8 @@ const offlineText = (page: Page) => page.locator('[data-region="offline-status"]
 async function enterMenu(page: Page) {
   await page.waitForSelector('.start-button', { timeout: 30_000 });
   await page.click('.start-button');
-  const skip = page.locator('[data-act="intro-skip"]');
-  if (await skip.count()) await skip.click().catch(() => undefined);
+  const skip = page.locator('[data-skip="armed"] [data-act="intro-skip"]');
+  await skip.click({ timeout: 2500 }).catch(() => undefined);
   await page.waitForSelector('[data-go="setup"]');
 }
 async function waitStatus(page: Page, re: RegExp, timeout = 90_000): Promise<string> {
@@ -430,8 +430,7 @@ try {
     // After the reload the player returns straight to the saved match (once), behind the privacy cover.
     await page.waitForSelector('.start-button', { timeout: 30_000 });
     await page.click('.start-button');
-    const skipU = page.locator('[data-act="intro-skip"]');
-    if (await skipU.count()) await skipU.click().catch(() => undefined);
+    await page.locator('[data-skip="armed"] [data-act="intro-skip"]').click({ timeout: 2500 }).catch(() => undefined);
     await page.waitForSelector('.table-screen', { timeout: 30_000 });
     const saveAfter = await page.evaluate(() => localStorage.getItem('sticks-and-bones.save'));
     const strip = (s: string | null) => {

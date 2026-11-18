@@ -11,8 +11,13 @@
  *   - The audio manager stays in its silent 'intro' scene through the credit.
  *   - The video element is released before menu music can start.
  * - **Credit:**
- *   - The owner's video, if supplied. It's skippable (button, Escape), paused while the app is in the
- *     background, and ends once on any failure.
+ *   - The INSPIRE studio video (a local file: assets/video/inspiresoftwareintro.mp4). It's skippable (button,
+ *     Escape), paused while the app is in the background, and ends once on any failure.
+ *   - Skip and Mute arm only after the starting input is released (the tap's pointerup, the key's keyup) and at
+ *     least SKIP_ARM_MS later, so the start gesture itself (a tap landing on Skip, a held or repeating Enter)
+ *     can never skip the credit by accident.
+ *   - A refused play() is retried muted (the Mute button then reads "Unmute"; the player's saved mute is not
+ *     changed). Skip fades the soundtrack out with the picture, and the menu waits until the media is released.
  *   - Otherwise, a short typeset text card that doesn't pretend to be the video. Also skippable.
  * - **Reveal:** the menu fades up from black. Title, menu panel and Cousin follow in a short stagger.
  *   - Any input finishes the reveal at once, and reduced motion skips it.
@@ -49,6 +54,12 @@ export interface IntroDeps {
 export const INIT_PATIENCE_MS = 8000;
 /** How long the text credit holds when the studio video isn't supplied. */
 export const CREDIT_CARD_MS = 1600;
+/** Skip / Mute ignore input until the starting gesture is released and at least this long has passed. */
+export const SKIP_ARM_MS = 400;
+/** If the starting input's release is never seen (focus moved, a lost pointerup), arm anyway after this. */
+export const SKIP_ARM_MAX_MS = 1500;
+/** The credit's soundtrack fades out over this on Skip (shorter under reduced motion; the picture fade is 420 ms). */
+export const AUDIO_FADE_MS = 380;
 
 function port(el: HTMLVideoElement): VideoPort {
   return {
@@ -64,6 +75,23 @@ function port(el: HTMLVideoElement): VideoPort {
       return () => el.removeEventListener(event, cb);
     },
     durationSec: () => (Number.isFinite(el.duration) ? el.duration : null),
+    mute: () => void (el.muted = true),
+    fadeOut: (ms) =>
+      new Promise<void>((resolve) => {
+        const from = el.volume;
+        const t0 = performance.now();
+        const step = () => {
+          const k = Math.min(1, (performance.now() - t0) / ms);
+          try {
+            el.volume = Math.max(0, from * (1 - k)); // iOS ignores volume: the release still stops it
+          } catch {
+            /* volume not settable */
+          }
+          if (k >= 1 || document.hidden) resolve();
+          else requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      }),
   };
 }
 
@@ -94,6 +122,12 @@ export function showStart(d: IntroDeps): () => void {
   let cardTimer = 0;
   let cardLeft = 0;
   let cardAt = 0;
+  // Skip guard: armed once the starting input is released AND SKIP_ARM_MS has passed.
+  let skipArmed = false;
+  let armMin = false;
+  let armReleased = false;
+  let armTimers: number[] = [];
+  let armOffs: (() => void)[] = [];
   const fade = root.querySelector('.fade-black') as HTMLElement;
   const fadeMs = () => (d.reduceMotion() ? 0 : 420);
   if (d.reduceMotion()) fade.style.transition = 'none';
@@ -156,16 +190,57 @@ export function showStart(d: IntroDeps): () => void {
   }
 
   // ---- start (one gesture) and the credit ----
+  /** The key behind a keyboard-activated click (a button's own Enter/Space activation carries no key). */
+  let lastKey = '';
   const onKey = (e: KeyboardEvent) => {
-    if (started) {
-      // Keyboard skip during the credit (its buttons handle Enter/Space themselves).
-      if (e.key === 'Escape' && !finished) skip();
+    const activates = e.key === 'Enter' || e.key === ' ';
+    if (!e.repeat) lastKey = e.key;
+    // An auto-repeating key never activates anything here: a held Enter can't start the game (if its first press
+    // came while loading) and can't skip the credit. Only fresh presses count.
+    if (e.repeat && activates) {
+      e.preventDefault();
       return;
     }
-    if (!ready || e.target === retryBtn) return;
-    if (!['Tab', 'Shift', 'Control', 'Alt', 'Meta', 'Escape'].includes(e.key)) begin();
+    if (started) {
+      // While the guard is closed, a held or repeating key can't reach Skip / Mute (their own Enter/Space).
+      if (!skipArmed && (activates || e.key === 'Escape')) {
+        e.preventDefault();
+        return;
+      }
+      // Keyboard skip during the credit (its buttons handle Enter/Space themselves).
+      if (e.key === 'Escape' && !e.repeat && !finished) skip();
+      return;
+    }
+    if (!ready || e.target === retryBtn || e.repeat) return;
+    if (!['Tab', 'Shift', 'Control', 'Alt', 'Meta', 'Escape'].includes(e.key)) begin({ key: e.key });
+  };
+  /** Open the Skip / Mute guard (both conditions met). */
+  const maybeArm = () => {
+    if (skipArmed || !armMin || !armReleased || finished || disposed) return;
+    skipArmed = true;
+    for (const b of root.querySelectorAll<HTMLElement>('.intro-controls [aria-disabled]')) b.removeAttribute('aria-disabled');
+    root.querySelector('.intro-stage')?.setAttribute('data-skip', 'armed');
+  };
+  /** The start input: wait for its release (a pointerup, or that key's keyup) before Skip can act. */
+  const guardSkip = (from: { key?: string; pointer?: boolean }) => {
+    armTimers.push(window.setTimeout(() => ((armMin = true), maybeArm()), SKIP_ARM_MS));
+    armTimers.push(window.setTimeout(() => ((armMin = armReleased = true), maybeArm()), SKIP_ARM_MAX_MS));
+    if (!from.key && !from.pointer) armReleased = true; // a click: the press is already over
+    const released = () => window.setTimeout(() => ((armReleased = true), maybeArm()), 0); // after the trailing click
+    if (from.pointer) {
+      const up = () => released();
+      addEventListener('pointerup', up, { capture: true, once: true });
+      addEventListener('pointercancel', up, { capture: true, once: true });
+      armOffs.push(() => removeEventListener('pointerup', up, true), () => removeEventListener('pointercancel', up, true));
+    }
+    if (from.key) {
+      const up = (e: KeyboardEvent) => e.key === from.key && released();
+      addEventListener('keyup', up, true);
+      armOffs.push(() => removeEventListener('keyup', up, true));
+    }
   };
   const skip = () => {
+    if (!skipArmed) return; // the start gesture's own trailing events never skip
     if (controller) controller.skip();
     else if (cardTimer) {
       window.clearTimeout(cardTimer);
@@ -174,13 +249,14 @@ export function showStart(d: IntroDeps): () => void {
     }
   };
   const creditHtml = (body: string, label: string, mute: string) => `
-      <div class="intro-stage" role="region" aria-label="${esc(label)}">
+      <div class="intro-stage" role="region" aria-label="${esc(label)}" data-skip="guarded">
         ${body}
-        <div class="intro-controls">${mute}<button type="button" class="btn" data-act="intro-skip">Skip intro</button></div>
+        <div class="intro-controls">${mute}<button type="button" class="btn" data-act="intro-skip" aria-disabled="true">Skip intro</button></div>
       </div>`;
-  const begin = () => {
+  const begin = (from: { key?: string; pointer?: boolean } = {}) => {
     if (started || disposed || !ready) return;
     started = true; // double clicks / key repeats can't start twice
+    guardSkip(from);
     d.onGesture();
     startBtn.disabled = true;
     const screen = root.querySelector('.start-screen')!;
@@ -196,10 +272,23 @@ export function showStart(d: IntroDeps): () => void {
     const vol = d.videoVolume();
     v.muted = vol.muted;
     v.volume = vol.volume;
-    screen.innerHTML = creditHtml('<div class="intro-frame"></div>', 'INSPIRE studio intro', `<button type="button" class="btn-ghost" data-act="intro-mute" aria-pressed="${vol.muted}">${vol.muted ? 'Unmute' : 'Mute'}</button>`);
+    screen.innerHTML = creditHtml('<div class="intro-frame"></div>', 'INSPIRE studio intro', `<button type="button" class="btn-ghost" data-act="intro-mute" aria-pressed="${vol.muted}" aria-disabled="true">${vol.muted ? 'Unmute' : 'Mute'}</button>`);
     root.querySelector('.intro-frame')!.appendChild(v);
     (root.querySelector('[data-act="intro-skip"]') as HTMLElement).focus();
-    controller = new IntroController({ video: port(v), scheduler: realScheduler, onFinish: (r) => finishTo(r) });
+    controller = new IntroController({
+      video: port(v),
+      scheduler: realScheduler,
+      fadeOutMs: d.reduceMotion() ? 120 : AUDIO_FADE_MS,
+      onFinish: (r, released) => finishTo(r, released),
+      // Sound was refused: the credit plays muted, and says so (the player's saved mute is left alone).
+      onMutedFallback: () => {
+        const m = root.querySelector<HTMLElement>('[data-act="intro-mute"]');
+        if (m) {
+          m.setAttribute('aria-pressed', 'true');
+          m.textContent = 'Unmute';
+        }
+      },
+    });
     controller.start();
     if (document.hidden) controller.suspend();
   };
@@ -229,14 +318,15 @@ export function showStart(d: IntroDeps): () => void {
   };
 
   let finished = false;
-  const finishTo = (reason: IntroEnd) => {
+  const finishTo = (reason: IntroEnd, released: Promise<void> = Promise.resolve()) => {
     if (finished || disposed) return;
     finished = true;
     // Decode before reveal: wait (briefly, never past the patience budget) for essentials still in flight.
     const essentials = Promise.race([allSettled, new Promise<void>((r) => window.setTimeout(r, ready ? 1500 : 0))]);
     // Controlled fade through black, then the menu, then fade back in.
     fade.classList.add('is-on');
-    void Promise.all([essentials, new Promise<void>((r) => window.setTimeout(r, fadeMs()))]).then(() => {
+    // The menu (and its music) only once the credit's media is released: no overlap, ever.
+    void Promise.all([essentials, released, new Promise<void>((r) => window.setTimeout(r, fadeMs()))]).then(() => {
       if (disposed) return;
       cleanup();
       d.onMenu(reason);
@@ -275,7 +365,9 @@ export function showStart(d: IntroDeps): () => void {
   const onClick = (e: MouseEvent) => {
     const t = (e.target as HTMLElement).closest<HTMLElement>('[data-act]');
     if (!t) return;
-    if (t.dataset.act === 'start') begin();
+    // A click with detail 0 came from the keyboard (Enter/Space on the button): arm Skip only after that key's release.
+    if (t.dataset.act === 'start') begin(e.detail === 0 && lastKey ? { key: lastKey } : {});
+    if (t.getAttribute('aria-disabled') === 'true') return; // Skip / Mute: guarded until the start input is released
     if (t.dataset.act === 'start-retry') {
       // Retry only what failed; progress counts it again honestly.
       const failed = items.filter((i) => result.get(i) === false);
@@ -285,9 +377,10 @@ export function showStart(d: IntroDeps): () => void {
       void runItems(failed);
     }
     if (t.dataset.act === 'intro-skip') skip();
-    if (t.dataset.act === 'intro-mute' && videoEl) {
+    if (t.dataset.act === 'intro-mute' && videoEl && skipArmed) {
       const muted = !videoEl.muted;
       videoEl.muted = muted;
+      if (!muted && videoEl.paused && !finished) void videoEl.play().catch(() => undefined); // unmuting is a gesture
       d.setMuted(muted); // persists: menu music will respect it
       t.setAttribute('aria-pressed', String(muted));
       t.textContent = muted ? 'Unmute' : 'Mute';
@@ -296,7 +389,7 @@ export function showStart(d: IntroDeps): () => void {
   const onPointer = (e: PointerEvent) => {
     // Touch anywhere on the start screen starts (the button covers it, this catches the margins).
     const t = e.target as HTMLElement;
-    if (!started && ready && t.closest('.start-screen') && !t.closest('.start-retry')) begin();
+    if (!started && ready && t.closest('.start-screen') && !t.closest('.start-retry')) begin({ pointer: true });
   };
   root.addEventListener('click', onClick);
   root.addEventListener('pointerdown', onPointer);
@@ -309,6 +402,10 @@ export function showStart(d: IntroDeps): () => void {
     document.removeEventListener('visibilitychange', onVisibility);
     window.clearTimeout(patience);
     window.clearTimeout(cardTimer);
+    for (const t of armTimers) window.clearTimeout(t);
+    for (const off of armOffs) off();
+    armTimers = [];
+    armOffs = [];
     if (controller && !controller.done) controller.finish('cancelled');
   };
   return () => {

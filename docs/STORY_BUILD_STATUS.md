@@ -69,7 +69,7 @@ v0.2, committed to `main` by the owner as 242ee60). The general project log stay
 | | Fake speaker and trail voice caption-only (no impersonation), so the motif can't be confused with it | ✅ |
 | | No ghost sounds: cancel on beat / skip / card / scene / profile / reset / background; refused cues never queued; resume restores mix state but never replays the knock | ✅ |
 | | Captions never duck music (no speech recordings exist) | ✅ |
-| | Intro: touch-to-start → video (Skip) → black → menu retained; no SFX or music during init/intro | ✅ (video **still missing**: the fallback runs) |
+| | Intro: touch-to-start → video (Skip) → black → menu retained; no SFX or music during init/intro | ✅ The INSPIRE video is in (startup polish stage, 2026-11-18): guarded Skip, a muted retry when sound is refused, the soundtrack fades before the menu. Offline caching of the video is the next stage |
 | | Original music briefs: night-investigation bed, cave suspense bed, four stingers (`docs/MUSIC_BRIEFS.md`); no music generated | ✅ (briefs; music **missing**) |
 | **Integration stage: assets, loading, offline, analytics** | Re-audit: nothing new supplied on `main`; remaining final assets listed explicitly (`docs/ASSETS.md`), none relabelled as final | ✅ |
 | | Cast portraits (Vale, Luz, Marisol, Rafa) in dialogue: cleaned repacked derivatives (specks removed, colour fringes repaired, baselines/centres aligned), identity checked, scene assignments tested; all eight frames with meanings verified by inspection | ✅ |
@@ -128,7 +128,7 @@ stage entry of `docs/BUILD_STATUS.md` and `docs/AUDIO.md` § Verification.
 | Recorded domino foley for picking up, placing, sliding and drawing a tile (the slam and the deal are now the owner's recordings) | Replacing the remaining casino-chip stand-ins |
 | ~~Night-investigation bed, cave suspense bed, round stingers~~ — delivered (owner audio stage). Still missing: the case-complete cue, the optional chapter-card cue, edited loops / endings for the two beds (`docs/MUSIC_BRIEFS.md`) | Chapter 4 and 6 music, results and case-complete cues |
 | The contractor speaker recording (voice + repeating cough), if the owner wants it voiced | Chapter 6 (caption-only until then; never impersonated) |
-| INSPIRE intro video `assets/video/inspiresoftwareintro.mp4` | The studio credit (the fallback already works) |
+| ~~INSPIRE intro video `assets/video/inspiresoftwareintro.mp4`~~ — delivered (copied from `officialinspire/Inspire-card-parlor@cdc789b`, verified) | The studio credit |
 | INSPIRE analytics contract | Analytics (still disabled) |
 | Representative first-time playtesters | The 90–110-minute target and the under-two-hours requirement |
 

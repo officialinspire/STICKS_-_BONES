@@ -465,9 +465,8 @@ export const IMAGE_ASSETS = [
 export type ImageAssetId = (typeof IMAGE_ASSETS)[number]['id'];
 
 export const MISSING_ASSETS: readonly MissingAsset[] = [
-  { id: 'audio.sfx', kind: 'audio', description: 'Owner-approved or recorded domino foley (real tiles on wood), the contractor speaker recording and the commissioned music beds/stingers (docs/MUSIC_BRIEFS.md).', fallback: 'Selected CC0 samples and beds (src/assets/sound-manifest.json, docs/SOUND_SOURCES.md; tile sounds are casino stand-ins, not final); captions for the speaker; silence + ambience instead of the missing beds. Synthesized sounds only while a sample decodes or if a file is missing.' },
+  { id: 'audio.sfx', kind: 'audio', description: 'Recorded foley for picking up, placing, sliding and drawing a tile; the contractor speaker recording; the case-complete and chapter-card music (docs/MUSIC_BRIEFS.md).', fallback: 'CC0 stand-ins for those tile sounds (the slam and the deal are the owner\'s recordings, src/assets/owner-audio.json); captions for the speaker; the end card stays on its ambience bed. Synthesized sounds only while a sample decodes or if a file is missing.' },
   { id: 'audio.voice', kind: 'audio', description: 'Spoken lines for Cousin.', fallback: 'Subtitles (speech bubble + live region) and expressions only.' },
-  { id: 'video.intro', kind: 'video', description: 'INSPIRE studio intro, expected at assets/video/inspiresoftwareintro.mp4.', fallback: 'Start screen fades through black straight to the menu.' },
   { id: 'image.opponents', kind: 'image', description: 'Opponent / partner seat portraits for AI and second-human seats.', fallback: 'Quick Play: initial badges. Story: cast derivatives, frame e1 only. Missing: expression labels; art for Worker, Representative, the speaker (name tags).' },
   { id: 'image.tile-sideview', kind: 'image', description: 'Edge-on / stacked tile art for the boneyard and opponent hands.', fallback: 'SVG tile backs rendered from the teal back sprite or flat colour.' },
   { id: 'image.ui-icons', kind: 'image', description: 'App icon / favicon and UI glyphs.', fallback: 'Inline SVG favicon with a 6|6 domino.' },
