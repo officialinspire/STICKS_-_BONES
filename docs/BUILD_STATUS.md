@@ -1852,6 +1852,9 @@ The other budgets hold: code 325 / 330 KB, startup 951 / 960 KB, sfx 576 / 720 K
 
 **Corrected:** the hardening pass's note claimed startup 940 KB; the measured figure was 948 KB.
 
+**Branch / commit:** `claude/inspiring-bardeen-4yfmu5` at `7fe3e79` (after the merge of `main`, `c57b076`). Not
+merged into `main` or deployed.
+
 ### Commands run and results (Chromium)
 
 | Command | Result |
