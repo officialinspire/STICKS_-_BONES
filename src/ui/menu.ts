@@ -182,9 +182,8 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
   if (screen === 'home') {
     root.innerHTML = shell(
       `<nav class="panel home-nav" aria-label="Main menu">
-        ${menuPages('Main menu pages', [{ title: 'Main menu', html: `
         ${h.resume ? `<div class="resume"><h2>Game in progress</h2><p>${esc(h.resume.summary)}</p>${h.resume.twoHumans ? '<p class="note">Hands stay hidden until the right player reveals them.</p>' : ''}<div class="row"><button type="button" class="btn" data-act="resume">Resume</button><button type="button" class="btn-ghost dark" data-act="discard">Discard…</button></div></div>` : ''}
-        ${updateBanner(h.pwa)}
+        ${menuPages('Main menu pages', [{ title: 'Main menu', html: `
         <ul class="destinations" role="list">
           <li><button type="button" class="dest dest-story" data-act="story"><span class="dest-kicker">Story · ${esc(STORY_SUBTITLE)}</span><span class="dest-title">${h.story ? (h.story.closed ? 'Case Closed' : 'Continue Case') : 'New Case'}</span><span class="dest-sub">${esc(h.story ? h.story.label : 'Seven chapters, seven hands')}</span></button></li>
           <li><button type="button" class="dest dest-quick btn-start" data-go="setup"><span class="dest-title">Quick Play</span><span class="dest-sub">You against Cousin: Draw, Block or Partnership</span></button></li>
@@ -196,6 +195,7 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
           <button type="button" class="btn-ghost dark" data-go="stats">Statistics</button>
           <button type="button" class="btn-ghost dark" data-go="achievements">Achievements</button>
         </div>
+        ${updateBanner(h.pwa)}
         ${(h.notices ?? []).map((n) => `<p class="notice" role="status">${esc(n)}</p>`).join('')}
         ${offlineLine(h.pwa)}
         ` }])}

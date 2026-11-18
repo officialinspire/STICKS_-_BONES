@@ -67,13 +67,18 @@ async function checkMenu(label: string) {
   let pages = 0;
   const next = pager.locator('[data-page-step="1"]');
   do {
-    const overflow = await pager.evaluate((menu: HTMLElement) => {
+    const layout = await pager.evaluate((menu: HTMLElement) => {
       const view = menu.querySelector<HTMLElement>('.menu-page-view')!;
       const doc = document.documentElement;
-      return Math.max(doc.scrollWidth - innerWidth, doc.scrollHeight - innerHeight, view.scrollWidth - view.clientWidth, view.scrollHeight - view.clientHeight);
+      const section = view.querySelector('.menu-page-items:not([data-off-page])');
+      return {
+        height: view.clientHeight, overflow: Math.max(doc.scrollWidth - innerWidth, doc.scrollHeight - innerHeight, view.scrollWidth - view.clientWidth, view.scrollHeight - view.clientHeight),
+        section: menu.querySelector<HTMLSelectElement>('.menu-pages-nav select')?.selectedOptions[0]?.text,
+        text: section?.querySelector(':scope > :not([hidden], [data-off-page])')?.textContent?.trim().slice(0, 90),
+      };
     });
     const box = await pager.boundingBox();
-    check(overflow <= 1 && !!box && box.y >= 0 && box.y + box.height <= (page.viewportSize()?.height ?? 0) + 1, `${label}, page ${++pages}: overflow ${overflow}px`);
+    check(layout.height >= 44 && layout.overflow <= 1 && !!box && box.y >= 0 && box.y + box.height <= (page.viewportSize()?.height ?? 0) + 1, `${label}, page ${++pages}: ${JSON.stringify(layout)}`);
     if (!(await next.isVisible()) || await next.getAttribute('aria-disabled') === 'true') break;
     await next.evaluate((button: HTMLButtonElement) => button.click());
   } while (pages < 120);

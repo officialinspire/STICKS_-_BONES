@@ -148,11 +148,11 @@ function renderPage(el: HTMLElement, tracker: AchievementTracker): void {
   const got = ACHIEVEMENTS.filter((a) => p.unlocked[a.id]).length;
   const option = (value: string, label: string) => `<option value="${value}">${esc(label)}</option>`;
   el.innerHTML = `
-    <div class="ach-overview">
-      <p class="ach-summary"><strong>${got}</strong> of ${total} unlocked</p>
-      <progress class="ach-total" max="${total}" value="${got}" aria-label="Achievements unlocked: ${got} of ${total}"></progress>
-    </div>
     <div class="ach-filters">
+      <div class="ach-overview">
+        <p class="ach-summary"><strong>${got}</strong> of ${total} unlocked</p>
+        <progress class="ach-total" max="${total}" value="${got}" aria-label="Achievements unlocked: ${got} of ${total}"></progress>
+      </div>
       <select aria-label="Category" data-cat>${option('all', 'All categories')}${CATEGORIES.map((c) => option(c.id, c.label)).join('')}</select>
       <select aria-label="Status" data-status>${option('all', 'Any status')}${option('unlocked', 'Unlocked')}${option('progress', 'In progress')}${option('locked', 'Locked')}</select>
     </div>

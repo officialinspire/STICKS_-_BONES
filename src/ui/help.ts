@@ -87,13 +87,12 @@ export function helpHtml(): string {
   const diagram = `<div class="turn-diagram" role="img" aria-label="Turn order: bottom, right, top, left — counterclockwise. Partners sit opposite.">
       <span class="seat s-top">Top<br><small>partner</small></span><span class="seat s-left">Left</span><span class="arrow" aria-hidden="true">↺</span><span class="seat s-right">Right</span><span class="seat s-bottom">You</span>
     </div>`;
-  const sections = HELP_SECTIONS.map(
-    (s) => `<section class="help-section" data-help="${s.id}"><h3>${esc(s.title)}</h3><ul>${s.points.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>${s.id === 'direction' ? diagram : ''}</section>`,
-  );
   return menuPages('How to play', [
-    { title: 'Basics', html: sections.slice(0, 4).join('') },
-    { title: 'Opening & scoring', html: sections.slice(4, 7).join('') },
-    { title: 'Controls', html: sections[7]! },
+    ...HELP_SECTIONS.map(({ id, title, points }) => ({
+      title,
+      layout: 'help-section',
+      html: `<h3>${esc(title)}</h3>${points.map((p) => `<p>${esc(p)}</p>`).join('')}${id === 'direction' ? diagram : ''}`,
+    })),
     ...MODE_IDS.map((m) => ({ title: preset.modes[m].name, html: rulesPageItems(preset.modes[m]), layout: 'rules-card' })),
     { title: 'About these rules', html: `<p>${esc(preset.name)} v${preset.version}. ${esc(preset.disclaimer)}</p>` },
   ]);
