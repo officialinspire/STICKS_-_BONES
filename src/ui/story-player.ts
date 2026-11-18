@@ -19,14 +19,14 @@ import { realScheduler } from '../app/session';
 import { HANDS, insertLines, outcomeFor, segments, type Outcome } from '../story/chapters';
 import { DEFAULT_TIMINGS, REDUCED_TIMINGS, SceneDirector, type DirectorState, type StageView } from '../story/director';
 import type { Block, Scene } from '../story/parse';
-import { newProgress, readStory, TEXT_SCALES, type Part, type SceneId, type StoryProgress } from '../story/progress';
+import { newProgress, readStory, type Part, type SceneId, type StoryProgress } from '../story/progress';
 import { cuesFor, STAGING, type Cue, type Light, type Mood } from '../story/staging';
 import { STATE_CUES } from '../audio/manager';
 import { phaseEnd, phaseStart } from '../story/timing';
 import { castFrameFor, lineExpression, lineNumbers, robertoMood, type Character, type Expression } from '../story/expressions';
-import { wrapTab } from './focus-trap';
 import { dialogueSourceSize, HostView } from './host';
-import { captionPanelHtml, captionText, chapterCardHtml, loadScript, renderStoryHome, save, speakerLabelHtml, speakerOf, type StoryDeps } from './story-ui';
+import { chapterCardHtml, loadScript, renderStoryHome, save, speakerLabelHtml, speakerOf, type StoryDeps } from './story-ui';
+import { playerCaption } from '../story/captions';
 import { esc } from './svg';
 import { castFace, castFrame, CAST_BY_SEAT_NAME, regionStyle, sceneAssets, sceneCast, speakerKey } from './story-assets';
 
@@ -88,6 +88,8 @@ class DomStage implements StageView<Beat> {
   #swap = 0;
   #disposed = false;
   #onResize = () => this.#layoutFigures();
+  /** The bar can wrap (title, position): the space left for dialogue follows it. */
+  #barRO: ResizeObserver | null = null;
   constructor(
     root: HTMLElement,
     private readonly sceneId: SceneId,
@@ -130,6 +132,8 @@ class DomStage implements StageView<Beat> {
   dispose(): void {
     this.#disposed = true;
     window.clearTimeout(this.#swap);
+    this.#barRO?.disconnect();
+    this.#barRO = null;
     this.#unshape?.();
     this.#unshape = null;
     window.removeEventListener('resize', this.#onResize);
@@ -162,6 +166,16 @@ class DomStage implements StageView<Beat> {
     const actual = slot?.offsetHeight ?? 0;
     const reserve = Math.round(Math.max(panel ? parseFloat(getComputedStyle(panel).minHeight) || 0 : 0, 1)) || actual;
     const mainH = main?.clientHeight ?? 0;
+    // The panel may use the whole height below the bar; beyond that only its text scrolls (Continue stays).
+    if (main) this.#root.style.setProperty('--dlg-max', `${Math.max(120, Math.floor(window.innerHeight - main.getBoundingClientRect().top - 26))}px`); // below the bar's gap, above the bottom padding
+    const body = this.q<HTMLElement>('.dialogue-body');
+    if (body) {
+      const scrolls = body.scrollHeight > body.clientHeight + 2;
+      body.toggleAttribute('tabindex', scrolls);
+      if (scrolls) body.setAttribute('tabindex', '0');
+      body.setAttribute('role', 'region');
+      body.setAttribute('aria-label', 'Dialogue');
+    }
     const above = Math.max(0, mainH - reserve);
     this.#root.style.setProperty('--fig-room', `${Math.round(above / 0.78)}px`);
     for (const el of this.#root.querySelectorAll<HTMLElement>('.st-actor, .st-cast')) {
@@ -218,14 +232,26 @@ class DomStage implements StageView<Beat> {
   }
   showBeat(b: Beat, index: number, revealMs: number): void {
     for (const c of b.cues) this.apply(c);
-    const slot = this.q<HTMLElement>('.dialogue-slot');
+    // ONE persistent panel: the speaker name, the line, and its single action (Continue). Only the body
+    // changes per beat, so focus stays on Continue and nothing in the panel moves.
+    const panel = this.q<HTMLElement>('.dialogue-panel');
+    const body = this.q<HTMLElement>('.dialogue-body');
     const blk = b.block;
-    slot.innerHTML =
+    const caption = blk.kind === 'line' ? null : playerCaption(blk.raw);
+    body.innerHTML =
       blk.kind === 'line'
-        ? `<article class="dialogue-panel" data-kind="line" data-index="${index}">${speakerLabelHtml(blk.speaker!)}<p class="dialogue-text">${esc(blk.text!)}</p></article>`
-        : captionPanelHtml(blk.raw, ` data-index="${index}"`);
-    const panel = slot.firstElementChild as HTMLElement;
+        ? `${speakerLabelHtml(blk.speaker!)}<p class="dialogue-text">${esc(blk.text!)}</p>`
+        : caption === null
+          ? '<p class="caption-text"><span class="sr-only">Silence.</span></p>'
+          : `<p class="caption-text">${esc(caption)}</p>`;
+    panel.dataset.kind = blk.kind === 'line' ? 'line' : 'direction';
+    panel.dataset.index = String(index);
+    panel.classList.toggle('is-caption', blk.kind !== 'line');
+    panel.classList.toggle('is-silent', blk.kind !== 'line' && caption === null);
+    panel.hidden = false;
     panel.style.setProperty('--reveal-ms', `${revealMs}ms`);
+    panel.classList.remove('is-revealing');
+    void panel.offsetWidth; // restart the reveal animation for the new line
     panel.classList.toggle('is-revealing', revealMs > 0);
     // ONE figure on stage: the current speaker. Roberto for his own lines and his reaction beats; a cast
     // member for theirs (once their sheet has decoded). Nobody for narration, captions, or speakers
@@ -306,7 +332,7 @@ class DomStage implements StageView<Beat> {
   setState(s: DirectorState): void {
     this.#root.dataset.director = s;
     const busy = s !== 'presenting';
-    this.#root.querySelectorAll<HTMLButtonElement>('.cine-controls [data-busy-disable]').forEach((b) => (b.disabled = busy));
+    this.#root.querySelectorAll<HTMLButtonElement>('[data-busy-disable]').forEach((b) => (b.disabled = busy));
   }
   apply(c: Cue): void {
     switch (c.kind) {
@@ -351,6 +377,11 @@ class DomStage implements StageView<Beat> {
     // The game's own reduced-motion setting (not only the OS preference) turns figure transitions off.
     this.#root.classList.toggle('reduce-motion', this.reduce());
     window.addEventListener('resize', this.#onResize);
+    const bar = this.q<HTMLElement>('.story-bar');
+    if (bar && typeof ResizeObserver !== 'undefined') {
+      this.#barRO = new ResizeObserver(() => requestAnimationFrame(() => this.#layoutFigures()));
+      this.#barRO.observe(bar);
+    }
     this.#layoutFigures();
   }
   cousinPresent(on: boolean): void {
@@ -413,7 +444,8 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
     const part: Part = p.sceneId === sceneId ? p.part : 'pre';
     root.className = 'is-story is-playing';
     root.dataset.scene = sceneId;
-    root.style.setProperty('--story-scale', String(p.textScale));
+    // Text size and instant text come from Settings (the dialogue panel carries only Continue).
+    root.style.setProperty('--story-scale', String(d.prefs?.().textScale ?? 1));
     root.innerHTML = `
       <div class="story-stage" data-scene="${esc(sceneId)}">
         <div class="st-layers" aria-hidden="true">
@@ -422,6 +454,11 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
         </div>
         <header class="story-bar">
           <button type="button" class="btn-ghost back" data-act="story-file">← Case file</button>
+          <nav class="story-nav" aria-label="Scene navigation">
+            <button type="button" class="btn-ghost cine-btn" data-act="story-back" data-busy-disable aria-label="Back to the previous line">‹ Back</button>
+            <button type="button" class="btn-ghost cine-btn" data-act="story-skip" aria-label="Skip scene">Skip</button>
+            <span class="cine-pos" aria-live="off"></span>
+          </nav>
           ${d.update ? `<button type="button" class="btn-ghost cine-btn story-update" data-region="update" data-act="update-now" ${d.update.ready() ? '' : 'hidden'} aria-label="Update the game now (your place is saved first)">Update</button>` : ''}
           <h1 class="story-bar-title"><span class="chapter-num">${esc(label(scene))}</span> ${esc(scene.title)}${o.replay ? ' <span class="replay-tag">Replay</span>' : ''}</h1>
         </header>
@@ -429,17 +466,13 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
           <div class="scene-card-slot"></div>
           <div class="st-actor" aria-hidden="true"><div class="st-actor-art"></div></div>
           <div class="st-cast" aria-hidden="true"><div class="st-cast-art"></div></div>
-          <div class="dialogue-slot" aria-live="polite"></div>
+          <div class="dialogue-slot">
+            <article class="dialogue-panel">
+              <div class="dialogue-body" aria-live="polite"></div>
+              <div class="dialogue-actions"><button type="button" class="btn primary cine-next" data-act="story-next">Continue</button></div>
+            </article>
+          </div>
         </section>
-        <nav class="cine-controls" aria-label="Scene controls">
-          <button type="button" class="btn-ghost cine-btn" data-act="story-back" data-busy-disable aria-label="Back to the previous line">‹ Back</button>
-          <button type="button" class="btn-ghost cine-btn" data-act="story-transcript">Transcript</button>
-          <button type="button" class="btn-ghost cine-btn" data-act="story-text" aria-label="Aa: change text size">Aa</button>
-          <button type="button" class="btn-ghost cine-btn" data-act="story-skip">Skip</button>
-          <span class="cine-pos" aria-live="off"></span>
-          <button type="button" class="btn primary cine-next" data-act="story-next">Next ›</button>
-        </nav>
-        <dialog class="sheet transcript" aria-labelledby="transcript-h"></dialog>
         <div class="st-curtain is-closed" aria-hidden="true"></div>
       </div>
       <div class="story-table-host" hidden></div>`;
@@ -481,7 +514,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
       d.beat();
       const setup = HANDS[sceneId]!;
       const slot = root.querySelector<HTMLElement>('.scene-card-slot')!;
-      root.querySelector<HTMLElement>('.dialogue-slot')!.innerHTML = '';
+      root.querySelector<HTMLElement>('.dialogue-panel')!.hidden = true; // the panel (and Continue) persist, hidden behind the card
       slot.innerHTML = `<section class="hand-card" aria-labelledby="hand-h"><p class="chapter-num">${esc(label(scene))} · the hand</p><h2 id="hand-h" class="section-h">${esc(setup.label)}</h2>${st.handNote ? `<p class="hand-note">${esc(st.handNote)}</p>` : ''}<p class="hand-note">One hand. Win, lose or blocked tie — the case moves on either way.</p><button type="button" class="btn primary" data-act="story-deal">Deal the tiles</button></section>`;
       (slot.querySelector('[data-act="story-deal"]') as HTMLElement).focus({ preventScroll: true });
       root.querySelector<HTMLElement>('[data-act="story-next"]')!.hidden = true;
@@ -493,7 +526,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
       const idx = SCENES_IN_ORDER.indexOf(sceneId);
       const next = o.replay ? null : SCENES_IN_ORDER[idx + 1] ?? null;
       const slot = root.querySelector<HTMLElement>('.scene-card-slot')!;
-      root.querySelector<HTMLElement>('.dialogue-slot')!.innerHTML = '';
+      root.querySelector<HTMLElement>('.dialogue-panel')!.hidden = true; // the panel (and Continue) persist, hidden behind the card
       const nb = seg.notebook ? `<div class="notebook is-inline"><p class="notebook-chapter">Notebook · ${esc(label(scene))}</p><p class="notebook-text">${esc(seg.notebook.raw.replace(/^Notebook:\s*/, ''))}</p></div>` : '';
       const fin = sceneId === 'epilogue' ? `<p class="case-complete">Case complete.</p>` : '';
       slot.innerHTML = `<section class="end-card" aria-labelledby="end-h"><h2 id="end-h" class="section-h">End of ${esc(label(scene))}</h2>${fin}${nb}${next ? chapterCardHtml(sceneOf(next), 'next') : ''}<button type="button" class="btn primary" data-act="story-onward">${next ? `Continue to ${esc(label(sceneOf(next)))}` : 'Back to the case file'}</button></section>`;
@@ -547,7 +580,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
         onExit: () => {},
       },
       realScheduler,
-      reduce() ? REDUCED_TIMINGS : DEFAULT_TIMINGS,
+      reduce() ? REDUCED_TIMINGS : d.prefs?.().instantText ? { ...DEFAULT_TIMINGS, revealCps: Infinity, revealMaxMs: 0 } : DEFAULT_TIMINGS,
     );
     const dir = director;
 
@@ -650,32 +683,15 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
       } else if (act === 'story-file') {
         dispose();
         void renderStoryHome(d);
-      } else if (act === 'story-text') {
-        const i = TEXT_SCALES.indexOf(p.textScale);
-        p = { ...p, textScale: TEXT_SCALES[(i + 1) % TEXT_SCALES.length]! };
-        if (!o.replay) save(d, p);
-        root.style.setProperty('--story-scale', String(p.textScale));
-      } else if (act === 'story-transcript') {
-        d.track?.explore?.('transcript');
-        const dlg = root.querySelector<HTMLDialogElement>('dialog.transcript')!;
-        const upto = Math.min(dir.index + 1, beats.length);
-        const seen = beats === preBeats ? preBeats.slice(0, upto) : [...preBeats, ...beats.slice(0, upto)];
-        dlg.innerHTML = `<h2 id="transcript-h">Transcript</h2><p class="note">${esc(scene.heading)} — everything shown so far.</p><ol class="transcript-list">${seen
-          .map(({ block: b }) => `<li>${b.kind === 'line' ? `<strong>${esc(speakerOf(b.speaker!).label)}${speakerOf(b.speaker!).qualifier ? ` (${esc(speakerOf(b.speaker!).qualifier!)})` : ''}:</strong> ${esc(b.text!)}` : (captionText(b.raw) ? `<em>${esc(captionText(b.raw))}</em>` : '<em>(Silence.)</em>')}</li>`)
-          .join('')}</ol><div class="sheet-actions"><button type="button" class="btn" data-act="transcript-close">Close</button></div>`;
-        dlg.showModal();
-        (dlg.querySelector('[data-act="transcript-close"]') as HTMLElement).focus();
-      } else if (act === 'transcript-close') {
-        root.querySelector<HTMLDialogElement>('dialog.transcript')?.close();
-        (root.querySelector('[data-act="story-transcript"]') as HTMLElement).focus();
       }
     };
     root.onkeydown = (e) => {
-      const dlg = root.querySelector<HTMLDialogElement>('dialog.transcript[open]');
-      if (dlg) return void wrapTab(e, dlg);
       if (!root.querySelector('.story-table-host')?.hasAttribute('hidden')) return; // the table owns input during a hand
       const t = e.target as HTMLElement;
-      if (t.closest('button:not([data-act="story-next"])')) return;
+      // A held key never runs through lines: auto-repeat is ignored (Continue's own Enter included).
+      if (e.repeat && (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowRight')) return void e.preventDefault();
+      if (t.closest('button:not([data-act="story-next"]), dialog, input, select, textarea')) return;
+      // On Continue itself, Enter and Space are the button's own click (one activation, never two).
       if (e.key === 'ArrowRight' || ((e.key === 'Enter' || e.key === ' ') && !t.closest('button'))) {
         e.preventDefault();
         dir.advance();

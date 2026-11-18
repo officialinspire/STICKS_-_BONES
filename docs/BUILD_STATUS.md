@@ -1466,6 +1466,91 @@ audio manager. No new manager.
 - **The cast's speaking lines never directly follow each other**, so a cast expression change always
   happens while the figure is faded out. The in-place swap is exercised by the § K test.
 
+## Dialogue controls stage: one action, Continue (2026-11-18)
+
+### Completed
+- **Removed from dialogue:** Aa and Transcript, with their focus stops, the transcript dialog, its
+  Tab-trap and Escape handling, the click handlers, the controls row and its reserved grid track.
+  The unused `cinematicControlsHtml` and caption-panel helpers are gone too.
+- **The dialogue panel holds the speaker name, the line, and ONE action: Continue.** It is one
+  persistent element (only the body changes per beat), so focus stays on Continue across lines and
+  reloads.
+  - Continue sits below the text on portrait phones and short landscape, and beside it elsewhere.
+  - The line is announced (`aria-live="polite"` on the body).
+- **Input:**
+  - The first activation completes a revealing line; the next advances exactly one beat (SceneDirector).
+  - Taps closer than 180 ms are ignored, and key auto-repeat is ignored.
+  - Enter and Space on Continue are its own click (the global key handler skips buttons), so one press
+    is one activation.
+  - The table owns all input during a hand (unchanged).
+- **Navigation outside the panel:** ← Case file, ‹ Back, Skip and the position counter are in the
+  story bar.
+- **Settings:** a "Story text" fieldset with size (Standard / Large / Larger) and "Show each line at
+  once" (instant text), in the menu Settings and the in-game pause sheet.
+  - The settings record goes v2 → v3 (migration tested). A text size previously saved with the Story
+    record is carried over once.
+  - Reduced motion still means instant text and no entrance animation.
+- **Long lines stay readable:**
+  - Short landscape stacks Continue under the text, widens the panel (figure column 32–34 %) and
+    trims the dialogue size slightly.
+  - The bar packs onto two rows on phones.
+  - The panel may use all the height below the bar (recomputed when the bar wraps, through a
+    ResizeObserver that is disconnected on dispose).
+  - As a last resort, at 130 % text on the smallest screens, only the text scrolls (focusable) and
+    Continue stays on screen.
+  - Measured: the longest spoken line (229 characters) and the longest caption at 100 % and 130 % on
+    390×844, 360×640, 667×375, 844×390 and 1366×768. All 30 cases: no page scroll, Continue on
+    screen.
+- **Achievements:**
+  - `ex-transcript` (open a transcript) became impossible. It is retired, never reissued, and
+    replaced by `ex-story-text` ("Easy on the Eyes": change the Story text size or instant text in
+    Settings).
+  - The catalog stays at exactly 100. A record holding the old unlock drops it on load.
+
+### Defects found while building (fixed)
+- The hand and end cards cleared the dialogue slot, which now held the persistent Continue button.
+  They now hide the panel instead.
+- Continue missed focus when a scene opened, because the panel started hidden.
+- The dialogue height cap was computed before the bar wrapped (54 px too generous on 360×640). It is
+  now recomputed on bar resize.
+- story e2e § I compared the saved hand read before the reload with the restored one, so a fast AI
+  reply in between made it flaky. It now reads what was saved at the reload.
+
+### Tests
+- **story e2e § L:**
+  - The panel's only button is Continue; Aa, Transcript and the controls row are gone; Back and Skip
+    are in the bar.
+  - A 6-tap burst on a revealing line moved 0 beats.
+  - Enter and Space advance one beat each; key repeat advances nothing.
+  - Reload keeps the line with Continue focused.
+  - Rotation 844×390 → 667×375 → 390×844 keeps Continue on screen and focused.
+  - The longest line at 130 % with instant text from Settings is readable on 667×375 (its text
+    scrolls, focusable).
+- **story e2e § G:** Continue on screen in every staged moment; the figure never below the panel.
+- **a11y:** the panel's only control is Continue, and the line is announced.
+- **qa:** the old transcript screen is replaced by `story-long` (the longest line at 130 % on all 8
+  viewports).
+- **Unit:** settings v2 → v3 migration, round trip and invalid values.
+
+### Commands run and results (Chromium)
+
+| Command | Result |
+| --- | --- |
+| `npm run story:e2e` | pass (§ G, I, K, L) |
+| `npm run check` | running at commit time; result recorded in the next commit |
+| `npm run e2e` | DLG_E2E |
+| `npm run qa` / `npm run a11y` | running at commit time; result recorded in the next commit |
+| `npm run perf:story` / `npm run pwa` / `npm run audio` | running at commit time; result recorded in the next commit |
+
+### Known limitations
+- **Transcript conflict:** the script document's production notes (`docs/STORY_SCRIPT.md`) list a
+  transcript among things to retain. This stage removed it from dialogue as instructed, and nothing
+  replaces it. The script itself (dialogue) is unchanged. Owner decision: confirm, or ask for a
+  transcript outside the dialogue panel.
+- **Last-resort scrolling:** at the largest text on the smallest screens, the longest lines scroll
+  inside the panel. That is readable but needs a scroll.
+- Only Chromium; no real devices.
+
 ## Next stage
 
 The detailed list is in `docs/STORY_BUILD_STATUS.md`:

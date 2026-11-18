@@ -154,7 +154,7 @@ try {
       await axe(page, `menu: ${s}`);
       await page.click('[data-act="home"]');
     }
-    // Story: case file, a scene, the transcript dialog — and keyboard-only advancing.
+    // Story: case file, a scene — and keyboard-only advancing.
     await page.click('[data-act="story"]');
     await page.waitForSelector('.story-shell');
     await axe(page, 'story: case file');
@@ -162,7 +162,7 @@ try {
     await page.waitForSelector('.story-stage');
     // Input during the entrance fade is ignored by design: wait until the scene is presenting.
     await page.waitForFunction(`window.__sbStory && window.__sbStory.director.state === 'presenting'`, null, { timeout: 8000 });
-    check(await activeIs(page, '[data-act="story-next"]'), 'story: Next not focused when the scene opens');
+    check(await activeIs(page, '[data-act="story-next"]'), 'story: Continue not focused when the scene opens');
     // First input on a revealing line only completes the reveal (by design); let it finish so Enter advances.
     await page.waitForTimeout(1000);
     const pos0 = await page.textContent('.cine-pos');
@@ -172,14 +172,10 @@ try {
     check(pos0 !== pos1, `story: Enter did not advance (${pos0} → ${pos1})`);
     await page.waitForTimeout(300);
     await axe(page, 'story: scene');
-    await page.click('[data-act="story-transcript"]');
-    await page.waitForSelector('dialog.transcript[open]');
-    await axe(page, 'story: transcript');
-    await tabStaysInside(page, 'dialog.transcript[open]', 'story transcript', 6);
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(100);
-    check(!(await page.locator('dialog.transcript[open]').count()), 'story: Escape did not close the transcript');
-    notes.push(`story: keyboard Enter advanced ${pos0} → ${pos1}; transcript trapped Tab and closed on Escape`);
+    // The dialogue panel holds one control (Continue); Aa and Transcript are gone (no extra focus stops).
+    const panel = await page.evaluate(() => ({ buttons: [...document.querySelectorAll('.dialogue-panel button, .dialogue-panel [tabindex="0"]')].map((b) => (b as HTMLElement).dataset.act ?? b.className), removed: document.querySelectorAll('[data-act="story-text"], [data-act="story-transcript"], dialog.transcript').length, live: document.querySelector('.dialogue-body')?.getAttribute('aria-live') }));
+    check(panel.buttons.length === 1 && panel.buttons[0] === 'story-next' && panel.removed === 0 && panel.live === 'polite', `story: dialogue panel controls ${JSON.stringify(panel)}`);
+    notes.push(`story: keyboard Enter advanced ${pos0} → ${pos1}; the dialogue panel's only control is Continue; the line is announced (aria-live polite)`);
     await page.click('[data-act="story-file"]');
     await page.click('[data-act="story-home"]');
     await page.waitForSelector('[data-go="setup"]');

@@ -162,7 +162,7 @@ and WebKit on a machine that has them means changing the `chromium` import.
 **Viewports now captured** (`npm run qa`, Chromium device emulation at DPR 3 with touch below 1100 px):
 360×800, 390×844, **667×375 (new)**, 844×390, 768×1024, 1024×768, 1366×768 and **1920×1080 (new)**.
 That's 13 screens each: startup, menu, setup, case file, story scene, **a cast line (Vale's portrait,
-new)**, **the transcript (new)**, longest chain, largest hand, partnership, handoff, pause and results.
+new)**, **the longest line at 130 % text (story-long)**, longest chain, largest hand, partnership, handoff, pause and results.
 Text scaling at 150% and 200% is checked too.
 
 **Faults found by the new viewports and fixed:**

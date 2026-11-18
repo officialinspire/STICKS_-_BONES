@@ -66,6 +66,19 @@ describe('versioned records: graceful recovery', () => {
     st.setItem(SETTINGS_KEY, '[[[');
     expect(loadSettingsResult(st)).toEqual({ settings: DEFAULT_SETTINGS, status: 'corrupt' });
   });
+
+  it('settings v2 → v3: Story text preferences added with defaults; v3 keeps them; bad values fall back', () => {
+    const st = memoryStore();
+    st.setItem(SETTINGS_KEY, JSON.stringify({ format: 'sticks-and-bones/settings', version: 2, data: { ...DEFAULT_SETTINGS, banter: false, storyTextScale: undefined, instantText: undefined } }));
+    const r = loadSettingsResult(st);
+    expect(r.status).toBe('migrated');
+    expect(r.settings).toMatchObject({ banter: false, storyTextScale: 1, instantText: false });
+    saveSettings(st, { ...r.settings, storyTextScale: 1.3, instantText: true });
+    expect(JSON.parse(st.getItem(SETTINGS_KEY)!).version).toBe(3);
+    expect(loadSettingsResult(st)).toMatchObject({ status: 'ok', settings: { storyTextScale: 1.3, instantText: true } });
+    st.setItem(SETTINGS_KEY, JSON.stringify({ format: 'sticks-and-bones/settings', version: 3, data: { storyTextScale: 2, instantText: 'yes' } }));
+    expect(loadSettingsResult(st).settings).toMatchObject({ storyTextScale: 1, instantText: false });
+  });
 });
 
 describe('match save v2', () => {

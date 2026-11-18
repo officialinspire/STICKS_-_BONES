@@ -27,7 +27,7 @@ No rule, currency, timer or calendar streak was added.
   - How to Play and Statistics opened from the menu.
   - A setting changed.
   - Sort or zoom used at the table.
-  - The transcript opened in a Story scene.
+  - The Story text size or instant text changed in Settings.
 
 ### What counts
 
@@ -84,6 +84,8 @@ Inline SVG medallions (`role="img"`, label "*Title* badge, unlocked/locked").
   progress.
 
 ## The 100 achievements
+
+**Retired id:** `ex-transcript` ("On the Record", open a Story transcript) was retired when the transcript control was removed from dialogue. It is never reissued. `ex-story-text` replaces it, so the catalog stays at 100. A record that still holds the old unlock drops it on load (unknown ids are never kept).
 
 ### Learning (10)
 
@@ -221,7 +223,7 @@ Inline SVG medallions (`role="img"`, label "*Title* badge, unlocked/locked").
 | `ex-settings` | Your Table, Your Way | Change any setting (menu or pause sheet). | 1 |  |
 | `ex-sort` | Sorted | Use the Sort button at the table. | 1 |  |
 | `ex-zoom` | Closer Look | Use the + or − board zoom at the table. | 1 |  |
-| `ex-transcript` | On the Record | Open the transcript during a Story scene. | 1 |  |
+| `ex-story-text` | Easy on the Eyes | Change the Story text size or instant text in Settings. | 1 |  |
 | `ex-local` | Pass the Device | Finish any match with two players sharing one device. | 1 |  |
 | `ex-local-all` | Shared Table | Finish a two-player, one-device match in Draw, Block and Partnership. | 3 |  |
 

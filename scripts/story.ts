@@ -272,7 +272,7 @@ try {
       await page.waitForTimeout(1300); // let light/water transitions finish for the still
       const m = await page.evaluate(`(() => {
         const r = (s) => { const e = document.querySelector(s); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height, b: b.bottom }; };
-        const actor = r('.st-actor'), cast = r('.st-cast'), panel = r('.dialogue-panel'), controls = r('.cine-controls'), bar = r('.story-bar');
+        const actor = r('.st-actor'), cast = r('.st-cast'), panel = r('.dialogue-panel'), controls = r('.cine-next'), bar = r('.story-bar');
         const stage = document.querySelector('.story-stage');
         const shown = [...document.querySelectorAll('.st-actor.is-on, .st-cast.is-on')];
         const actorVisible = !!document.querySelector('.st-actor.is-on');
@@ -290,12 +290,14 @@ try {
         const faceFrac = actorVisible ? 0.4 : 0.47;
         const faceCover = fig && panel ? Math.max(0, Math.min(fig.y + fig.h * faceFrac, panel.b) - Math.max(fig.y, panel.y)) * (panel.x < fig.x + fig.w && panel.x + panel.w > fig.x ? 1 : 0) : 0;
         const underBar = fig && bar ? Math.max(0, bar.b - fig.y) : 0;
-        const intoControls = fig && controls ? Math.max(0, fig.b - controls.y) : 0;
+        // The panel's one action (Continue) is on screen, and the figure never reaches below the panel.
+        const intoControls = fig && panel ? Math.max(0, fig.b - panel.b) : 0;
+        const nextOnScreen = !!controls && controls.y >= 0 && controls.b <= innerHeight;
         const tag = document.querySelector('.dialogue-panel .speaker-name')?.textContent || null;
-        return { count: shown.length, actorVisible, castVisible, speaking: stage.dataset.speaking, tag, faceCover, underBar, intoControls, figH: fig ? Math.round(fig.h) : 0, overflowX: document.documentElement.scrollWidth - innerWidth, overflowY: document.documentElement.scrollHeight - innerHeight, panel, controls, cousin: actorVisible, up: +up.toFixed(2), castUp: +castUp.toFixed(2), env: document.querySelector('.st-bg.is-front')?.dataset.env || null };
-      })()`) as { count: number; actorVisible: boolean; castVisible: boolean; speaking: string; tag: string | null; faceCover: number; underBar: number; intoControls: number; figH: number; overflowX: number; overflowY: number; panel: { y: number; b: number } | null; controls: { y: number } | null; cousin: boolean; up: number; castUp: number; env: string | null };
+        return { nextOnScreen, count: shown.length, actorVisible, castVisible, speaking: stage.dataset.speaking, tag, faceCover, underBar, intoControls, figH: fig ? Math.round(fig.h) : 0, overflowX: document.documentElement.scrollWidth - innerWidth, overflowY: document.documentElement.scrollHeight - innerHeight, panel, controls, cousin: actorVisible, up: +up.toFixed(2), castUp: +castUp.toFixed(2), env: document.querySelector('.st-bg.is-front')?.dataset.env || null };
+      })()`) as { nextOnScreen: boolean; count: number; actorVisible: boolean; castVisible: boolean; speaking: string; tag: string | null; faceCover: number; underBar: number; intoControls: number; figH: number; overflowX: number; overflowY: number; panel: { y: number; b: number } | null; controls: { y: number } | null; cousin: boolean; up: number; castUp: number; env: string | null };
       check(m.overflowX <= 0 && m.overflowY <= 0, `G ${vp.name} ${name}: page overflow ${m.overflowX}/${m.overflowY}`);
-      check(!!m.panel && !!m.controls && m.panel.b <= m.controls.y + 1, `G ${vp.name} ${name}: dialogue overlaps the controls`);
+      check(!!m.panel && m.nextOnScreen, `G ${vp.name} ${name}: Continue is off screen`);
       check(m.count <= 1, `G ${vp.name} ${name}: ${m.count} figures on stage (only the speaker may be)`);
       // Captions and narration: the backdrop only. A line: its own speaker (or nobody without a portrait).
       if (m.speaking === 'none' || m.speaking === 'other') check(m.count === 0, `G ${vp.name} ${name}: a figure is on stage during ${m.speaking === 'none' ? 'a caption' : `narration / ${m.tag}`}`);
@@ -304,7 +306,7 @@ try {
       if (m.castVisible) check(m.castUp <= 1.6, `G ${vp.name} ${name}: cast portrait upscaled ×${m.castUp} (blurry)`);
       check(m.faceCover <= 1, `G ${vp.name} ${name}: the dialogue panel covers the speaker's face by ${m.faceCover.toFixed(0)}px`);
       check(m.underBar <= 1, `G ${vp.name} ${name}: the speaker's head is under the scene bar by ${m.underBar}px`);
-      check(m.intoControls <= 0, `G ${vp.name} ${name}: the speaker reaches into the controls by ${m.intoControls}px`);
+      check(m.intoControls <= 0, `G ${vp.name} ${name}: the speaker reaches below the dialogue panel by ${m.intoControls}px`);
       if (id === 'chapter-6' && name === 'cave-accepted-hand') check(m.env !== 'env.cave-waterfall', `G: chapter 6 rest-area beat still shows the ancient platform (${m.env})`);
       await page.screenshot({ path: join(out, `${vp.name}-${name}.png`) });
       await page.click('[data-act="story-file"]');
@@ -374,6 +376,86 @@ try {
     await page.context().close();
   }
 
+  // ---- L. One action: Continue. Rapid taps, Enter/Space, key repeat, reload, rotation, the longest line ----------
+  {
+    const { page, errors } = await newPage({ width: 390, height: 844 });
+    await toMenu(page);
+    await seed(page, { sceneId: 'chapter-1', part: 'pre', index: 1, completed: ['prologue'] });
+    await openStory(page);
+    await waitState(page, 'presenting');
+    const idx = async () => (await dstate(page))!.index;
+    const ui = await page.evaluate(() => ({ inPanel: [...document.querySelectorAll('.dialogue-panel button')].map((b) => (b as HTMLElement).dataset.act), gone: document.querySelectorAll('[data-act="story-text"], [data-act="story-transcript"], dialog.transcript, .cine-controls').length, nav: [...document.querySelectorAll('.story-bar [data-act]')].map((b) => (b as HTMLElement).dataset.act), label: document.querySelector('.cine-next')?.textContent?.trim() }));
+    check(JSON.stringify(ui.inPanel) === '["story-next"]' && ui.gone === 0 && ui.label === 'Continue' && ['story-file', 'story-back', 'story-skip'].every((a) => ui.nav.includes(a)), `L: controls ${JSON.stringify(ui)}`);
+    // Rapid taps on a line that is still revealing: the first completes it, the burst moves at most ONE beat.
+    await page.waitForTimeout(1200);
+    await page.click('[data-act="story-next"]'); // → line 2 (Roberto), revealing
+    const i0 = await idx();
+    await page.evaluate(() => { const b = document.querySelector('[data-act="story-next"]') as HTMLElement; for (let k = 0; k < 6; k++) b.click(); });
+    await page.waitForTimeout(400);
+    const i1 = await idx();
+    check(i1 - i0 <= 1, `L: a burst of 6 taps skipped ${i1 - i0} lines`);
+    // Enter and Space on the focused Continue: exactly one beat each (never the key AND the click).
+    await page.waitForTimeout(900);
+    await page.focus('[data-act="story-next"]');
+    const i2 = await idx();
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(900);
+    const i3 = await idx();
+    await page.keyboard.press(' ');
+    await page.waitForTimeout(900);
+    const i4 = await idx();
+    check(i3 - i2 === 1 && i4 - i3 === 1, `L: Enter/Space advanced ${i3 - i2} / ${i4 - i3} beats (want 1 / 1)`);
+    // A held key (auto-repeat) never runs through lines.
+    await page.evaluate(() => { for (let k = 0; k < 8; k++) document.querySelector('.story-stage')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', repeat: true, bubbles: true })); });
+    await page.waitForTimeout(300);
+    check((await idx()) === i4, 'L: key auto-repeat advanced the dialogue');
+    // Reload: the same line, Continue focused, still the only action.
+    await page.waitForTimeout(400);
+    const before = await prog(page);
+    await page.reload();
+    await page.click('.start-button');
+    await page.waitForSelector('[data-act="story"]');
+    await openStory(page);
+    await waitState(page, 'presenting');
+    await page.waitForTimeout(600);
+    const after = await prog(page);
+    const focused = await page.evaluate(() => (document.activeElement as HTMLElement)?.dataset.act);
+    check(after?.index === before?.index && focused === 'story-next', `L: reload → index ${before?.index} → ${after?.index}, focus ${focused}`);
+    // Rotation: Continue stays on screen and keeps focus.
+    for (const vp of [{ width: 844, height: 390 }, { width: 667, height: 375 }, { width: 390, height: 844 }]) {
+      await page.setViewportSize(vp);
+      await page.waitForTimeout(300);
+      const r = await page.evaluate(() => { const n = document.querySelector('.cine-next')!.getBoundingClientRect(); return { on: n.top >= 0 && n.bottom <= innerHeight && n.left >= 0 && n.right <= innerWidth, page: document.documentElement.scrollHeight <= innerHeight + 1, focus: (document.activeElement as HTMLElement)?.dataset.act }; });
+      check(r.on && r.page && r.focus === 'story-next', `L: rotation ${vp.width}×${vp.height}: ${JSON.stringify(r)}`);
+    }
+    // The longest spoken line at 130 % on a short landscape phone: readable, Continue on screen.
+    await page.setViewportSize({ width: 667, height: 375 });
+    await page.click('[data-act="story-file"]');
+    await page.click('[data-act="story-home"]');
+    await page.waitForSelector('[data-act="story"]');
+    await page.evaluate(() => localStorage.setItem('sticks-and-bones.settings', JSON.stringify({ format: 'sticks-and-bones/settings', version: 3, data: { storyTextScale: 1.3, instantText: true } })));
+    const luz = segments(scene('chapter-5')).pre.findIndex((b) => b.raw.startsWith('LUZ: “Our local name'));
+    await seed(page, { sceneId: 'chapter-5', part: 'pre', index: luz, completed: ['prologue', 'chapter-1', 'chapter-2', 'chapter-3', 'chapter-4'] });
+    await page.reload();
+    await page.click('.start-button');
+    await page.waitForSelector('[data-act="story"]');
+    await openStory(page);
+    await waitState(page, 'presenting');
+    await page.waitForTimeout(600);
+    const long = await page.evaluate(() => {
+      const b = document.querySelector('.dialogue-body') as HTMLElement;
+      const n = document.querySelector('.cine-next')!.getBoundingClientRect();
+      b.scrollTop = b.scrollHeight;
+      const t = document.querySelector('.dialogue-text')!.getBoundingClientRect();
+      const bb = b.getBoundingClientRect();
+      return { scale: getComputedStyle(document.querySelector('#app')!).getPropertyValue('--story-scale'), revealing: !!document.querySelector('.dialogue-panel.is-revealing'), next: n.bottom <= innerHeight && n.top >= 0, page: document.documentElement.scrollHeight <= innerHeight + 1, endVisible: t.bottom <= bb.bottom + 1, scrolls: b.scrollHeight > b.clientHeight + 32, focusable: b.getAttribute('tabindex') === '0' };
+    });
+    check(long.scale.trim() === '1.3' && !long.revealing && long.next && long.page && long.endVisible && (!long.scrolls || long.focusable), `L: longest line at 130 % on 667×375: ${JSON.stringify(long)}`);
+    check(errors.length === 0, `L: errors ${errors.join(' | ')}`);
+    notes.push(`L: one action (Continue); 6-tap burst moved ${i1 - i0} beat; Enter and Space one beat each; key repeat ignored; reload kept line ${after?.index} with Continue focused; Continue on screen through 844×390 / 667×375 / 390×844; longest line at 130 % (instant text from Settings) readable on 667×375${long.scrolls ? ' (its text scrolls, focusable)' : ''}`);
+    await page.context().close();
+  }
+
   // ---- H. Story analytics events (dev recorder; the transport is disabled) ------------------------------
   {
     const { page, errors } = await newPage();
@@ -439,8 +521,9 @@ try {
       await legal.first().click();
       await page.locator('.end-slot.is-legal').first().click();
     } else await page.locator('[data-act="draw"]:not([disabled]), [data-act="pass"]:not([disabled])').first().click();
-    const savedAt = await prog(page);
+    // What's saved at the moment of the reload (the fast test AI may already have answered the move).
     await page.reload();
+    const savedAt = await prog(page);
     await page.click('.start-button');
     await page.waitForSelector('[data-act="story"]');
     await openStory(page);

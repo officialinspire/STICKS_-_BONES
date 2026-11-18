@@ -125,10 +125,15 @@ Ivory text on guava would be only 3.68:1.
 - **Dialogue panel:** ivory with an ink border and offset shadow. **Caption panel:** for stage directions, ink scrim with italic ivory text. Plot-critical sounds are written out (e.g. the knocks).
 - **Chapter card:** chapter number, title, location, hand and a status badge (Completed, Up next, In progress, Not reached yet). Has full and compact forms.
 - **Evidence panel:** dashed frame with a list or an empty state. **Notebook entry:** a ruled notebook with a guava margin rule.
-- **Cinematic controls:**
-  - Back, Transcript (a modal with trapped Tab, closed with Escape), Aa (text size cycles 100% / 115% / 130% and is saved), Skip scene, a position counter, and Next (gold, 48 px).
+- **Dialogue panel actions:** the panel holds the speaker name, the line, and ONE action: **Continue** (gold, 48 px).
+  - Continue sits below the text on portrait phones and short landscape, and beside it elsewhere.
+  - The first activation completes a line that is still revealing; the next advances exactly one beat.
+  - Taps closer together than 180 ms and key auto-repeat are ignored. On Continue, Enter and Space are its own click (never two activations).
+  - A line too long for the space left (the largest text on the smallest screens) scrolls inside the panel, focusable, and Continue never leaves the screen.
+- **Scene navigation (outside the panel, in the bar):** ← Case file, ‹ Back, Skip and the position counter.
   - Keyboard: Enter, Space or → advances; ← goes back.
   - Reduced motion: no entrance animation.
+- **Story text preferences** live in Settings: text size (Standard / Large / Larger: 100 / 115 / 130 %) and "Show each line at once" (instant text).
 - **Pause, results and confirm sheets, and privacy covers** are re-skinned: ivory, ink border, deep-sea offset shadow. Match winners get a guava ★.
 
 ## Hand targets

@@ -32,6 +32,13 @@ export function settingsPanelHtml(s: Settings): string {
       <label class="check"><input type="checkbox" name="set-banter" ${s.banter ? 'checked' : ''}> Cousin’s banter</label>
       <label class="check"><input type="checkbox" name="set-host-anim" ${s.hostAnimation ? 'checked' : ''}> Cousin’s slam animation</label>
     </div></fieldset>
+    <fieldset><legend>Story text</legend><div class="row">
+      ${radio('set-story-text', '1', 'Standard', s.storyTextScale === 1)}
+      ${radio('set-story-text', '1.15', 'Large', s.storyTextScale === 1.15)}
+      ${radio('set-story-text', '1.3', 'Larger', s.storyTextScale === 1.3)}
+    </div>
+      <label class="check"><input type="checkbox" name="set-instant-text" ${s.instantText ? 'checked' : ''}> Show each line at once <small>(no gradual reveal)</small></label>
+    </fieldset>
     <fieldset><legend>Motion</legend><div class="row">
       ${radio('set-motion', 'system', 'Follow my device', s.motion === 'system')}
       ${radio('set-motion', 'reduce', 'Reduce', s.motion === 'reduce')}
@@ -81,6 +88,12 @@ export function bindSettingsPanel(root: HTMLElement, api: SettingsApi): void {
         break;
       case 'set-ai-speed':
         api.set({ aiSpeed: t.value as Settings['aiSpeed'] });
+        break;
+      case 'set-story-text':
+        api.set({ storyTextScale: Number(t.value) as Settings['storyTextScale'] });
+        break;
+      case 'set-instant-text':
+        api.set({ instantText: t.checked });
         break;
     }
   });

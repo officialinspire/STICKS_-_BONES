@@ -7,7 +7,7 @@ Every record in `localStorage` is an envelope: `{ format, version, data }`.
 | Key | Format | Version | Migrates from |
 | --- | --- | --- | --- |
 | `sticks-and-bones.save` | `sticks-and-bones/match` | 2 | the Stage 5 un-enveloped save (`sticks-and-bones-save@1`) |
-| `sticks-and-bones.settings` | `sticks-and-bones/settings` | 2 | the Stage 6/7 un-enveloped settings object |
+| `sticks-and-bones.settings` | `sticks-and-bones/settings` | 3 | v2 (adds the Story text size and instant text; an existing Story text size is carried over from the Story record) and the Stage 6/7 un-enveloped settings object |
 | `sticks-and-bones.stats` | `sticks-and-bones/stats` | 1 | — |
 | `sticks-and-bones.achievements` | `sticks-and-bones/achievements` | 1 | v0 (`{ unlocked: [ids] }`, never shipped: accepted so the path is tested). Counters, unlocks, dedupe keys, the Story case log. No tile ids or hands (`docs/ACHIEVEMENTS.md`) |
 

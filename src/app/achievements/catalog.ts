@@ -6,7 +6,8 @@
  * rule, a currency or a calendar streak.
  *
  * Fields:
- * - **id:** stable, never reused.
+ * - **id:** stable, never reused. Retired ids (never reissued): `ex-transcript` (the Story transcript
+ *   control was removed; replaced by `ex-story-text`).
  * - **condition:** a counter key (see facts.ts) and a target. `all` means "every one of these counters
  *   at least once".
  * - **how:** the plain-language condition shown to the player (docs/ACHIEVEMENTS.md lists them all).
@@ -156,7 +157,7 @@ const ROWS: Record<Category, Row[]> = {
     ['ex-settings', 'Your Table, Your Way', 'Changed a setting.', 'explore.settings', 1, 'Change any setting (menu or pause sheet).', 'compass', 1],
     ['ex-sort', 'Sorted', 'Re-sorted your hand.', 'explore.sort', 1, 'Use the Sort button at the table.', 'tile', 1],
     ['ex-zoom', 'Closer Look', 'Zoomed the board.', 'explore.zoom', 1, 'Use the + or − board zoom at the table.', 'eye', 2],
-    ['ex-transcript', 'On the Record', 'Opened a scene transcript.', 'explore.transcript', 1, 'Open the transcript during a Story scene.', 'book', 2],
+    ['ex-story-text', 'Easy on the Eyes', 'Set how Story text appears.', 'explore.storyText', 1, 'Change the Story text size or instant text in Settings.', 'book', 2],
     ['ex-local', 'Pass the Device', 'Finished a two-player match on one device.', 'local.finished', 1, 'Finish any match with two players sharing one device.', 'handshake', 1],
     ['ex-local-all', 'Shared Table', 'Two-player matches in every mode.', ['local.draw2', 'local.block2', 'local.partnership4'], 3, 'Finish a two-player, one-device match in Draw, Block and Partnership.', 'handshake', 3],
   ],

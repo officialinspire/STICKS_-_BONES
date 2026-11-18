@@ -2264,7 +2264,7 @@ h1, h2, h3, .title, .chapter-title, .section-h, .score-val, .dest-title, .points
 .story-stage {
   min-height: 100dvh;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 10px;
   padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
   max-width: 980px;
@@ -2310,21 +2310,30 @@ h1, h2, h3, .title, .chapter-title, .section-h, .score-val, .dest-title, .points
 .speaker-q { font: 600 0.8em / 1 var(--body); color: var(--sb-ivory); background: var(--sb-ink); padding: 3px 6px; border-radius: 4px; }
 .dialogue-text { margin: 0; font: 500 1.15em / 1.45 var(--body); }
 .caption-text { margin: 0; font: italic 500 1.05em / 1.5 var(--body); }
-.cine-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  background: var(--scrim-ink);
-  border-radius: 12px;
-  padding: 8px;
+/* Global scene navigation lives in the bar, outside the dialogue panel: Case file and Back / Skip on one
+   row, the title after them (it takes its own row only where the width runs out). */
+.story-bar .back { order: 1; }
+.story-nav { order: 2; margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.story-bar .story-update { order: 3; }
+.story-bar .story-bar-title { order: 4; }
+@media (max-width: 699px) {
+  .story-bar .story-bar-title { flex-basis: 100%; font-size: 0.92rem; }
 }
 .cine-btn { min-height: 44px; }
-.cine-pos { margin-left: auto; font-size: 0.85rem; color: var(--sb-ivory); }
-.cine-next { margin: 0; min-height: 48px; min-width: 120px; font-size: 1.05rem; }
+.cine-pos { font-size: 0.85rem; color: var(--sb-ivory); background: var(--scrim-ink); padding: 4px 8px; border-radius: 6px; }
+/* The panel's one action. Beside the text where there's width; below it on portrait phones. */
+.dialogue-panel { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 6px 14px; --dlg-actions: 0px; }
+.dialogue-panel[hidden] { display: none; }
+/* Last resort for the longest lines at the largest text on the smallest screens: only the text scrolls (it's
+   then focusable); Continue never leaves the screen. */
+.dialogue-body { box-sizing: border-box; min-width: 0; max-height: calc(var(--dlg-max, 9999px) - 6px - var(--dlg-actions)); overflow-y: auto; padding-top: 30px; margin-top: -30px; }
+.dialogue-actions { display: flex; justify-content: flex-end; }
+.cine-next { margin: 0; min-height: 48px; min-width: 132px; font-size: 1.05rem; }
+@media (orientation: portrait) and (max-width: 699px) {
+  .dialogue-panel { grid-template-columns: minmax(0, 1fr); --dlg-actions: 60px; }
+}
 .end-card { display: grid; gap: 10px; max-width: 640px; }
 .end-card .section-h { color: var(--sb-gold); }
-.transcript-list { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; max-height: 60dvh; overflow: auto; }
 .chapter-card:not(.is-compact) { max-width: 520px; }
 
 /* ---- save failure banner (persistent) ---- */
@@ -2396,7 +2405,7 @@ h1, h2, h3, .title, .chapter-title, .section-h, .score-val, .dest-title, .points
   .dest { min-height: 52px; padding: 6px 12px; }
   .dest-title { font-size: 1.1rem; }
   .dest-sub { font-size: 0.8rem; }
-  .story-stage { grid-template-rows: auto minmax(0, 1fr) auto; }
+  .story-stage { grid-template-rows: auto minmax(0, 1fr); }
   .dialogue-text { font-size: 1.05em; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -2508,7 +2517,8 @@ h1, h2, h3, .title, .chapter-title, .section-h, .score-val, .dest-title, .points
    screens 61–97 px. */
 .story-main .dialogue-panel { min-height: 6.1em; }
 @media (orientation: portrait) and (max-width: 699px) {
-  .story-main .dialogue-panel { min-height: 7.75em; }
+  /* Text (two to three lines) plus Continue stacked below it. */
+  .story-main .dialogue-panel { min-height: 10.75em; }
 }
 @media (min-width: 1200px) and (min-height: 700px) {
   .story-main { --fig-h: min(66dvh, 720px); }
@@ -2548,11 +2558,16 @@ h1, h2, h3, .title, .chapter-title, .section-h, .score-val, .dest-title, .points
   /* Short landscape: no height to stand the speaker on the panel. They stand beside it at the full scene
      height instead (left), and the panel takes the right; the layout is the same for every beat, so
      nothing moves when the speaker changes or nobody is on stage. */
-  .story-main > .dialogue-slot { margin-left: 41%; }
+  .story-main > .dialogue-slot { margin-left: 34%; }
+  /* Stacked: the text gets the panel's whole width; Continue sits below it. */
+  .dialogue-panel { grid-template-columns: minmax(0, 1fr); padding: 12px 14px 12px; --dlg-actions: 54px; }
+  .dialogue-text { font-size: 1.02em; line-height: 1.4; }
+  .caption-text { font-size: 0.98em; line-height: 1.4; }
+  .cine-next { min-height: 44px; }
   .story-main > .st-actor, .story-main > .st-cast { left: 1%; bottom: 0; transform: translate(0, 6px); }
   .story-main > .st-actor.is-on, .story-main > .st-cast.is-on { transform: none; }
-  .story-main > .st-actor { height: min(calc(100% - 4px), var(--actor-cap-h, 999px), calc(39cqi / var(--ar))); }
-  .story-main > .st-cast { height: min(calc(100% - 4px), var(--cast-cap-h, 999px), calc(39cqi / var(--ar))); }
+  .story-main > .st-actor { height: min(calc(100% - 4px), var(--actor-cap-h, 999px), calc(32cqi / var(--ar))); }
+  .story-main > .st-cast { height: min(calc(100% - 4px), var(--cast-cap-h, 999px), calc(32cqi / var(--ar))); }
   .st-threshold { top: 30%; }
 }
 /* Scene bar stays legible over bright skies (gold 8.6:1 and ivory 14:1 on the ink scrim). */

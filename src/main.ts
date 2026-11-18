@@ -45,6 +45,13 @@ const noticeFor = (what: string, status: ReadStatus): string | null =>
 
 const loadedSettings = loadSettingsResult(store);
 let settings: Settings = loadedSettings.settings;
+// Settings v2 → v3: the Story text size used to be chosen on the dialogue controls and saved with the
+// Story record; carry it over once, so nobody's preference is lost when the control moved to Settings.
+if (loadedSettings.status === 'migrated') {
+  const kept = readStory(store).value?.textScale;
+  if (kept && kept !== 1 && kept !== settings.storyTextScale) settings = { ...settings, storyTextScale: kept };
+  saveSettings(store, settings);
+}
 const sn = noticeFor('settings', loadedSettings.status);
 if (sn) notices.push(sn);
 const loadedStats = loadStats(store);
@@ -88,7 +95,7 @@ window.addEventListener('pageshow', () => audio.setHidden(document.hidden));
 // the studio credit. Table moves, story advance and intro controls are silent here (they have their own sounds
 // or none); everything else gets a quiet select/confirm/back.
 const SILENT_ACTS = new Set(['draw', 'pass', 'place', 'select', 'story-next', 'story-back', 'story-skip', 'focus-end', 'intro-skip', 'intro-mute', 'start', 'zoom-in', 'zoom-out']);
-const BACK_ACTS = new Set(['home', 'story-home', 'story-file', 'menu', 'menu-now', 'cover-back', 'cover-menu', 'confirm-no', 'transcript-close', 'discard']);
+const BACK_ACTS = new Set(['home', 'story-home', 'story-file', 'menu', 'menu-now', 'cover-back', 'cover-menu', 'confirm-no', 'discard']);
 const CONFIRM_ACTS = new Set(['confirm-yes', 'story-deal', 'story-onward', 'story-new', 'story-continue', 'new-match', 'next-hand', 'restart', 'update-now', 'resume', 'pause-resume']);
 document.addEventListener(
   'click',
@@ -117,6 +124,7 @@ const settingsApi = {
     saveSettings(store, settings);
     audio.setLevels(settings.audio);
     achievements.note('explore.settings');
+    if ('storyTextScale' in p || 'instantText' in p) achievements.note('explore.storyText');
   },
 };
 
@@ -351,6 +359,7 @@ function openStory(): void {
       showMenu();
     },
     reduceMotion: () => reduceMotion(settings, matchMedia('(prefers-reduced-motion: reduce)').matches),
+    prefs: () => ({ textScale: settings.storyTextScale, instantText: settings.instantText }),
     onSaveFailed: () => setSaveHealth(false),
     cue: (c) => void audio.cue(c),
     registerRun: (hooks) => (storyHooks = hooks),
@@ -367,7 +376,6 @@ function openStory(): void {
         // key = `<caseKey>:<scene>:<pre|post>`; only first-play cases ("case:<start>") are tracked.
         if (key.startsWith('case:')) achievements.storyAssist(key.split(':').slice(0, 2).join(':'));
       },
-      explore: (what) => achievements.note(`explore.${what}`),
     },
     offlineNote: (id) => {
       if (pwa.view.offline.kind === 'unsupported' || !pwa.status) return null;

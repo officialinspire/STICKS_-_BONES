@@ -283,7 +283,7 @@ function judge(where: string, m: Measure, opts: { pageMayScroll?: boolean }) {
   if (m.uncomfortable.length) warnings.push(`${where}: under ${LIMITS.targetComfortable}px: ${m.uncomfortable.join(' | ')}`);
 }
 
-const SCREENS = ['startup', 'menu', 'menu-stats', 'menu-settings', 'menu-achievements', 'setup', 'story-home', 'story-scene', 'story-cast', 'story-transcript', 'longest-chain', 'largest-hand', 'partnership', 'handoff', 'pause', 'results'] as const;
+const SCREENS = ['startup', 'menu', 'menu-stats', 'menu-settings', 'menu-achievements', 'setup', 'story-home', 'story-scene', 'story-cast', 'story-long', 'longest-chain', 'largest-hand', 'partnership', 'handoff', 'pause', 'results'] as const;
 type Screen = (typeof SCREENS)[number];
 
 async function capture(vp: (typeof VIEWPORTS)[number], screen: Screen, page: Page, opts: { pageMayScroll?: boolean } = {}) {
@@ -345,10 +345,24 @@ try {
     await page.waitForFunction(() => document.querySelector('.story-stage')?.hasAttribute('data-cast-visible') && document.querySelector('.st-curtain:not(.is-closed)'), null, { timeout: 20_000 }).then((h: { dispose(): Promise<void> }) => h.dispose()).catch(() => failures.push(`${vp.name} story-cast: Vale's portrait never appeared`));
     await page.waitForTimeout(400);
     await capture(vp, 'story-cast', page);
-    await page.click('[data-act="story-transcript"]');
-    await page.waitForSelector('dialog.transcript[open]');
-    await capture(vp, 'story-transcript', page, { pageMayScroll: true });
-    await page.keyboard.press('Escape');
+    // The longest spoken line (Luz, Chapter 5) at the largest Story text size: fully readable, Continue on screen.
+    await page.click('[data-act="story-file"]');
+    await page.waitForSelector('.story-shell');
+    await page.evaluate(() => {
+      localStorage.setItem('sticks-and-bones.settings', JSON.stringify({ format: 'sticks-and-bones/settings', version: 3, data: { storyTextScale: 1.3 } }));
+      localStorage.setItem('sticks-and-bones.story', JSON.stringify({ format: 'sticks-and-bones/story', version: 2, data: { sceneId: 'chapter-5', part: 'pre', index: 19, outcome: null, completed: ['prologue', 'chapter-1', 'chapter-2', 'chapter-3', 'chapter-4'], textScale: 1, startedAt: 1, hand: null } }));
+    });
+    await page.reload();
+    await page.click('.start-button');
+    await page.locator('[data-act="intro-skip"]').click().catch(() => undefined);
+    await page.waitForSelector('[data-act="story"]');
+    await page.click('[data-act="story"]');
+    await page.click('[data-act="story-continue"]');
+    await page.waitForFunction(() => /Cámara del Agua/.test(document.querySelector('.dialogue-text')?.textContent ?? ''), null, { timeout: 20_000 }).then((h: { dispose(): Promise<void> }) => h.dispose()).catch(() => failures.push(`${vp.name} story-long: the long line never appeared`));
+    await capture(vp, 'story-long', page);
+    const fit = await page.evaluate(() => { const n = document.querySelector('.cine-next')!.getBoundingClientRect(); const b = document.querySelector('.dialogue-body') as HTMLElement; return { next: n.bottom <= innerHeight && n.top >= 0, page: document.documentElement.scrollHeight <= innerHeight + 1, scrolls: b.scrollHeight > b.clientHeight + 32, focusable: b.getAttribute('tabindex') === '0' }; });
+    if (!(fit.next && fit.page && (!fit.scrolls || fit.focusable))) failures.push(`${vp.name} story-long: ${JSON.stringify(fit)}`);
+    await page.evaluate(() => localStorage.removeItem('sticks-and-bones.settings'));
     await page.click('[data-act="story-file"]');
     await page.waitForSelector('.story-shell');
     await page.click('[data-act="story-home"]');

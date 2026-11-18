@@ -39,7 +39,7 @@ npm run dev
 | `npm run atlas:build` | Regenerate the double-six tile atlas + JSON from the verified material sheet |
 | `npm run ai:tournament` | Mirrored seeded AI duels per mode plus decision timing |
 | `npm run e2e` | Browser acceptance checks (needs the machine's Playwright + Chromium; not part of `check`) |
-| `npm run qa` | Rendered-screen QA: 8 viewports × 13 screens (including story cast lines and the transcript), layout/target/pip/endpoint metrics, atlas bleed ([docs/QA.md](docs/QA.md)) |
+| `npm run qa` | Rendered-screen QA: 8 viewports × 13 screens (including story cast lines and the longest line at 130 % text), layout/target/pip/endpoint metrics, atlas bleed ([docs/QA.md](docs/QA.md)) |
 | `npm run a11y` | axe, keyboard, focus traps, screen-reader privacy, reduced motion, safe areas, orientation |
 | `npm run perf` | Profile the production build (run `npm run build` first) — see [docs/PERFORMANCE.md](docs/PERFORMANCE.md) |
 | `npm run assets:derive` | Rebuild the WebP runtime derivatives (and the environments' 3:4 portrait crops) from the preserved originals |

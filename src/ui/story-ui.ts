@@ -17,7 +17,6 @@ import type { HandSetup } from '../story/chapters';
 import { STAGING } from '../story/staging';
 import type { StoryCue } from '../audio/manager';
 import { renderStoryRun } from './story-player';
-import { playerCaption } from '../story/captions';
 import type { Outcome } from '../story/chapters';
 import { sceneAssets } from './story-assets';
 import { envKey } from '../assets/env';
@@ -45,24 +44,6 @@ export function speakerLabelHtml(tag: string): string {
   return `<p class="speaker speaker-${s.tone}"><span class="speaker-name">${esc(s.label)}</span>${s.qualifier ? `<span class="speaker-q">${esc(s.qualifier)}</span>` : ''}</p>`;
 }
 
-/** Stage directions are shown as descriptive captions (the script's square brackets are its own markup). */
-/** Player-facing caption (implementation notes omitted; see src/story/captions.ts). Empty string = a silent beat. */
-/** A caption panel; a writer's-note bracket becomes a silent beat (visually empty, "Silence." for screen readers). */
-export function captionPanelHtml(raw: string, attrs: string): string {
-  const t = playerCaption(raw);
-  return t === null
-    ? `<article class="dialogue-panel is-caption is-silent" data-kind="direction"${attrs}><p class="caption-text"><span class="sr-only">Silence.</span></p></article>`
-    : `<article class="dialogue-panel is-caption" data-kind="direction"${attrs}><p class="caption-text">${esc(t)}</p></article>`;
-}
-export const captionText = (raw: string) => playerCaption(raw) ?? '';
-
-export function dialoguePanelHtml(b: Block): string {
-  if (b.kind === 'line') {
-    return `<article class="dialogue-panel" data-kind="line">${speakerLabelHtml(b.speaker!)}<p class="dialogue-text">${esc(b.text!)}</p></article>`;
-  }
-  return captionPanelHtml(b.raw, '');
-}
-
 export type ChapterStatus = 'completed' | 'next' | 'locked' | 'reading';
 export function chapterCardHtml(s: Scene, status: ChapterStatus, opts: { compact?: boolean } = {}): string {
   const num = s.number === null ? (s.id === 'prologue' ? 'Prologue' : 'Epilogue') : `Chapter ${s.number}`;
@@ -86,17 +67,6 @@ export function notebookEntryHtml(s: Scene): string {
   const entry = s.blocks.find((b) => b.kind === 'notebook');
   if (!entry) return '';
   return `<li class="notebook-entry"><p class="notebook-chapter">Chapter ${s.number} · ${esc(s.title)}</p><p class="notebook-text">${esc(entry.raw.replace(/^Notebook:\s*/, ''))}</p></li>`;
-}
-
-export function cinematicControlsHtml(o: { canBack: boolean; atEnd: boolean; position: string }): string {
-  return `<nav class="cine-controls" aria-label="Scene controls">
-    <button type="button" class="btn-ghost cine-btn" data-act="story-back" ${o.canBack ? '' : 'disabled'} aria-label="Back to the previous line">‹ Back</button>
-    <button type="button" class="btn-ghost cine-btn" data-act="story-transcript">Transcript</button>
-    <button type="button" class="btn-ghost cine-btn" data-act="story-text" aria-label="Aa: change text size">Aa</button>
-    <button type="button" class="btn-ghost cine-btn" data-act="story-skip" ${o.atEnd ? 'disabled' : ''}>Skip scene</button>
-    <span class="cine-pos" aria-live="off">${esc(o.position)}</span>
-    <button type="button" class="btn primary cine-next" data-act="story-next">${o.atEnd ? 'Continue' : 'Next ›'}</button>
-  </nav>`;
 }
 
 // ---- data ---------------------------------------------------------------------------
@@ -134,6 +104,8 @@ export interface StoryDeps {
   readonly store: KeyValueStore | null;
   onBack(): void;
   reduceMotion(): boolean;
+  /** Story text preferences from Settings: text size (1, 1.15, 1.3) and instant text. */
+  prefs?(): { textScale: number; instantText: boolean };
   /** Storage refused a write: show persistent feedback (never claim it saved). */
   onSaveFailed(): void;
   /** Mount a chapter hand at the table (main.ts: GameSession + TableController + TableScreen in story mode). */
@@ -158,8 +130,6 @@ export interface StoryDeps {
     caseComplete(caseKey: string): void;
     resume(scene: SceneId, part: 'dialogue' | 'hand', via: 'continue' | 'update', positionKey: string): void;
     assist(scene: SceneId, key: string): void;
-    /** Opened a story tool (transcript): exploration achievements. */
-    explore?(what: 'transcript'): void;
   };
   /** True once, right after an update reload that interrupted a story: reopen the saved scene without a tap. */
   takeAutoContinue?(): boolean;

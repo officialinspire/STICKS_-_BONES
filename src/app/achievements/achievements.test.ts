@@ -182,7 +182,7 @@ const FIX: Record<string, (h: H) => void> = {
   'ex-settings': (h) => h.note('explore.settings'),
   'ex-sort': (h) => h.note('explore.sort'),
   'ex-zoom': (h) => h.note('explore.zoom'),
-  'ex-transcript': (h) => h.note('explore.transcript'),
+  'ex-story-text': (h) => h.note('explore.storyText'),
   'ex-local': (h) => h.facts(localMatchFacts({ mode: 'draw2', humansArePartners: false, humansWon: false }), 'local:1'),
   'ex-local-all': (h) => (['draw2', 'block2', 'partnership4'] as ModeId[]).forEach((m, i) => h.facts(localMatchFacts({ mode: m, humansArePartners: false, humansWon: true }), `local:${i}`)),
 };
