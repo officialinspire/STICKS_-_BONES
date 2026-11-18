@@ -4,6 +4,7 @@
  * area as the full frame under `background-size: cover`, at roughly a third of the bytes.
  */
 import { ENV_FOCUS, isEnv, portraitCrop, PORTRAIT_ASPECT } from './focal';
+import { urlFor } from './index';
 import { IMAGE_ASSETS } from './manifest';
 import type { RuntimeAssetId, WarmKey } from './urls';
 
@@ -36,4 +37,17 @@ export function onViewportShape(cb: () => void): () => void {
   const mq = matchMedia(QUERY);
   mq.addEventListener('change', cb);
   return () => mq.removeEventListener('change', cb);
+}
+
+/**
+ * Point an element's `--env-image` / `--env-pos` at an environment for THIS viewport, and remember which
+ * environment it shows (`data-env-id`) so a rotation re-picks the same place, never a different one.
+ */
+export function setEnvBackdrop(el: HTMLElement, id: RuntimeAssetId): void {
+  const key = envKey(id);
+  const url = urlFor(key);
+  el.dataset.envId = id;
+  if (!url) return;
+  el.style.setProperty('--env-image', `url("${url}")`);
+  el.style.setProperty('--env-pos', envPosition(key));
 }

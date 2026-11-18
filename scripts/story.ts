@@ -308,6 +308,8 @@ try {
       check(m.underBar <= 1, `G ${vp.name} ${name}: the speaker's head is under the scene bar by ${m.underBar}px`);
       check(m.intoControls <= 0, `G ${vp.name} ${name}: the speaker reaches below the dialogue panel by ${m.intoControls}px`);
       if (id === 'chapter-6' && name === 'cave-accepted-hand') check(m.env !== 'env.cave-waterfall', `G: chapter 6 rest-area beat still shows the ancient platform (${m.env})`);
+      // The resort and the confrontation are the approved corporate terrace (never the retired leisure patio).
+      if (id === 'chapter-3' || id === 'chapter-7') check(m.env === 'env.executive-terrace', `G ${vp.name} ${name}: ${id} shows ${m.env}, not the corporate terrace`);
       await page.screenshot({ path: join(out, `${vp.name}-${name}.png`) });
       await page.click('[data-act="story-file"]');
       await page.click('[data-act="story-home"]');
@@ -529,7 +531,14 @@ try {
     await openStory(page);
     await page.locator('.table-screen').first().waitFor({ timeout: 20_000 });
     const resumed = await prog(page);
-    check(JSON.stringify((savedAt?.hand as { state?: { hand?: unknown } } | null)?.state?.hand ?? null) === JSON.stringify((resumed?.hand as { state?: { hand?: unknown } } | null)?.state?.hand ?? null), 'I: reload during the AI turn changed the hand');
+    // The same hand came back: same hand number, the human's own tiles untouched, and the public log
+    // continues the saved one. The restored AI may legitimately answer before this read (the log then
+    // grows), but a re-deal or a lost move would break the prefix.
+    type H = { number: number; hands: unknown[]; log: unknown[] };
+    const hs = (savedAt?.hand as { state?: { hand?: H } } | null)?.state?.hand;
+    const hr = (resumed?.hand as { state?: { hand?: H } } | null)?.state?.hand;
+    const prefix = !!hs && !!hr && hs.log.length <= hr.log.length && JSON.stringify(hr.log.slice(0, hs.log.length)) === JSON.stringify(hs.log);
+    check(!!hs && !!hr && hs.number === hr.number && JSON.stringify(hs.hands[0]) === JSON.stringify(hr.hands[0]) && prefix, `I: reload during the AI turn changed the hand (saved log ${hs?.log.length}, resumed ${hr?.log.length})`);
     // Results showing: finish the hand, reload with the sheet open → the outcome is kept, completion is not repeated.
     await playHandAtTable(page);
     const atResults = await prog(page);
@@ -566,7 +575,36 @@ try {
     const end = await prog(page);
     check(end?.part === 'end' && end.completed.filter((c) => c === 'chapter-1').length === 1, `I: end-card reload ${JSON.stringify(end)}`);
     check(errors.length === 0, `I: page errors ${errors.join(' | ')}`);
-    notes.push(`I: reloads — during the opponent's turn the saved hand came back identical; with results showing the outcome (${atResults?.outcome}) and the single completion were kept and nothing re-dealt; on the chapter end card the end card came back with completion recorded once`);
+    notes.push(`I: reloads — during the opponent's turn the same hand came back (hand number and the player's tiles unchanged, the public log continued, never re-dealt); with results showing the outcome (${atResults?.outcome}) and the single completion were kept and nothing re-dealt; on the chapter end card the end card came back with completion recorded once`);
+    await page.context().close();
+  }
+  // ---- M. The corporate scenes' hands: played over the terrace, in both orientations and after rotation ----
+  {
+    const { page, errors } = await newPage();
+    const urls: string[] = [];
+    page.on('request', (r: { url(): string }) => urls.push(r.url()));
+    const seen: string[] = [];
+    for (const [id, done] of [['chapter-3', 3], ['chapter-7', 7]] as const) {
+      const completed = ['prologue', ...[1, 2, 3, 4, 5, 6].filter((n) => n < done).map((n) => `chapter-${n}`)];
+      await page.setViewportSize({ width: 390, height: 844 });
+      await toMenu(page); // a fresh page: the previous hand can't write over the seed
+      await seed(page, { sceneId: id, part: 'hand', index: 0, completed });
+      await openStory(page);
+      await page.waitForSelector('.table-screen');
+      for (const vp of [{ width: 390, height: 844 }, { width: 844, height: 390 }, { width: 390, height: 844 }]) {
+        await page.setViewportSize(vp);
+        await page.waitForTimeout(700);
+        const b = (await page.evaluate(`(() => { const h = document.querySelector('.story-table-host'); return { id: h.dataset.envId, bg: getComputedStyle(h).backgroundImage, app: getComputedStyle(document.getElementById('app')).backgroundImage }; })()`)) as { id: string; bg: string; app: string };
+        const portrait = vp.width < vp.height;
+        check(b.id === 'env.executive-terrace', `M ${id}: the hand's backdrop is ${b.id}`);
+        check(b.bg.includes(portrait ? 'executive-terrace-portrait' : 'executive-terrace.'), `M ${id} ${portrait ? 'portrait' : 'landscape'}: the hand shows ${b.bg.slice(0, 160)}`);
+        check(!/neighborhood-patio/.test(b.app), `M ${id}: the patio is painted behind the hand`);
+        seen.push(`${id} ${portrait ? 'P' : 'L'}`);
+      }
+    }
+    check(!urls.some((u) => /resort-patio/.test(u)), 'M: the retired leisure-resort backdrop was requested');
+    check(errors.length === 0, `M: page errors ${errors.join(' | ')}`);
+    notes.push(`M: Chapter 3 and 7 hands over the corporate terrace (${seen.length} checks: portrait, landscape, rotated back), no patio behind them, no resort-patio request`);
     await page.context().close();
   }
 } catch (e) {

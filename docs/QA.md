@@ -8,6 +8,7 @@ layout, so these are the evidence for it:
 | `npm run qa` | 6 viewports × 9 screens: page scroll, controls off screen or clipped, touch targets, clipped text, region overlap, Cousin's portrait clipping and upscaling, tile/pip size, hand fit, open-end reachability; plus atlas bleeding at DPR 1/2/3 | `test-results/qa/` (screenshots, one contact sheet per screen, `report.json`) |
 | `npm run a11y` | axe-core on every screen and dialog; keyboard-only play; focus traps and restoration; screen-reader hand privacy; non-colour legal cues; reduced motion; safe areas; orientation changes | `test-results/a11y/report.json` plus screenshots |
 | `npm run e2e` | Full games and stage acceptance (solo, AI partnership, two humans, reset, save/resume, rapid actions…) | `test-results/e2e/` |
+| `npm run story:sweep` | Every Story beat in the real UI (all 9 scenes, every win / loss / tie route at 390×844; Chapters 3 and 7 at the seven QA viewports): verbatim text, the tagged expression and verified cast frame, one figure in a settled stable box, Continue as the only action (on screen and focused; the text is a focus stop only when it really scrolls), one beat per Continue, the corporate terrace in Chapters 3 and 7, no overflow | `test-results/story-sweep/report.json` |
 
 ## Viewports and screens
 
@@ -190,3 +191,20 @@ tablet.
 | Firefox desktop | A different layout and audio engine |
 | A screen reader on a real device (VoiceOver, TalkBack) | Live-region pacing, rotor/landmark navigation, privacy of concealed hands |
 | Headphones and speakers | Levels, knock motif clarity, bed seams (nothing has been listened to) |
+
+## QA checkpoint (2026-11-18): Story presentation sweep
+
+- **New `npm run story:sweep`:** 1,485 beats checked.
+  - 701 beats at 390×844: the whole Story and all three outcome routes.
+  - 112 beats at each of the seven viewports (360×800 to 1366×768): Chapters 3 and 7.
+- **Defects found and fixed:**
+
+| Found by | Defect | Fix |
+| --- | --- | --- |
+| `npm run a11y` | The dialogue text kept a stale `tabindex=0` (an extra focus stop) on short lines. It had been measured mid-reveal, while the text briefly overhung a body that was still free to grow | The text is a focus stop only when the body is held at its max-height and really scrolls. The sweep checks this on every beat |
+| Review | The panel's height limit subtracted a fixed 26 px, ignoring a bottom safe-area inset (home indicator) | It subtracts the stage's real bottom padding, which includes `env(safe-area-inset-bottom)`. Same result when there is no inset |
+| Resort correction | Story hands always showed the neighbourhood patio, so the Chapter 3 and 7 hands weren't on the corporate terrace, and rotation forced every backdrop back to the patio | A per-scene `handEnv` on the table host; rotation re-picks each element's own place (story § M) |
+| `npm run pwa` | Test race: the dialogue panel is now permanent markup, so "scene up" passed before the first line was placed | It waits for the line's position |
+| `npm run story:e2e` | Test race (§ I): a reload during the AI's turn compared the whole hand, but the restored AI may legitimately answer before the read | It compares the hand number, the player's tiles and the public log as a prefix (a re-deal or lost move still fails) |
+
+- **Emulation only:** safe-area insets can't be emulated in Chromium here; the inset fix is by construction.

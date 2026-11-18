@@ -42,7 +42,11 @@ export interface SceneStaging {
   readonly establishing: 'push' | 'pan-left' | 'pan-right' | 'none';
   /** Cousin on stage from the first beat (otherwise he enters on a cue). */
   readonly cousin: boolean;
-  /** Backdrop while this scene's hand is played (Chapter 6: the modern rest area — never the ancient platform). */
+  /**
+   * Backdrop while this scene's hand is played. Omitted or null: the table's usual patio. Chapters 3 and 7
+   * name the corporate terrace (the hand is played where the scene is); Chapter 6's rest area has no art of
+   * its own, so it keeps the patio, never the ancient platform.
+   */
   readonly handEnv?: RuntimeAssetId | null;
   readonly handNote?: string;
   readonly cues: readonly { readonly at: string; readonly cues: readonly Cue[] }[];
@@ -88,9 +92,12 @@ export const STAGING: Readonly<Record<SceneId, SceneStaging>> = {
     ],
   },
   'chapter-3': {
-    env: 'env.resort-patio',
+    // The approved corporate resort art (glass lobby, stone terrace): Vale's executive world. The hand is
+    // played over the same terrace, as is Chapter 7's confrontation.
+    env: 'env.executive-terrace',
+    handEnv: 'env.executive-terrace',
     light: 'resort',
-    focus: '50% 50%',
+    focus: '27% 50%',
     establishing: 'push',
     cousin: true,
     cues: [
@@ -152,9 +159,11 @@ export const STAGING: Readonly<Record<SceneId, SceneStaging>> = {
     ],
   },
   'chapter-7': {
+    // The executive confrontation stays corporate: the terrace for the scene and its hand.
     env: 'env.executive-terrace',
+    handEnv: 'env.executive-terrace',
     light: 'sunset',
-    focus: '50% 50%',
+    focus: '27% 50%',
     establishing: 'pan-right',
     cousin: true,
     cues: [

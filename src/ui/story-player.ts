@@ -167,10 +167,19 @@ class DomStage implements StageView<Beat> {
     const reserve = Math.round(Math.max(panel ? parseFloat(getComputedStyle(panel).minHeight) || 0 : 0, 1)) || actual;
     const mainH = main?.clientHeight ?? 0;
     // The panel may use the whole height below the bar; beyond that only its text scrolls (Continue stays).
-    if (main) this.#root.style.setProperty('--dlg-max', `${Math.max(120, Math.floor(window.innerHeight - main.getBoundingClientRect().top - 26))}px`); // below the bar's gap, above the bottom padding
+    if (main) {
+      // Below the bar, above the stage's real bottom padding (which includes the safe-area inset, so the
+      // panel never reaches under a home indicator), less the panel's own shadow.
+      const padB = parseFloat(getComputedStyle(this.#root).paddingBottom) || 12; // the root IS .story-stage
+      this.#root.style.setProperty('--dlg-max', `${Math.max(120, Math.floor(window.innerHeight - main.getBoundingClientRect().top - padB - 14))}px`);
+    }
     const body = this.q<HTMLElement>('.dialogue-body');
     if (body) {
-      const scrolls = body.scrollHeight > body.clientHeight + 2;
+      // Only a body held at its max-height can scroll. Mid-reveal the text briefly overhangs a body that is
+      // still free to grow (no real scroll), and that once left a stale focus stop on short lines.
+      const max = parseFloat(getComputedStyle(body).maxHeight);
+      const capped = !Number.isFinite(max) || body.offsetHeight >= max - 2;
+      const scrolls = capped && body.scrollHeight > body.clientHeight + 2;
       body.toggleAttribute('tabindex', scrolls);
       if (scrolls) body.setAttribute('tabindex', '0');
       body.setAttribute('role', 'region');
@@ -598,6 +607,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
         replay: !!o.replay,
         host,
         faces: tableFaces(HANDS[sceneId]!.seatNames),
+        env: STAGING[sceneId].handEnv ?? undefined,
         onSnapshot: (h) => {
           if (!o.replay && outcome === null) persist({ ...p, sceneId, part: 'hand', index: 0, hand: h });
         },

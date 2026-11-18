@@ -24,7 +24,6 @@ export const RUNTIME_ASSET_URLS = {
   'env.cave-waterfall': new URL('../../assets/generated/web/cave-waterfall.webp', import.meta.url).href,
   // Story chapter backdrops: warmed only when their scene is next (src/story/staging.ts).
   'env.back-alley': new URL('../../assets/generated/web/back-alley.webp', import.meta.url).href,
-  'env.resort-patio': new URL('../../assets/generated/web/resort-patio.webp', import.meta.url).href,
   'env.moonlit-promenade': new URL('../../assets/generated/web/moonlit-promenade.webp', import.meta.url).href,
   'env.jungle-camp': new URL('../../assets/generated/web/jungle-camp.webp', import.meta.url).href,
   'env.executive-terrace': new URL('../../assets/generated/web/executive-terrace.webp', import.meta.url).href,
@@ -46,7 +45,6 @@ export const PORTRAIT_URLS = {
   'env.neighborhood-patio@portrait': new URL('../../assets/generated/web/neighborhood-patio-portrait.webp', import.meta.url).href,
   'env.cave-waterfall@portrait': new URL('../../assets/generated/web/cave-waterfall-portrait.webp', import.meta.url).href,
   'env.back-alley@portrait': new URL('../../assets/generated/web/back-alley-portrait.webp', import.meta.url).href,
-  'env.resort-patio@portrait': new URL('../../assets/generated/web/resort-patio-portrait.webp', import.meta.url).href,
   'env.moonlit-promenade@portrait': new URL('../../assets/generated/web/moonlit-promenade-portrait.webp', import.meta.url).href,
   'env.jungle-camp@portrait': new URL('../../assets/generated/web/jungle-camp-portrait.webp', import.meta.url).href,
   'env.executive-terrace@portrait': new URL('../../assets/generated/web/executive-terrace-portrait.webp', import.meta.url).href,

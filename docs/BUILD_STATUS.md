@@ -1377,10 +1377,10 @@ audio manager. No new manager.
 | Command | Result |
 | --- | --- |
 | `npm run story:e2e` | pass. § G now checks one figure: at most one on stage, none for captions and narration, Roberto only while he speaks, face clear of the panel and the scene bar, nothing into the controls, ≤ 1.6× upscale (10 moments × portrait/landscape). New § K: Rafa → Roberto is never two figures; fade out, then in, after 184 ms; reduced motion swaps instantly; Roberto's box identical on his next line |
-| `npm run check` | run together with the expressions stage below (one suite for both) |
-| `npm run e2e` | run together with the expressions stage below (one suite for both) |
-| `npm run qa` / `npm run a11y` | run together with the expressions stage below (one suite for both) |
-| `npm run perf:story` | run together with the expressions stage below (one suite for both) |
+| `npm run check` | not run at this commit; the combined run at the QA checkpoint (2026-11-18, below) passed on code that includes this stage |
+| `npm run e2e` | not run at this commit; the combined run at the QA checkpoint (2026-11-18, below) passed on code that includes this stage |
+| `npm run qa` / `npm run a11y` | not run at this commit; the combined run at the QA checkpoint (2026-11-18, below) passed on code that includes this stage |
+| `npm run perf:story` | not run at this commit; the combined run at the QA checkpoint (2026-11-18, below) passed on code that includes this stage |
 
 ### Known limitations
 - **Phones are limited by the art's resolution:** at DPR 3 most phones get about 194 px (Roberto) and
@@ -1452,11 +1452,11 @@ audio manager. No new manager.
 | Command | Result |
 | --- | --- |
 | `npm run assets:cast` | ✓ all four sheets; WebPs byte-identical; `cast.json` meanings updated |
-| `npm run check` | running at commit time; result recorded in the next commit |
-| `npm run story:e2e` | running at commit time; result recorded in the next commit |
-| `npm run e2e` | running at commit time; result recorded in the next commit |
-| `npm run qa` / `npm run a11y` | running at commit time; result recorded in the next commit |
-| `npm run perf:story` | running at commit time; result recorded in the next commit |
+| `npm run check` | not run at this commit; the combined run at the QA checkpoint (2026-11-18, below) passed on code that includes this stage |
+| `npm run story:e2e` | not run at this commit; the combined run at the QA checkpoint (2026-11-18, below) passed on code that includes this stage |
+| `npm run e2e` | not run at this commit; the combined run at the QA checkpoint (2026-11-18, below) passed on code that includes this stage |
+| `npm run qa` / `npm run a11y` | not run at this commit; the combined run at the QA checkpoint (2026-11-18, below) passed on code that includes this stage |
+| `npm run perf:story` | not run at this commit; the combined run at the QA checkpoint (2026-11-18, below) passed on code that includes this stage |
 
 ### Known limitations
 - **Readings are this build's, not the owner's:** the meanings come from visual inspection here. The
@@ -1537,10 +1537,10 @@ audio manager. No new manager.
 | Command | Result |
 | --- | --- |
 | `npm run story:e2e` | pass (§ G, I, K, L) |
-| `npm run check` | running at commit time; result recorded in the next commit |
-| `npm run e2e` | DLG_E2E |
-| `npm run qa` / `npm run a11y` | running at commit time; result recorded in the next commit |
-| `npm run perf:story` / `npm run pwa` / `npm run audio` | running at commit time; result recorded in the next commit |
+| `npm run check` | not run at this commit; the combined run at the QA checkpoint (2026-11-18, below) passed on code that includes this stage |
+| `npm run e2e` | not run at this commit; the combined run at the QA checkpoint (2026-11-18, below) passed on code that includes this stage |
+| `npm run qa` / `npm run a11y` | not run at this commit; the combined run at the QA checkpoint (2026-11-18, below) passed on code that includes this stage |
+| `npm run perf:story` / `npm run pwa` / `npm run audio` | not run at this commit; the combined run at the QA checkpoint (2026-11-18, below) passed on code that includes this stage |
 
 ### Known limitations
 - **Transcript conflict:** the script document's production notes (`docs/STORY_SCRIPT.md`) list a
@@ -1550,6 +1550,121 @@ audio manager. No new manager.
 - **Last-resort scrolling:** at the largest text on the smallest screens, the longest lines scroll
   inside the panel. That is readable but needs a scroll.
 - Only Chromium; no real devices.
+
+## Resort backdrop correction (2026-11-18)
+
+Owner direction: the resort scenes use the approved **corporate** resort art instead of the leisure resort.
+
+**What changed:**
+- **Art (inspected first):** `environments/Sleek Puerto Rican Executive Resort Terrace.png` (`env.executive-terrace`)
+  shows a glass-fronted lobby, a flat canopy, a hotel tower and a stone plaza, with the sea beyond. Corporate.
+  `Puerto Rico Resort Patio by the Sea.png` (umbrellas, loungers) stays in `assets/art/` untouched, but is
+  retired: manifest note, no derivative, no URL, not bundled.
+- **Chapter 3:** its establishing shot, every dialogue beat and its partnership hand use the terrace.
+- **Chapter 7:** the executive confrontation and its hand use the terrace too.
+- **Hand backdrops:**
+  - `STAGING.handEnv` now drives the table's backdrop, through `setEnvBackdrop` (`src/assets/env.ts`) on the
+    story table host.
+  - Previously every story hand showed the menu's patio.
+  - Rotation re-picks each element's own place (`data-env-id`), so it can no longer swap the terrace for the patio.
+- **Unchanged:** the patio (Chapters 1–2, the epilogue, Quick Play), alley, promenade, jungle and cave.
+  Chapter 6's rest-area hand keeps the patio.
+- **Focal point:** x = 0.27 (the lobby and tower).
+  - Landscape is positioned at 27% 50%.
+  - The portrait 3:4 crop is re-derived (x = 98, 96 KB).
+  - The full-frame WebP is byte-identical.
+- **Preload and offline:** `SCENE_IMAGES` and `check-dist`'s chapter map now name the terrace for Chapter 3.
+  - `check-dist` refuses any `resort-patio` file.
+  - The service worker already prunes every file a new build doesn't list.
+  - `npm run pwa` now proves it by planting an old `resort-patio` file in the story cache before an update.
+- **Script:** the script's own location line for Chapter 3 is unchanged (the script is authoritative). Only
+  the art changed.
+
+**Inspected:**
+- Chapter 3 (opening, mid-scene, hand, after the hand) and Chapter 7 (opening, hand) at 390×844 and 844×390.
+- The hands again after rotating mid-hand.
+- Offline Chapter 3 after the whole-story download.
+- No request for `resort-patio` anywhere.
+
+**Tests added:**
+- story § G: Chapters 3 and 7 must be the terrace.
+- story § M: both hands are over the terrace in portrait, in landscape and after rotating back, with no
+  patio behind them and no `resort-patio` request.
+- pwa: offline Chapter 3 shows the terrace, and the update prunes old resort art.
+- check-dist: the retired-file guard.
+
+Budgets: story images 1,410 / 1,600 KB, largest chapter (Ch. 3) 848 / 1,000 KB, startup 940 / 960 KB. All
+results are in the QA checkpoint table below (one run covers both).
+
+## QA checkpoint: Story presentation, resort backgrounds, regressions (2026-11-18)
+
+QA of the last four checkpoints (single-speaker sprites, verified expressions, Continue-only dialogue,
+corporate resort backgrounds), plus regressions.
+
+**New: `npm run story:sweep`** (`scripts/story-sweep.ts`) walks every Story beat in the real UI and checks
+each one.
+- **Coverage:** 1,485 beats.
+  - 701 at 390×844: all 9 scenes plus every win / loss / tie route.
+  - 112 at each of 360×800, 390×844, 667×375, 844×390, 768×1024, 1024×768 and 1366×768: Chapters 3 and 7.
+- **Script fidelity:** verbatim script text and captions; the tagged expression and the verified cast frame.
+- **Staging:** at most one figure (the speaker), in a settled box identical every time that speaker appears;
+  the corporate terrace for Chapters 3 and 7.
+- **Dialogue controls:** Continue as the only action, on screen and focused; one beat per Continue; no
+  overflow.
+
+**Defects found and fixed:**
+1. **Stale focus stop:** the dialogue text kept `tabindex=0` on short lines (found by `npm run a11y`). It had
+   been measured mid-reveal while still free to grow. Now it is a focus stop only when held at its max-height
+   and really scrolling.
+2. **Safe area:** the panel's height limit ignored a bottom safe-area inset. It now subtracts the stage's real
+   bottom padding, which includes `env(safe-area-inset-bottom)`; layout is identical without an inset.
+3. **Corporate hands:** the Chapter 3 and 7 hands weren't on the corporate terrace, and rotation reverted
+   backdrops to the patio (resort section above).
+4. **Two test races, not app defects:**
+   - pwa "scene up": the dialogue panel is permanent markup now, so it waits for the line's position.
+   - story § I: the restored AI may legitimately answer before the read, so it now checks the hand number,
+     the player's tiles and the public log as a prefix (a re-deal or lost move still fails).
+- **Sweep timing (not a defect):** the sweep's first run measured a 1–2 px box difference mid-entrance (the
+  designed 240 ms rise). Settled boxes are identical, and the sweep now waits for figure transitions to finish.
+
+**Already covered and re-run here:**
+- **story:e2e:**
+  - rapid input: 25 taps, 6-tap bursts, key repeat;
+  - scene cancellation: 6 rapid case-file round trips, one live director;
+  - rotation mid-scene; refresh mid-dialogue, mid-hand, on results and on the end card;
+  - missing images (drawn fallback), background during the entrance, reduced motion;
+  - one-speaker fades; the longest line at 130 % text on 667×375.
+- **pwa:** offline per chapter and the whole story; update mid-match, mid-dialogue and mid-hand; storage
+  refusing the update-time write; repair.
+- **audio:** background/foreground, no ghost cues after beat, skip, card, scene or reset.
+- **perf:story:** 8 chapter visits with no growth in nodes, listeners, timers, workers, audio sources or media.
+- **e2e:** Quick Play and pass-and-play privacy.
+- **matches:** fair AI and scoring in full matches of every arrangement.
+- **Unit tests:** saves, settings migrations, 100 achievements, expression anchors.
+
+### Commands run and results (Chromium, this checkpoint's code)
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | pass: typecheck, lint, 468 unit tests, assets verified, build and budgets (code 314 / 320 KB, startup 940 / 960 KB, total 14,683 / 15,400 KB) |
+| `npm run story:sweep` | pass: 1,485 beats (above) |
+| `npm run story:e2e` | pass: § A–M, including the new § M (corporate hands) |
+| `npm run pwa` | pass, after the test-race fix: offline Chapter 3 on the terrace; old resort art pruned on update |
+| `npm run a11y` | pass, after the focus-stop fix |
+| `npm run e2e` | pass: full games (solo, AI partnership, two humans), pass-and-play privacy covers, save/resume, 400 rapid taps (≤ 1 table / track / dialog) |
+| `npm run qa` | pass: 0 failures over 8 viewports (including `story-cast` and `story-long` on the terrace and in the jungle); atlas bleed clean at DPR 1/2/3; 150 % / 200 % text; 1 comfort warning kept on purpose (667×375 longest-chain end slots 62×40) |
+| `npm run perf:story` | pass (D: nodes 303→303, listeners 58→58, timers, workers and media flat) |
+| `npm run audio` | pass |
+| `npm run matches` | pass: every arrangement completed full matches |
+| `npm run smoke` | pass: subpath load, offline-ready, one hand vs the computer, offline restart, clean console |
+
+### Known limitations
+- **Chromium emulation only.** Firefox, WebKit/iOS Safari, Android Chrome, real safe-area insets, real
+  screen readers and listening on real speakers were **not tested**.
+- **Figure size is limited by the art's resolution.** On DPR-2 tablets and desktops the figures sit at their
+  ≤ 1.6× cap, so they look modest in a large scene.
+- **Transcript conflict:** still open for the owner (see the dialogue controls stage).
+- **Expression readings are this build's,** by visual inspection, for the owner to confirm.
 
 ## Next stage
 

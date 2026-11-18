@@ -62,24 +62,6 @@
    "alphaExact": true
   },
   {
-   "id": "env.resort-patio",
-   "of": "env.resort-patio",
-   "path": "assets/generated/web/resort-patio.webp",
-   "format": "webp",
-   "encoder": "q80 alphaQuality100 smartSubsample",
-   "width": 1672,
-   "height": 941,
-   "bytes": 290430,
-   "sha256": "39ccfda4b03bf63e05f68ca77c3890e6f9d02b72fb27c887735d616ace38660c",
-   "sourceBytes": 2924393,
-   "sourceSha256": "4bc5873a103301f87ba0dd73240a078acb6d9fd6a00e575bc030090b3a7785e2",
-   "maxMeanErr": 6,
-   "meanErr": 5.9,
-   "edgeP99": 0,
-   "edgePixels": 0,
-   "alphaExact": true
-  },
-  {
    "id": "env.moonlit-promenade",
    "of": "env.moonlit-promenade",
    "path": "assets/generated/web/moonlit-promenade.webp",
@@ -306,30 +288,6 @@
    "meanErr": 4.84
   },
   {
-   "id": "env.resort-patio@portrait",
-   "of": "env.resort-patio",
-   "path": "assets/generated/web/resort-patio-portrait.webp",
-   "format": "webp",
-   "encoder": "q80 smartSubsample",
-   "crop": {
-    "x": 483,
-    "y": 0,
-    "w": 706,
-    "h": 941
-   },
-   "focus": {
-    "x": 0.5,
-    "y": 0.5
-   },
-   "width": 706,
-   "height": 941,
-   "bytes": 88678,
-   "sha256": "65d6d45908ed1113b9589d6913b72008aa1f31c2b6359c5eb7b251e1c5103973",
-   "sourceSha256": "4bc5873a103301f87ba0dd73240a078acb6d9fd6a00e575bc030090b3a7785e2",
-   "maxMeanErr": 6,
-   "meanErr": 5.06
-  },
-  {
    "id": "env.moonlit-promenade@portrait",
    "of": "env.moonlit-promenade",
    "path": "assets/generated/web/moonlit-promenade-portrait.webp",
@@ -384,22 +342,22 @@
    "format": "webp",
    "encoder": "q80 smartSubsample",
    "crop": {
-    "x": 483,
+    "x": 98,
     "y": 0,
     "w": 706,
     "h": 941
    },
    "focus": {
-    "x": 0.5,
+    "x": 0.5006,
     "y": 0.5
    },
    "width": 706,
    "height": 941,
-   "bytes": 75346,
-   "sha256": "1e17898669e848ab4936e4799c0710af37d23f6c3d34c7949364059a05e28f60",
+   "bytes": 98616,
+   "sha256": "928121eec665e7ecc3e2c857e47a525a1a11ce3918d335f82751949c86c86114",
    "sourceSha256": "ef862bdfed3c129277ac39312f681d91f0daf4ec3357bed6fc49f3435ad6e70d",
    "maxMeanErr": 6,
-   "meanErr": 4.47
+   "meanErr": 4.89
   }
  ]
 }

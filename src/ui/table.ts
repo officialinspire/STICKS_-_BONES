@@ -4,8 +4,8 @@
  * controller intents. On a shared device, hands are never in the DOM unless
  * the controller is in 'human-turn' for that human.
  */
-import { assetUrl, urlFor } from '../assets';
-import { envKey } from '../assets/env';
+import { assetUrl, type RuntimeAssetId } from '../assets';
+import { setEnvBackdrop } from '../assets/env';
 import { warm } from '../assets/warm';
 import { layoutChain, type BoardLayout, type EndSlot } from '../board/layout';
 import type { GameEvent } from '../engine/events';
@@ -39,7 +39,12 @@ export interface TableCallbacks {
   /** A new app version is waiting (PWA). `apply` saves, hides every hand and reloads. */
   readonly update?: { ready(): boolean; apply(): void };
   /** Story hand (NO REST FOR COUSIN): one hand only; the results sheet continues the case instead of dealing again. */
-  readonly story?: { onContinue(): void; faces?: Readonly<Partial<Record<number, string>>> };
+  readonly story?: {
+    onContinue(): void;
+    faces?: Readonly<Partial<Record<number, string>>>;
+    /** The scene's backdrop for this hand (Chapters 3 and 7: the corporate terrace); omitted: the patio. */
+    env?: RuntimeAssetId;
+  };
   /** The player used a table tool (sort, zoom): exploration achievements. Presentation only. */
   explore?(what: 'sort' | 'zoom'): void;
 }
@@ -223,9 +228,9 @@ export class TableScreen {
     this.#q('announce').textContent = [this.#quip, this.#message].filter(Boolean).join(' ');
     this.#root.classList.toggle('reduce-motion', this.#reduce());
     this.#s.setThinkingSpeed(AI_SPEED_FACTOR[this.#cb.settings.get().aiSpeed]);
-    const env = urlFor(envKey('env.neighborhood-patio')); // the 3:4 crop on portrait screens
+    // The 3:4 crop on portrait screens; a story hand may name its own scene (never inferred from art).
+    setEnvBackdrop(r, this.#cb.story?.env ?? 'env.neighborhood-patio');
     const table = assetUrl('table.weathered');
-    if (env) r.style.setProperty('--env-image', `url("${env}")`);
     if (table) r.style.setProperty('--table-image', `url("${table}")`);
     this.render();
   }

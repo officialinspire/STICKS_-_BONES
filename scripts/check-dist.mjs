@@ -83,7 +83,7 @@ const startupKB = code + fontsKB + sumKB(coreImages.filter((f) => /neighborhood-
 const CHAPTER_IMAGES = {
   'chapter-1': ['neighborhood-patio', 'rafa', 'marisol'],
   'chapter-2': ['back-alley', 'marisol', 'vale'],
-  'chapter-3': ['resort-patio', 'vale', 'marisol', 'rafa'],
+  'chapter-3': ['executive-terrace', 'vale', 'marisol', 'rafa'],
   'chapter-4': ['moonlit-promenade', 'rafa', 'marisol'],
   'chapter-5': ['jungle-camp', 'luz', 'marisol'],
   'chapter-6': ['cave-waterfall', 'marisol', 'luz'],
@@ -120,6 +120,9 @@ const budgetLines = [
   gate('total', bytes / KB, BUDGET.totalKB),
 ];
 if (images.some((f) => /\.png$/.test(f))) errors.push(`a PNG original was bundled (${images.filter((f) => /\.png$/.test(f)).map(rel).join(', ')}) — serve the WebP derivative`);
+// Retired by owner direction (the resort scenes use the corporate executive terrace): never bundled again.
+const RETIRED = /(^|\/)resort-patio[-.]/;
+if (files.some((f) => RETIRED.test(rel(f)))) errors.push(`a retired backdrop was bundled (${files.filter((f) => RETIRED.test(rel(f))).map(rel).join(', ')})`);
 for (const o of over) errors.push(`over budget: ${o}`);
 if (errors.length) {
   console.error('dist check failed:\n  ' + errors.join('\n  '));

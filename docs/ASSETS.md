@@ -43,7 +43,7 @@ count, SHA-256, dimension, alpha flag or frame rectangle drifts, if an image und
 | `table.worn` | variant | `tables/Worn wood tabletop with cream-teal border.png` | 1,583,657 | 1254×1254 | RGBA | `aabc8b425498…` |
 | `env.neighborhood-patio` | runtime | `environments/Shaded Puerto Rican Neighborhood Patio.png` | 2,754,726 | 1672×941 | RGB | `31966bdf144a…` |
 | `env.back-alley` | variant | `environments/Sunlit San Juan Back Alley.png` | 2,832,333 | 1672×941 | RGB | `c7d502f6a0a1…` |
-| `env.resort-patio` | variant | `environments/Puerto Rico Resort Patio by the Sea.png` | 2,924,393 | 1672×941 | RGB | `4bc5873a1033…` |
+| `env.resort-patio` | variant (retired from the Story, not bundled) | `environments/Puerto Rico Resort Patio by the Sea.png` | 2,924,393 | 1672×941 | RGB | `4bc5873a1033…` |
 | `env.executive-terrace` | variant | `environments/Sleek Puerto Rican Executive Resort Terrace.png` | 2,576,870 | 1672×941 | RGB | `ef862bdfed3c…` |
 | `env.moonlit-promenade` | variant | `environments/Moonlit Puerto Rican Beachfront Promenade.png` | 2,493,674 | 1672×941 | RGB | `fd3231aad8c7…` |
 | `env.jungle-camp` | variant | `environments/Puerto Rican Jungle Camp Clearing.png` | 3,342,573 | 1672×941 | RGB | `2ff66fe10f71…` |
@@ -469,7 +469,7 @@ correct (nothing at runtime depends on it):
 | Marisol Vélez | e1 composed, slight smile · e2 wry half-smile · e3 worried, brows raised · e4 determined, set jaw · e5 pained, brows tilted · e6 warm smile · e7 suspicious frown · e8 broad smile |
 | Tío Rafa | e1 calm, looking off · e2 laughing · e3 sly grin · e4 looking up, wistful · e5 sad, brows tilted · e6 downcast, eyes lowered · e7 proud, chin up · e8 broad smile |
 
-### Portrait crops of the seven environments
+### Portrait crops of the environments
 
 Each environment now has a 3:4 crop centred on its focal point (`src/assets/focal.ts`, the single source for
 the staging positions too — tested). Viewports no wider than 3:4 load the crop instead of the full frame:
@@ -480,10 +480,36 @@ the same visible area under `background-size: cover`, far fewer bytes. Rotation 
 | `env.neighborhood-patio` | 229 KB | 90 KB | x = 483 (focal 50.0% inside the crop) | 4.38 |
 | `env.cave-waterfall` | 285 KB | 93 KB | x = 483 (focal 50.0% inside the crop) | 4.9 |
 | `env.back-alley` | 236 KB | 96 KB | x = 399 (focal 50.1% inside the crop) | 4.84 |
-| `env.resort-patio` | 284 KB | 87 KB | x = 483 (focal 50.0% inside the crop) | 5.06 |
 | `env.moonlit-promenade` | 191 KB | 50 KB | x = 483 (focal 50.0% inside the crop) | 3.68 |
 | `env.jungle-camp` | 428 KB | 182 KB | x = 483 (focal 50.0% inside the crop) | 5.42 |
-| `env.executive-terrace` | 209 KB | 74 KB | x = 483 (focal 50.0% inside the crop) | 4.47 |
+| `env.executive-terrace` | 209 KB | 96 KB | x = 98 (focal x = 0.27: the glass lobby, canopy and tower; 50.1% inside the crop) | 4.89 |
+
+`env.resort-patio` (a leisure patio by the sea) had a crop here until the resort correction below; it is
+no longer derived or bundled.
+
+### Resort backdrop correction (owner direction)
+
+The resort scenes now use the approved **corporate** resort art, not the leisure patio.
+- **Source:** `environments/Sleek Puerto Rican Executive Resort Terrace.png` (`env.executive-terrace`, 1672×941,
+  SHA `ef862bdfed3c…`, unchanged).
+- **Inspection:** a glass-fronted modern lobby under a flat canopy (left), a multi-storey hotel tower, a
+  stone-paved plaza with planters, and the sea beyond the terrace edge. It reads as Vale's executive world.
+  `Puerto Rico Resort Patio by the Sea.png` (thatched umbrellas, loungers, pool deck) reads as leisure; it
+  stays in `assets/art/` as supplied, but is retired from the Story (manifest status `variant`, with a note).
+- **Where it is used:** Chapter 3's establishing shot, every Chapter 3 dialogue beat and its partnership hand,
+  plus Chapter 7's executive confrontation and its hand. `STAGING` gives both scenes `env` and `handEnv` =
+  `env.executive-terrace`. The table host takes the hand's backdrop from `setEnvBackdrop`
+  (`src/assets/env.ts`), which records `data-env-id` so a rotation re-picks the same place. The patio
+  (Chapters 1–2, the epilogue, Quick Play), back alley, promenade, jungle and cave are unchanged; Chapter 6's
+  rest-area hand keeps the patio as before.
+- **Focal point:** `x = 0.27` (was 0.5, which in portrait kept the open sea and cut away both façades).
+  - Landscape: positioned at `27% 50%`.
+  - Portrait: the 3:4 crop is re-derived at x = 98 (96 KB) and shows the lobby, canopy and tower.
+  - The full-frame WebP is byte-identical to before.
+- **Removed:** `resort-patio.webp` and `resort-patio-portrait.webp` from `assets/generated/web/`, their URLs,
+  the derive entry and the focal entry.
+  - `check-dist` refuses any `resort-patio` file in a build.
+  - `npm run pwa` plants an old `resort-patio` file in the story cache and checks that the update prunes it.
 
 ### Cousin's portrait sheet: cleaned derivative (character framing stage)
 

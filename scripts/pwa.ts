@@ -462,7 +462,8 @@ try {
     await page.click('[data-act="story"]');
     await page.locator('.story-shell').first().waitFor({ timeout: 30_000 });
   };
-  const sceneUp = (page: Page) => page.waitForFunction(() => Boolean(document.querySelector('.st-curtain:not(.is-closed)') && document.querySelector('.dialogue-panel')), null, { timeout: 30_000 }).then((h: { dispose(): Promise<void> }) => h.dispose());
+  // The dialogue panel is permanent markup, so "up" means the curtain is open AND a line is placed (its position shown).
+  const sceneUp = (page: Page) => page.waitForFunction(() => Boolean(document.querySelector('.st-curtain:not(.is-closed)') && document.querySelector('.cine-pos')?.textContent?.trim()), null, { timeout: 30_000 }).then((h: { dispose(): Promise<void> }) => h.dispose());
   {
     const { ctx, page } = await newContext();
     state.site = SITE_A;
@@ -589,12 +590,14 @@ try {
       await sceneUp(page);
       const env = await page.evaluate(() => document.querySelector('.st-bg.is-front')?.getAttribute('data-env'));
       check(!!env && env !== 'none', `whole story offline: ${sc} opened without its backdrop`);
+      // The resort chapter is the corporate terrace offline too (the retired leisure patio is in no build).
+      if (sc === 'chapter-3') check(env === 'env.executive-terrace', `whole story offline: chapter 3 opened over ${env}, not the corporate terrace`);
       await page.click('[data-act="story-file"]');
       await page.click('[data-act="story-home"]');
     }
     await goOffline(ctx, false);
     check((errorsOf.get(page) ?? []).length === 0, `story download: page errors ${errorsOf.get(page)!.join(' | ')}`);
-    notes.push(`whole-story download: button "${label.trim()}"; with 2 files cut mid-transfer → "${(partial.urls.length)} saved, interrupted, Retry"; no truncated file stored; Retry → "${line}" (${full.urls.length} files, ${(full.bytes / 1048576).toFixed(2)} MB = build total); progress bar shown; choice remembered and restored by Repair; offline, Chapters 3 and 6 opened with their art`);
+    notes.push(`whole-story download: button "${label.trim()}"; with 2 files cut mid-transfer → "${(partial.urls.length)} saved, interrupted, Retry"; no truncated file stored; Retry → "${line}" (${full.urls.length} files, ${(full.bytes / 1048576).toFixed(2)} MB = build total); progress bar shown; choice remembered and restored by Repair; offline, Chapters 3 (the corporate terrace) and 6 opened with their art`);
     await ctx.close();
   }
 
@@ -685,6 +688,10 @@ try {
     await page.waitForTimeout(600);
     const pos = await page.evaluate(() => document.querySelector('.cine-pos')?.textContent);
     const progBefore = await page.evaluate(() => localStorage.getItem('sticks-and-bones.story'));
+    // An older build's retired backdrop left in the story cache must not survive the update (activation prunes
+    // every file the new build doesn't list), so it can never flash during a later transition.
+    const staleArt = `${ORIGIN}${APP}assets/resort-patio-portrait-0ld.webp`;
+    await page.evaluate(async (u: string) => (await caches.open('inspire:sticks-and-bones:story:v1')).put(u, new Response('old art', { headers: { 'Content-Type': 'image/webp' } })), staleArt);
     state.site = SITE_B;
     await page.evaluate(async () => (await navigator.serviceWorker.getRegistration())!.update());
     // The scene bar offers the update in the middle of the dialogue.
@@ -697,6 +704,8 @@ try {
     await sceneUp(page);
     const after = await page.evaluate(() => ({ pos: document.querySelector('.cine-pos')?.textContent, scene: document.querySelector('.story-stage')?.getAttribute('data-scene'), build: document.documentElement.dataset.build }));
     check(after.scene === 'chapter-1' && after.pos === pos && after.build === 'b', `update mid-dialogue: returned to ${JSON.stringify(after)}, expected chapter-1 at ${pos}`);
+    const leftover = (await cacheReport(page)).flatMap((c) => c.urls).filter((u) => /resort-patio/.test(u));
+    check(leftover.length === 0, `update mid-dialogue: the old resort backdrop stayed cached after the update (${leftover.join(', ')})`);
     // Once: a plain reload goes to the menu as usual.
     await page.reload();
     await enterMenu(page);

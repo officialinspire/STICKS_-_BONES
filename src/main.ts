@@ -10,8 +10,8 @@ import type { ReadStatus } from './app/storage';
 import type { ModeId, SeatIndex } from './engine/types';
 import { initTileArt, setForceSvg } from './render/tile-art';
 import { deferredAssets, warm, warmWithRetry } from './assets/warm';
-import { envKey, onViewportShape } from './assets/env';
-import { urlFor } from './assets';
+import { envKey, onViewportShape, setEnvBackdrop } from './assets/env';
+import { urlFor, type RuntimeAssetId } from './assets';
 import { MUSIC } from './assets/audio-manifest';
 import { introVideoUrl, musicUrl } from './assets/media-urls';
 import { AudioManager, type Scene, type SfxId } from './audio/manager';
@@ -78,13 +78,14 @@ const regesture = () => {
 document.addEventListener('pointerdown', regesture, { capture: true, passive: true });
 document.addEventListener('keydown', regesture, { capture: true });
 document.addEventListener('visibilitychange', () => audio.setHidden(document.hidden));
-// Rotation / split screen: the menu and table backdrops swap between the patio's 3:4 crop and full frame.
-// One app-wide listener (never per screen), so nothing accumulates across visits.
+// Rotation / split screen: the menu and table backdrops swap between their scene's 3:4 crop and full frame.
+// Each element keeps the place it shows (data-env-id: the patio, or a story hand's own scene), so a
+// rotation never swaps the corporate terrace for the patio. One app-wide listener (never per screen).
 onViewportShape(() => {
-  const u = urlFor(envKey('env.neighborhood-patio'));
-  if (!u) return;
-  void warm([envKey('env.neighborhood-patio')], { front: true }).then(() => {
-    for (const el of document.querySelectorAll<HTMLElement>('[style*="--env-image"]')) el.style.setProperty('--env-image', `url("${u}")`);
+  const els = [...document.querySelectorAll<HTMLElement>('[style*="--env-image"]')];
+  const ids = [...new Set(els.map((el) => (el.dataset.envId ?? 'env.neighborhood-patio') as RuntimeAssetId))];
+  void warm(ids.map((id) => envKey(id)), { front: true }).then(() => {
+    for (const el of els) setEnvBackdrop(el, (el.dataset.envId ?? 'env.neighborhood-patio') as RuntimeAssetId);
   });
 });
 window.addEventListener('pagehide', () => audio.setHidden(true));
@@ -406,7 +407,7 @@ function openStory(): void {
         settings: storySettingsApi,
         audio: audioApi,
         update: tableUpdate,
-        story: { onContinue: () => req.onContinue(), faces: req.faces },
+        story: { onContinue: () => req.onContinue(), faces: req.faces, env: req.env },
         explore: (w) => achievements.note(`explore.${w}`),
       });
       const playerTeam = session.rules.teams.findIndex((t) => t.includes(0));

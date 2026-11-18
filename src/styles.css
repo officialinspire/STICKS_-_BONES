@@ -2546,7 +2546,10 @@ h1, h2, h3, .title, .chapter-title, .section-h, .score-val, .dest-title, .points
 .seat-face { display: inline-block; width: 30px; height: 30px; border-radius: 8px; border: 2px solid rgba(255, 242, 216, 0.55); background-color: rgba(20, 37, 43, 0.6); background-repeat: no-repeat; vertical-align: middle; margin-right: 6px; flex: 0 0 auto; }
 .seats-2 .seat-face { width: 44px; height: 44px; border-radius: 10px; }
 .opp-head:has(.seat-face) { display: flex; align-items: center; flex-wrap: wrap; gap: 0 4px; }
-#app.is-story.is-table { background: linear-gradient(180deg, rgba(8, 63, 67, 0.55), rgba(20, 37, 43, 0.85)), var(--env-image) center / cover no-repeat, var(--sb-ink); }
+#app.is-story.is-table { background: var(--sb-ink); }
+/* A story hand's backdrop is the table host's own (--env-image / --env-pos from setEnvBackdrop: the scene's
+   place for Chapters 3 and 7, the patio otherwise), so the menu's patio can never show behind it. */
+.story-table-host:not([hidden]) { background: linear-gradient(180deg, rgba(8, 63, 67, 0.55), rgba(20, 37, 43, 0.85)), var(--env-image, none) var(--env-pos, center) / cover no-repeat, var(--sb-ink); }
 @media (prefers-reduced-motion: reduce) {
   .st-backdrop[data-move] { animation: none; }
   .st-threshold.is-pulse { animation: none; }

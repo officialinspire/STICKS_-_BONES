@@ -34,7 +34,6 @@ export const DERIVE: Record<string, { file: string; lossless?: boolean; quality?
   'env.cave-waterfall': { file: 'cave-waterfall.webp', quality: 80, maxMeanErr: 6 },
   // Story chapter backdrops (loaded only when their scene is next; never at startup).
   'env.back-alley': { file: 'back-alley.webp', quality: 80, maxMeanErr: 6 },
-  'env.resort-patio': { file: 'resort-patio.webp', quality: 80, maxMeanErr: 6 },
   'env.moonlit-promenade': { file: 'moonlit-promenade.webp', quality: 80, maxMeanErr: 6 },
   'env.jungle-camp': { file: 'jungle-camp.webp', quality: 84, maxMeanErr: 6 }, // dense foliage: q80 measured 6.05 mean error
   'env.executive-terrace': { file: 'executive-terrace.webp', quality: 80, maxMeanErr: 6 },

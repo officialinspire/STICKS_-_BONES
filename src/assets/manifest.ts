@@ -302,7 +302,7 @@ export const IMAGE_ASSETS = [
   {
     id: "env.resort-patio",
     category: "environment",
-    status: "runtime",
+    status: "variant",
     path: "assets/art/environments/Puerto Rico Resort Patio by the Sea.png",
     originalName: "Puerto Rico Resort Patio by the Sea.png",
     bytes: 2924393,
@@ -310,7 +310,7 @@ export const IMAGE_ASSETS = [
     width: 1672,
     height: 941,
     hasAlpha: false,
-    proposedUse: "Selectable table setting."
+    proposedUse: "Leisure resort patio by the sea. Retired from the Story by owner direction: the resort scenes (Chapter 3) use the corporate env.executive-terrace instead. Preserved as supplied; not bundled."
   },
   {
     id: "env.executive-terrace",

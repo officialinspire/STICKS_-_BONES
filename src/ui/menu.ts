@@ -3,8 +3,7 @@
  * selected mode's rules — visible before dealing), rules, and settings.
  * Dev tools appear only in development builds.
  */
-import { urlFor } from '../assets';
-import { envKey } from '../assets/env';
+import { setEnvBackdrop } from '../assets/env';
 import type { OpponentKind } from '../app/session';
 import type { Difficulty } from '../ai/types';
 import { DEFAULT_RULES_PRESET, type ModeId, type TargetScore } from '../engine';
@@ -129,8 +128,7 @@ let popInstalled = false;
 let pushed = false;
 
 export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: MenuHandlers): void {
-  const env = urlFor(envKey('env.neighborhood-patio')); // the 3:4 crop on portrait screens
-  if (env) root.style.setProperty('--env-image', `url("${env}")`);
+  setEnvBackdrop(root, 'env.neighborhood-patio'); // the 3:4 crop on portrait screens
   const screen = h.screen ?? 'home';
   const from = h.from;
   if (screen === 'rules' || screen === 'stats') h.onExplore?.(screen);

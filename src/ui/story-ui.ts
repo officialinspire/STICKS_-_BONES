@@ -20,6 +20,7 @@ import { renderStoryRun } from './story-player';
 import type { Outcome } from '../story/chapters';
 import { sceneAssets } from './story-assets';
 import { envKey } from '../assets/env';
+import type { RuntimeAssetId } from '../assets';
 import { wordmarkHtml } from './brand';
 import { esc } from './svg';
 import { confirmSheet } from './confirm';
@@ -90,6 +91,8 @@ export interface StoryHandRequest {
   readonly host: HTMLElement;
   /** Compact cast portraits by seat (CSS background for a square face crop); seats without art keep their badges. */
   readonly faces?: Readonly<Partial<Record<number, string>>>;
+  /** The hand's backdrop (STAGING handEnv); omitted: the table's usual patio. */
+  readonly env?: RuntimeAssetId;
   onSnapshot(h: StoryHand): void;
   /** The hand resolved (any result advances the story). */
   onResolved(winnerTeam: number | null, playerTeam: number): void;

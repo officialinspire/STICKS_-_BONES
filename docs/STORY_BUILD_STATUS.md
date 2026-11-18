@@ -73,7 +73,7 @@ v0.2, committed to `main` by the owner as 242ee60). The general project log stay
 | | Original music briefs: night-investigation bed, cave suspense bed, four stingers (`docs/MUSIC_BRIEFS.md`); no music generated | ✅ (briefs; music **missing**) |
 | **Integration stage: assets, loading, offline, analytics** | Re-audit: nothing new supplied on `main`; remaining final assets listed explicitly (`docs/ASSETS.md`), none relabelled as final | ✅ |
 | | Cast portraits (Vale, Luz, Marisol, Rafa) in dialogue: cleaned repacked derivatives (specks removed, colour fringes repaired, baselines/centres aligned), identity checked, scene assignments tested; all eight frames with meanings verified by inspection | ✅ |
-| | Portrait 3:4 crops for all seven environments from one focal table; chosen by viewport, re-picked on rotation; next chapter prefetched (bounded queue), decoded before reveal | ✅ |
+| | Portrait 3:4 crops for all seven environments (six since the resort correction) from one focal table; chosen by viewport, re-picked on rotation; next chapter prefetched (bounded queue), decoded before reveal | ✅ |
 | | Measured startup, chapter entry, decode cost, tap latency and memory; 8 repeated chapter visits: no growth in nodes, listeners, timers, workers, audio sources, media (`npm run perf:story`) | ✅ |
 | | Budgets revisited: core vs on-demand Story images, per-chapter limit; startup/code limits unchanged (manifest prose stripped from the bundle) | ✅ |
 | | Offline groups: shell + core at install; story per chapter or by explicit download (3.2 MB, progress, retry); optional audio (9.1 MB, disclosed, removable, byte ranges); quota/interruption/missing media/unavailable storage handled | ✅ |
@@ -86,6 +86,8 @@ v0.2, committed to `main` by the owner as 242ee60). The general project log stay
 | | Cousin's portrait derivative cleaned (specks/fringes); story stage no longer drawn under the table (fixed + regression check) | ✅ |
 | | Checked at 390×844, 844×390, 768×1024, 1366×768 (and QA's 8 viewports); faces clear of panel and bar; reduced motion | ✅ (emulation only) |
 | | Expressions in dialogue: verified frame meanings for all five characters, 311 lines tagged by stable id (`src/story/expressions.ts`), neutral fallback, same box for every expression | ✅ |
+| **Resort backdrop correction** | Chapter 3 (establishing shot, dialogue, partnership hand) and Chapter 7's confrontation and hand use the approved corporate `env.executive-terrace` (inspected; focal x = 0.27, portrait crop re-derived). The leisure `env.resort-patio` is retired (original kept, not bundled, pruned from caches on update). Script text unchanged | ✅ |
+| **QA checkpoint (2026-11-18)** | `npm run story:sweep`: 1,485 beats (all scenes and outcome routes at 390×844; Chapters 3 and 7 at seven viewports) with verbatim text, tagged expressions, verified frames, one settled figure, Continue only, one beat per tap, corporate terrace. Fixed a stale text focus stop and the panel limit's safe-area inset | ✅ (Chromium emulation) |
 | | Owner listening pass: SFX choices, bed seams (`/dev/audio-audition.html`), levels on headphones and speakers; mark `auditioned` / `final` | ☐ |
 | | Commissioned music (night bed, cave bed, stingers) and recorded domino foley | ☐ |
 | | Finish Hand with AI assistance, skip with recap, optional table banter in safe gaps | ☐ |
