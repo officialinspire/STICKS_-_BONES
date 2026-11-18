@@ -1,0 +1,727 @@
+/**
+ * The story scene player: a DOM StageView for the SceneDirector, and the run
+ * controller that walks prologue → chapters (pre → hand → outcome insert →
+ * continuation → notebook) → epilogue, saving progress at stable points.
+ *
+ * Layers (back to front): backdrop A/B (cross-faded only after the next image
+ * is decoded), light grade, threshold glow, water, boundary line, warmth
+ * vignette, Cousin's bust (HostView: same stage box for every expression, so
+ * swaps never jump or double-face) or the speaking cast member's portrait (a
+ * baseline-aligned cell of their cleaned sheet, shown only once decoded),
+ * dialogue, controls, curtain (the coherent
+ * colour scenes fade through). Every layer except the controls is
+ * pointer-events: none. Presentation never decides a hand.
+ */
+import { urlFor, type RuntimeAssetId } from '../assets';
+import { envKey, envPosition, onViewportShape } from '../assets/env';
+import { warm, warmState } from '../assets/warm';
+import { realScheduler } from '../app/session';
+import { HANDS, insertLines, outcomeFor, segments, type Outcome } from '../story/chapters';
+import { DEFAULT_TIMINGS, REDUCED_TIMINGS, SceneDirector, type DirectorState, type StageView } from '../story/director';
+import type { Block, Scene } from '../story/parse';
+import { newProgress, readStory, type Part, type SceneId, type StoryProgress } from '../story/progress';
+import { cuesFor, STAGING, type Cue, type Light, type Mood } from '../story/staging';
+import { STATE_CUES } from '../audio/manager';
+import { phaseEnd, phaseStart } from '../story/timing';
+import { castFrameFor, lineExpression, lineNumbers, robertoMood, type Character, type Expression } from '../story/expressions';
+import { dialogueSourceSize, HostView } from './host';
+import { chapterCardHtml, loadScript, renderStoryHome, save, speakerLabelHtml, speakerOf, storyGone, type StoryDeps } from './story-ui';
+import { bindLoadFailure } from './lazy';
+import { playerCaption } from '../story/captions';
+import { esc } from './svg';
+import { castFace, castFrame, CAST_BY_SEAT_NAME, regionStyle, sceneAssets, sceneCast, speakerKey } from './story-assets';
+
+interface Beat {
+  readonly block: Block;
+  readonly cues: readonly Cue[];
+}
+
+const SCENES_IN_ORDER: SceneId[] = ['prologue', 'chapter-1', 'chapter-2', 'chapter-3', 'chapter-4', 'chapter-5', 'chapter-6', 'chapter-7', 'epilogue'];
+const label = (s: Scene) => (s.number === null ? s.heading.split(' — ')[0]! : `Chapter ${s.number}`);
+
+/** Compact cast portraits for the table's seats during a story hand. */
+function tableFaces(names: Readonly<Partial<Record<number, string>>>): Partial<Record<number, string>> {
+  const out: Partial<Record<number, string>> = {};
+  for (const [seat, name] of Object.entries(names)) {
+    const id = name ? CAST_BY_SEAT_NAME[name] : undefined;
+    const f = id ? castFace(id) : null;
+    if (id && f) out[Number(seat)] = regionStyle(urlFor(id)!, f);
+  }
+  // Usually decoded already (the scene's cast is warmed on entry); a small chip may otherwise appear a moment later.
+  void warm(Object.values(names).flatMap((n) => (n && CAST_BY_SEAT_NAME[n] ? [CAST_BY_SEAT_NAME[n]!] : [])));
+  return out;
+}
+
+// ---- the DOM stage ------------------------------------------------------------------
+/** Who is on stage: Roberto, a cast sheet, or nobody. */
+type Figure = 'cousin' | RuntimeAssetId | null;
+const CHARACTER_OF: Readonly<Partial<Record<RuntimeAssetId, Exclude<Character, 'roberto'>>>> = {
+  'cast.vale.atlas': 'vale',
+  'cast.luz.atlas': 'luz',
+  'cast.marisol.atlas': 'marisol',
+  'cast.rafa.atlas': 'rafa',
+};
+/** Speaker change: the current figure fades out over this long, then the next fades in. */
+const FADE_OUT_MS = 160;
+
+class DomStage implements StageView<Beat> {
+  #root: HTMLElement;
+  #host: HostView | null = null;
+  #cousinIn = false;
+  #front: 'a' | 'b' = 'a';
+  #env: RuntimeAssetId | null = null;
+  #prepared = false;
+  /** Backdrop requested by cues replayed before prepare() (resume mid-scene): prepare honours it. */
+  #intent: { env: RuntimeAssetId | null; focus: string } | null = null;
+  #unshape: (() => void) | null = null;
+  /** Who should be on stage: the current speaker only ('cousin', a cast sheet id, or nobody). */
+  #want: Figure = null;
+  /** Who is on stage now (faded in). */
+  #shown: Figure = null;
+  /** The cast sheet loaded in the cast box, and the frame (expression) shown. */
+  #castLoaded: RuntimeAssetId | null = null;
+  #castFrameShown = '';
+  /** The frame the current cast line wants (verified mapping, src/story/expressions.ts). */
+  #castFrameWant = 'e1';
+  /** Roberto's mood as the stage directions last set it (unlisted lines keep it). */
+  #cueMood: Mood = 'neutral';
+  readonly #lineNo: (b: Block) => number | undefined;
+  #swap = 0;
+  #disposed = false;
+  #onResize = () => this.#layoutFigures();
+  /** The bar can wrap (title, position): the space left for dialogue follows it. */
+  #barRO: ResizeObserver | null = null;
+  constructor(
+    root: HTMLElement,
+    private readonly sceneId: SceneId,
+    private readonly reduce: () => boolean,
+    private readonly cue: (c: Cue) => void,
+    scene?: Scene,
+  ) {
+    this.#root = root;
+    this.#lineNo = scene ? lineNumbers(scene) : () => undefined;
+  }
+  q<T extends HTMLElement>(sel: string): T {
+    return this.#root.querySelector(sel) as T;
+  }
+  async prepare(scene?: Scene): Promise<boolean> {
+    const st = STAGING[this.sceneId];
+    if (!this.#intent) this.light(st.light);
+    const target = this.#intent ?? { env: st.env, focus: st.focus };
+    this.#prepared = true;
+    // Rotation / split screen: re-pick portrait crop vs full frame for the current backdrop (decoded first).
+    this.#unshape ??= onViewportShape(() => void this.#reshape());
+    // The speaking cast's portraits decode alongside (they never gate the reveal; a line shows its
+    // portrait only once decoded, otherwise just the name tag).
+    if (scene) void warm(sceneCast(scene), { front: true });
+    if (!target.env) {
+      this.#setBackdrop(null, target.focus, true);
+      return true;
+    }
+    // Decode BEFORE revealing: the curtain stays closed until the image is ready (or the director times out).
+    const [ok] = await warm([envKey(target.env)], { front: true });
+    this.#setBackdrop(ok ? target.env : null, target.focus, true);
+    return ok === true;
+  }
+  async #reshape(): Promise<void> {
+    const env = this.#env;
+    if (!env || this.#disposed) return;
+    const [ok] = await warm([envKey(env)], { front: true });
+    if (ok && env === this.#env && !this.#disposed) this.#setBackdrop(env, '50% 50%', true);
+  }
+  /** Remove listeners (the run controller calls this when the scene closes). */
+  dispose(): void {
+    this.#disposed = true;
+    window.clearTimeout(this.#swap);
+    this.#barRO?.disconnect();
+    this.#barRO = null;
+    this.#unshape?.();
+    this.#unshape = null;
+    window.removeEventListener('resize', this.#onResize);
+  }
+  /**
+   * Framing for the one figure on stage, from measured visible bounds (the crops in castFrame /
+   * dialogueSourceSize exclude transparent padding):
+   * - **Resolution cap:** the height at which the visible source pixels would be upscaled 1.6× on this
+   *   screen (devicePixelRatio), so art is never blurred.
+   * - **Room:** the figure stands on the dialogue panel with only its lowest 22 % tucked behind it, and
+   *   never rises above the scene area (so faces, hats and the scene bar stay clear, and nothing reaches
+   *   the controls below).
+   * - **Stable:** the figure stands on the panel's RESERVED height (its CSS min-height, sized to fit
+   *   typical lines), not on each line's own height, so the same speaker never moves between lines. A
+   *   longer line just overlaps more of the torso; the figure rises only if the panel would otherwise
+   *   reach the face (top 45 %).
+   * Size and position only, never a stretch: the box always takes the art's own aspect.
+   */
+  #layoutFigures(): void {
+    if (this.#disposed) return;
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const actor = dialogueSourceSize();
+    this.#root.style.setProperty('--actor-ar', String(actor.w / actor.h));
+    this.#root.style.setProperty('--actor-cap-h', `${Math.round((actor.h * 1.6) / dpr)}px`);
+    const cast = this.#castLoaded ? castFrame(this.#castLoaded) : null;
+    if (cast) this.q<HTMLElement>('.st-cast')?.style.setProperty('--cast-cap-h', `${Math.round((cast.h * 1.6) / dpr)}px`);
+    const slot = this.q<HTMLElement>('.dialogue-slot');
+    const panel = slot?.querySelector<HTMLElement>('.dialogue-panel');
+    const main = this.q<HTMLElement>('.story-main');
+    const actual = slot?.offsetHeight ?? 0;
+    const reserve = Math.round(Math.max(panel ? parseFloat(getComputedStyle(panel).minHeight) || 0 : 0, 1)) || actual;
+    const mainH = main?.clientHeight ?? 0;
+    // The panel may use the whole height below the bar; beyond that only its text scrolls (Continue stays).
+    if (main) {
+      // Below the bar, above the stage's real bottom padding (which includes the safe-area inset, so the
+      // panel never reaches under a home indicator), less the panel's own shadow.
+      const padB = parseFloat(getComputedStyle(this.#root).paddingBottom) || 12; // the root IS .story-stage
+      this.#root.style.setProperty('--dlg-max', `${Math.max(120, Math.floor(window.innerHeight - main.getBoundingClientRect().top - padB - 14))}px`);
+    }
+    const body = this.q<HTMLElement>('.dialogue-body');
+    if (body) {
+      // Only a body held at its max-height can scroll. Mid-reveal the text briefly overhangs a body that is
+      // still free to grow (no real scroll), and that once left a stale focus stop on short lines.
+      const max = parseFloat(getComputedStyle(body).maxHeight);
+      const capped = !Number.isFinite(max) || body.offsetHeight >= max - 2;
+      const scrolls = capped && body.scrollHeight > body.clientHeight + 2;
+      body.toggleAttribute('tabindex', scrolls);
+      if (scrolls) body.setAttribute('tabindex', '0');
+      body.setAttribute('role', 'region');
+      body.setAttribute('aria-label', 'Dialogue');
+    }
+    const above = Math.max(0, mainH - reserve);
+    this.#root.style.setProperty('--fig-room', `${Math.round(above / 0.78)}px`);
+    for (const el of this.#root.querySelectorAll<HTMLElement>('.st-actor, .st-cast')) {
+      const h = el.offsetHeight;
+      const room = Math.max(0, mainH - h);
+      const lift = Math.max(reserve - 0.22 * h, actual - 0.55 * h, 0);
+      el.style.setProperty('--fig-lift', `${Math.round(Math.min(room, lift))}px`);
+    }
+  }
+  #setBackdrop(env: RuntimeAssetId | null, focus: string, instant: boolean): void {
+    const next = this.#front === 'a' ? 'b' : 'a';
+    const el = this.q<HTMLElement>(`.st-bg-${next}`);
+    const key = env ? envKey(env) : null;
+    const url = key ? urlFor(key) : null;
+    // No inline "none": a missing image falls back to the drawn gradient in the stylesheet (never blank).
+    if (url) el.style.backgroundImage = `url("${url}")`;
+    else el.style.removeProperty('background-image');
+    // The focal point comes from src/assets/focal.ts (adjusted inside a portrait crop).
+    el.style.backgroundPosition = key ? envPosition(key) : focus;
+    el.dataset.variant = key?.endsWith('@portrait') ? 'portrait' : 'full';
+    el.dataset.env = env ?? 'none';
+    el.classList.toggle('is-instant', instant);
+    el.classList.add('is-front');
+    this.q<HTMLElement>(`.st-bg-${this.#front}`).classList.remove('is-front');
+    this.#front = next;
+    this.#env = env;
+  }
+  /** Mid-scene backdrop cut: only after the new image decoded; otherwise keep the current one and just change the light. */
+  async cutTo(env: RuntimeAssetId | null, light: Light, focus = '50% 50%'): Promise<void> {
+    this.light(light);
+    if (!this.#prepared) {
+      this.#intent = { env, focus };
+      return;
+    }
+    if (env === this.#env) return;
+    if (env === null) return this.#setBackdrop(null, focus, this.reduce());
+    const [ok] = await warm([envKey(env)], { front: true });
+    if (ok) this.#setBackdrop(env, focus, this.reduce());
+  }
+  light(l: Light): void {
+    this.#root.dataset.light = l;
+  }
+  curtain(to: 'closed' | 'open', ms: number): void {
+    const c = this.q<HTMLElement>('.st-curtain');
+    c.style.transitionDuration = `${ms}ms`;
+    c.classList.toggle('is-closed', to === 'closed');
+  }
+  establishing(ms: number): void {
+    const move = STAGING[this.sceneId].establishing;
+    if (move === 'none' || this.reduce()) return;
+    const bg = this.q<HTMLElement>('.st-backdrop');
+    bg.style.setProperty('--est-ms', `${ms}ms`);
+    bg.dataset.move = move; // a single restrained push/pan that ends; never loops
+  }
+  showBeat(b: Beat, index: number, revealMs: number): void {
+    for (const c of b.cues) this.apply(c);
+    // ONE persistent panel: the speaker name, the line, and its single action (Continue). Only the body
+    // changes per beat, so focus stays on Continue and nothing in the panel moves.
+    const panel = this.q<HTMLElement>('.dialogue-panel');
+    const body = this.q<HTMLElement>('.dialogue-body');
+    const blk = b.block;
+    const caption = blk.kind === 'line' ? null : playerCaption(blk.raw);
+    body.innerHTML =
+      blk.kind === 'line'
+        ? `${speakerLabelHtml(blk.speaker!)}<p class="dialogue-text">${esc(blk.text!)}</p>`
+        : caption === null
+          ? '<p class="caption-text"><span class="sr-only">Silence.</span></p>'
+          : `<p class="caption-text">${esc(caption)}</p>`;
+    panel.dataset.kind = blk.kind === 'line' ? 'line' : 'direction';
+    panel.dataset.index = String(index);
+    panel.classList.toggle('is-caption', blk.kind !== 'line');
+    panel.classList.toggle('is-silent', blk.kind !== 'line' && caption === null);
+    panel.hidden = false;
+    panel.style.setProperty('--reveal-ms', `${revealMs}ms`);
+    panel.classList.remove('is-revealing');
+    void panel.offsetWidth; // restart the reveal animation for the new line
+    panel.classList.toggle('is-revealing', revealMs > 0);
+    // ONE figure on stage: the current speaker. Roberto for his own lines and his reaction beats; a cast
+    // member for theirs (once their sheet has decoded). Nobody for narration, captions, or speakers
+    // without a portrait, which keep just their name tag over the backdrop.
+    const sp = blk.kind === 'line' ? speakerOf(blk.speaker!) : null;
+    const narration = !!sp?.qualifier && /narrat/i.test(sp.qualifier);
+    const own = !!sp && sp.label === 'Cousin' && !narration;
+    const castId = blk.kind === 'line' && !narration ? speakerKey(blk.speaker!) : null;
+    const reaction = blk.kind === 'direction' && b.cues.some((c) => c.kind === 'expr');
+    if (own && !this.#cousinIn) this.apply({ kind: 'cousin', to: 'in' });
+    // The line's verified expression (stable dialogue id → expression → this character's frame). Untagged
+    // lines are neutral; Roberto's untagged lines keep the stage directions' mood. Never random.
+    const n = blk.kind === 'line' ? this.#lineNo(blk) : undefined;
+    const expr: Expression | undefined = n !== undefined ? lineExpression(this.sceneId, n) : undefined;
+    if (own) this.#host?.setMood(expr ? robertoMood(expr) : this.#cueMood);
+    const who = castId ? CHARACTER_OF[castId] : undefined;
+    this.#castFrameWant = who ? castFrameFor(who, expr ?? 'neutral') : 'e1';
+    this.#root.dataset.expression = own ? (expr ?? 'cue') : castId ? (expr ?? 'neutral') : 'none';
+    this.#root.dataset.speaking = own || reaction ? 'cousin' : castId ? 'cast' : blk.kind === 'line' ? 'other' : 'none';
+    this.#layoutFigures();
+    this.#present(own || reaction ? 'cousin' : castId);
+  }
+  /**
+   * Change who is on stage. The same speaker stays exactly where they are. A different one: the current
+   * figure fades out (FADE_OUT_MS), then the new one fades in. Reduced motion: an instant swap.
+   * A cast portrait appears only once its sheet is decoded (never a blank or late pop-in).
+   */
+  #present(who: Figure): void {
+    this.#want = who;
+    if (who === this.#shown) {
+      // Same speaker: an expression change swaps the frame in place: same box, no fade, no dissolve.
+      if (who && who !== 'cousin') this.#loadCast(who);
+      return;
+    }
+    if (who && who !== 'cousin' && warmState(who) !== 'ready') {
+      this.#show(null);
+      void warm([who], { front: true }).then(([ok]) => ok && this.#want === who && !this.#disposed && this.#present(who));
+      return;
+    }
+    window.clearTimeout(this.#swap);
+    const wasShown = this.#shown !== null;
+    this.#show(null);
+    if (who === null) return;
+    const enter = () => {
+      if (this.#disposed || this.#want !== who) return;
+      if (who !== 'cousin') this.#loadCast(who);
+      this.#layoutFigures();
+      this.#show(who);
+    };
+    if (!wasShown || this.reduce()) enter();
+    else this.#swap = window.setTimeout(enter, FADE_OUT_MS);
+  }
+  #show(who: Figure): void {
+    this.#shown = who;
+    this.q<HTMLElement>('.st-actor')?.classList.toggle('is-on', who === 'cousin');
+    this.q<HTMLElement>('.st-cast')?.classList.toggle('is-on', who !== null && who !== 'cousin');
+    this.#root.toggleAttribute('data-actor-visible', who === 'cousin');
+    this.#root.toggleAttribute('data-cast-visible', who !== null && who !== 'cousin');
+  }
+  /** Put a cast member's wanted frame in the cast box (visible-bounds crop shared by all their frames). */
+  #loadCast(id: RuntimeAssetId): void {
+    const box = this.q<HTMLElement>('.st-cast-art');
+    const fig = this.q<HTMLElement>('.st-cast');
+    const frame = this.#castFrameWant;
+    const f = castFrame(id, frame);
+    if (!f || !box || !fig || (this.#castLoaded === id && this.#castFrameShown === frame)) return;
+    box.style.cssText = regionStyle(urlFor(id)!, f);
+    fig.style.setProperty('--ar', String(f.w / f.h));
+    fig.style.setProperty('--cast-cap-h', `${Math.round((f.h * 1.6) / Math.max(1, window.devicePixelRatio || 1))}px`);
+    box.dataset.cast = id;
+    box.dataset.frame = frame;
+    this.#castLoaded = id;
+    this.#castFrameShown = frame;
+  }
+  finishReveal(): void {
+    this.q<HTMLElement>('.dialogue-panel')?.classList.remove('is-revealing');
+  }
+  setState(s: DirectorState): void {
+    this.#root.dataset.director = s;
+    const busy = s !== 'presenting';
+    this.#root.querySelectorAll<HTMLButtonElement>('[data-busy-disable]').forEach((b) => (b.disabled = busy));
+  }
+  apply(c: Cue): void {
+    switch (c.kind) {
+      case 'light':
+        return this.light(c.to);
+      case 'backdrop':
+        return void this.cutTo(c.env, c.light, c.focus);
+      case 'threshold':
+        this.#root.dataset.threshold = c.to;
+        return;
+      case 'water':
+        this.#root.dataset.water = c.to;
+        return;
+      case 'boundary':
+        this.#root.toggleAttribute('data-boundary', c.show);
+        return;
+      case 'warmth':
+        this.#root.toggleAttribute('data-warmth', c.on);
+        return;
+      case 'pulse': {
+        const t = this.q<HTMLElement>('.st-threshold');
+        t.classList.remove('is-pulse');
+        void t.offsetWidth;
+        if (!this.reduce()) t.classList.add('is-pulse');
+        return;
+      }
+      case 'cousin': {
+        this.#cousinIn = c.to === 'in';
+        this.#root.toggleAttribute('data-cousin', this.#cousinIn);
+        return;
+      }
+      case 'expr':
+        this.#cueMood = c.mood;
+        this.#host?.setMood(c.mood);
+        return;
+      case 'audio':
+        return this.cue(c);
+    }
+  }
+  mountActor(): void {
+    this.#host = new HostView(this.q<HTMLElement>('.st-actor-art'), 'dialogue', { reduceMotion: this.reduce, animations: () => false });
+    // The game's own reduced-motion setting (not only the OS preference) turns figure transitions off.
+    this.#root.classList.toggle('reduce-motion', this.reduce());
+    window.addEventListener('resize', this.#onResize);
+    const bar = this.q<HTMLElement>('.story-bar');
+    if (bar && typeof ResizeObserver !== 'undefined') {
+      this.#barRO = new ResizeObserver(() => requestAnimationFrame(() => this.#layoutFigures()));
+      this.#barRO.observe(bar);
+    }
+    this.#layoutFigures();
+  }
+  cousinPresent(on: boolean): void {
+    this.apply({ kind: 'cousin', to: on ? 'in' : 'out' });
+  }
+}
+
+// ---- the run ------------------------------------------------------------------------
+export interface RunOptions {
+  /** Replay a completed chapter (memory only — never changes case progress). */
+  readonly replay: SceneId | null;
+  /** How this run was opened (analytics only): a tap on Continue, or the automatic return after an update. */
+  readonly via?: 'continue' | 'update';
+}
+
+export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void> {
+  const { root } = d;
+  let script: Awaited<ReturnType<typeof loadScript>>;
+  try {
+    script = await loadScript();
+  } catch {
+    if (storyGone(d)) return;
+    root.className = 'is-story';
+    root.innerHTML = '<div class="story-shell" data-region="story-load"></div>';
+    return bindLoadFailure(root.querySelector('[data-region="story-load"]') as HTMLElement, { title: 'This scene didn’t load', body: 'Check your connection and try again. Nothing was lost: your place is saved.', back: 'Back to the case file' }, { retry: () => void loadScript().then(() => renderStoryRun(d, o), () => (d.reload ? d.reload() : void renderStoryRun(d, o))), back: () => void renderStoryHome(d) });
+  }
+  if (storyGone(d)) return;
+  let p: StoryProgress = o.replay ? { ...newProgress(Date.now()), sceneId: o.replay, completed: [] } : (readStory(d.store).value ?? newProgress(Date.now()));
+  // Local analytics keys (never sent): this case, or this replay run.
+  const caseKey = o.replay ? `replay:${o.replay}:${Date.now()}` : `case:${p.startedAt}`;
+  let resumeTracked = false;
+  const persist = (next: StoryProgress) => {
+    p = next;
+    if (!o.replay) save(d, p);
+  };
+  const reduce = () => d.reduceMotion();
+  let director: SceneDirector<Beat> | null = null;
+  let stage: DomStage | null = null;
+  let disposed = false;
+
+  const onVisibility = () => {
+    if (document.hidden) director?.settle(); // never resume into a half-finished transition
+  };
+  document.addEventListener('visibilitychange', onVisibility);
+  const dispose = () => {
+    d.registerRun?.(null);
+    disposed = true;
+    director?.cancel();
+    stage?.dispose();
+    d.beat();
+    document.removeEventListener('visibilitychange', onVisibility);
+    root.onclick = null;
+    root.onkeydown = null;
+  };
+  // The app's update flow asks the open run to write its exact position (the saved hand included) and stop.
+  d.registerRun?.({ flush: () => (o.replay ? true : save(d, p)), stop: () => dispose() });
+
+  const sceneOf = (id: SceneId) => script.scenes.find((s) => s.id === id)!;
+
+  async function open(sceneId: SceneId): Promise<void> {
+    director?.cancel(); // a new scene invalidates every callback of the previous one
+    stage?.dispose();
+    if (disposed) return;
+    d.beat();
+    d.audioScene(sceneId);
+    const scene = sceneOf(sceneId);
+    const seg = segments(scene);
+    const st = STAGING[sceneId];
+    const part: Part = p.sceneId === sceneId ? p.part : 'pre';
+    root.className = 'is-story is-playing';
+    root.dataset.scene = sceneId;
+    // Text size and instant text come from Settings (the dialogue panel carries only Continue).
+    root.style.setProperty('--story-scale', String(d.prefs?.().textScale ?? 1));
+    root.innerHTML = `
+      <div class="story-stage" data-scene="${esc(sceneId)}">
+        <div class="st-layers" aria-hidden="true">
+          <div class="st-backdrop"><div class="st-bg st-bg-a"></div><div class="st-bg st-bg-b"></div></div>
+          <div class="st-light"></div><div class="st-threshold"></div><div class="st-water"></div><div class="st-boundary"></div><div class="st-warmth"></div>
+        </div>
+        <header class="story-bar">
+          <button type="button" class="btn-ghost back" data-act="story-file">← Case file</button>
+          <nav class="story-nav" aria-label="Scene navigation">
+            <button type="button" class="btn-ghost cine-btn" data-act="story-back" data-busy-disable aria-label="Back to the previous line">‹ Back</button>
+            <button type="button" class="btn-ghost cine-btn" data-act="story-skip" aria-label="Skip scene">Skip</button>
+            <span class="cine-pos" aria-live="off"></span>
+          </nav>
+          ${d.update ? `<button type="button" class="btn-ghost cine-btn story-update" data-region="update" data-act="update-now" ${d.update.ready() ? '' : 'hidden'} aria-label="Update the game now (your place is saved first)">Update</button>` : ''}
+          <h1 class="story-bar-title"><span class="chapter-num">${esc(label(scene))}</span> ${esc(scene.title)}${o.replay ? ' <span class="replay-tag">Replay</span>' : ''}</h1>
+        </header>
+        <section class="story-main" aria-label="Scene">
+          <div class="scene-card-slot"></div>
+          <div class="st-actor" aria-hidden="true"><div class="st-actor-art"></div></div>
+          <div class="st-cast" aria-hidden="true"><div class="st-cast-art"></div></div>
+          <div class="dialogue-slot">
+            <article class="dialogue-panel">
+              <div class="dialogue-body" aria-live="polite"></div>
+              <div class="dialogue-actions"><button type="button" class="btn primary cine-next" data-act="story-next">Continue</button></div>
+            </article>
+          </div>
+        </section>
+        <div class="st-curtain is-closed" aria-hidden="true"></div>
+      </div>
+      <div class="story-table-host" hidden></div>`;
+    // Resuming a saved position: the beat you land on shows its staging, but its one-shot sound (a knock)
+    // is not replayed — only mix-state cues are. Cleared once that first beat is on screen.
+    let quietOnce = false;
+    stage = new DomStage(
+      root.querySelector('.story-stage')!,
+      sceneId,
+      reduce,
+      (c) => {
+        if (c.kind === 'audio' && !(quietOnce && !STATE_CUES.has(c.cue))) d.cue(c.cue);
+      },
+      scene,
+    );
+    stage.mountActor();
+    stage.cousinPresent(st.cousin);
+    const s = stage;
+    let prefetched = false;
+
+    // Beats for the current part.
+    const preBeats = seg.pre.map((b) => ({ block: b, cues: cuesFor(sceneId, b.raw) }));
+    const afterBeats = (outcome: Outcome | null) => [...(outcome && seg.inserts[outcome] ? insertLines(seg.inserts[outcome]!) : []), ...seg.post].map((b) => ({ block: b, cues: cuesFor(sceneId, b.raw) }));
+    let beats = part === 'pre' ? preBeats : afterBeats(p.outcome);
+    // Replay all cues up to the resume point so light/water/expression match the saved position.
+    const replayCues = (upto: number) => {
+      const prior = part === 'pre' ? preBeats.slice(0, upto) : [...preBeats, ...afterBeats(p.outcome).slice(0, upto)];
+      // One-shot sounds (knocks, accents) are never replayed on resume; mix-state cues (the bed going quiet) are.
+      for (const b of prior) for (const c of b.cues) if (c.kind === 'audio' ? STATE_CUES.has(c.cue) : c.kind !== 'pulse') s.apply(c);
+    };
+
+    const pos = () => {
+      const el = root.querySelector('.cine-pos');
+      if (el) el.textContent = beats.length ? `${Math.min((director?.index ?? 0) + 1, beats.length)} / ${beats.length}` : '';
+    };
+
+    const showHandCard = () => {
+      phaseEnd(sceneId, 'pre');
+      d.beat();
+      const setup = HANDS[sceneId]!;
+      const slot = root.querySelector<HTMLElement>('.scene-card-slot')!;
+      root.querySelector<HTMLElement>('.dialogue-panel')!.hidden = true; // the panel (and Continue) persist, hidden behind the card
+      slot.innerHTML = `<section class="hand-card" aria-labelledby="hand-h"><p class="chapter-num">${esc(label(scene))} · the hand</p><h2 id="hand-h" class="section-h">${esc(setup.label)}</h2>${st.handNote ? `<p class="hand-note">${esc(st.handNote)}</p>` : ''}<p class="hand-note">One hand. Win, lose or blocked tie — the case moves on either way.</p><button type="button" class="btn primary" data-act="story-deal">Deal the tiles</button></section>`;
+      (slot.querySelector('[data-act="story-deal"]') as HTMLElement).focus({ preventScroll: true });
+      root.querySelector<HTMLElement>('[data-act="story-next"]')!.hidden = true;
+    };
+
+    const showEndCard = () => {
+      phaseEnd(sceneId, beats === preBeats ? 'pre' : 'post');
+      d.beat();
+      const idx = SCENES_IN_ORDER.indexOf(sceneId);
+      const next = o.replay ? null : SCENES_IN_ORDER[idx + 1] ?? null;
+      const slot = root.querySelector<HTMLElement>('.scene-card-slot')!;
+      root.querySelector<HTMLElement>('.dialogue-panel')!.hidden = true; // the panel (and Continue) persist, hidden behind the card
+      const nb = seg.notebook ? `<div class="notebook is-inline"><p class="notebook-chapter">Notebook · ${esc(label(scene))}</p><p class="notebook-text">${esc(seg.notebook.raw.replace(/^Notebook:\s*/, ''))}</p></div>` : '';
+      const fin = sceneId === 'epilogue' ? `<p class="case-complete">Case complete.</p>` : '';
+      slot.innerHTML = `<section class="end-card" aria-labelledby="end-h"><h2 id="end-h" class="section-h">End of ${esc(label(scene))}</h2>${fin}${nb}${next ? chapterCardHtml(sceneOf(next), 'next') : ''}<button type="button" class="btn primary" data-act="story-onward">${next ? `Continue to ${esc(label(sceneOf(next)))}` : 'Back to the case file'}</button></section>`;
+      (slot.querySelector('[data-act="story-onward"]') as HTMLElement).focus({ preventScroll: true });
+      root.querySelector<HTMLElement>('[data-act="story-next"]')!.hidden = true;
+      pos();
+      if (sceneId === 'prologue' || sceneId === 'epilogue') d.track?.chapterComplete(sceneId, 'none', !!o.replay, caseKey);
+      if (sceneId === 'epilogue' && !o.replay) d.track?.caseComplete(caseKey);
+      if (!o.replay) persist({ ...p, sceneId, part: 'end', index: 0, hand: null, completed: sceneId === 'prologue' || sceneId === 'epilogue' ? [...new Set([...p.completed, sceneId])] : p.completed });
+    };
+
+    director = new SceneDirector<Beat>(
+      {
+        prepare: () => s.prepare(scene),
+        curtain: (to, ms) => s.curtain(to, ms),
+        establishing: (ms) => s.establishing(ms),
+        showBeat: (b, i, ms) => {
+          d.beat(); // the previous beat's knocks never trail into this one
+          s.showBeat(b, i, ms);
+          quietOnce = false;
+          root.querySelector<HTMLElement>('.scene-card-slot')!.innerHTML = '';
+          root.querySelector<HTMLElement>('[data-act="story-next"]')!.hidden = false;
+          pos();
+          persist({ ...p, sceneId, part: part === 'pre' && beats === preBeats ? 'pre' : 'post', index: i, hand: null });
+        },
+        finishReveal: () => s.finishReveal(),
+        setState: (x) => {
+          s.setState(x);
+          // Once the scene is up, the primary control gets focus (unless the player is focused elsewhere in the stage).
+          if (x === 'presenting' && !prefetched) {
+            // The scene is up: fetch + decode the NEXT chapter's backdrop and cast in the background
+            // (bounded warm queue, never ahead of anything the current scene asks for).
+            prefetched = true;
+            const nextId = SCENES_IN_ORDER[SCENES_IN_ORDER.indexOf(sceneId) + 1];
+            if (nextId && !o.replay) void warm(sceneAssets(sceneOf(nextId)));
+          }
+          if (x === 'presenting') {
+            const a = document.activeElement;
+            if (!a || a === document.body || !root.contains(a) || a.closest('.st-curtain')) (root.querySelector('[data-act="story-next"]:not([hidden])') as HTMLElement | null)?.focus({ preventScroll: true });
+          }
+        },
+      },
+      {
+        textOf: (b) => b.block.text ?? b.block.raw,
+        now: () => performance.now(),
+        onEnd: () => {
+          if (beats === preBeats && seg.deal) showHandCard();
+          else showEndCard();
+        },
+        onHandStart: () => startHand(null),
+        onExit: () => {},
+      },
+      realScheduler,
+      reduce() ? REDUCED_TIMINGS : d.prefs?.().instantText ? { ...DEFAULT_TIMINGS, revealCps: Infinity, revealMaxMs: 0 } : DEFAULT_TIMINGS,
+    );
+    const dir = director;
+
+    const startHand = (restore: StoryProgress['hand']) => {
+      phaseStart(sceneId, 'hand');
+      const host = root.querySelector<HTMLElement>('.story-table-host')!;
+      root.querySelector<HTMLElement>('.story-stage')!.hidden = true;
+      host.hidden = false;
+      if (!o.replay && !restore) persist({ ...p, sceneId, part: 'hand', index: 0, hand: null });
+      let outcome: Outcome | null = null;
+      d.playHand({
+        sceneId,
+        setup: HANDS[sceneId]!,
+        restore,
+        replay: !!o.replay,
+        host,
+        faces: tableFaces(HANDS[sceneId]!.seatNames),
+        env: STAGING[sceneId].handEnv ?? null,
+        onSnapshot: (h) => {
+          if (!o.replay && outcome === null) persist({ ...p, sceneId, part: 'hand', index: 0, hand: h });
+        },
+        onResolved: (winnerTeam, playerTeam) => {
+          if (outcome !== null) return; // once
+          outcome = outcomeFor(winnerTeam, playerTeam);
+          phaseEnd(sceneId, 'hand');
+          phaseStart(sceneId, 'post');
+          d.track?.chapterComplete(sceneId, outcome, !!o.replay, caseKey);
+          // One write: outcome + completion + position. A reload can't replay the completion.
+          persist({ ...p, sceneId, part: 'post', index: 0, outcome, hand: null, completed: [...new Set([...p.completed, sceneId])] });
+        },
+        onContinue: () => {
+          d.endHand();
+          host.hidden = true;
+          root.querySelector<HTMLElement>('.story-stage')!.hidden = false;
+          root.className = 'is-story is-playing';
+          beats = afterBeats(outcome ?? p.outcome);
+          if (dir.state !== 'in-hand') {
+            // Resumed straight into the hand (refresh): the director never entered it — enter now.
+            void dir.load(beats, 0, { handAlreadyDone: true });
+          } else dir.leaveHand(beats);
+          (root.querySelector('[data-act="story-next"]') as HTMLElement)?.focus({ preventScroll: true });
+        },
+        onLeave: () => {
+          d.endHand();
+          dispose();
+          void renderStoryHome(d);
+        },
+      });
+    };
+
+    // Enter at the saved position.
+    // Pacing hooks (performance measures only): the dialogue phase this open starts in.
+    if (part === 'pre') phaseStart(sceneId, 'pre');
+    else if (part === 'post' || part === 'insert') phaseStart(sceneId, 'post');
+    // Continue Case into an in-progress position (not a fresh scene start, not a replay): a resume.
+    const inProgress = !o.replay && p.sceneId === sceneId && (part === 'hand' || part === 'post' || part === 'insert' || p.index > 0);
+    if (inProgress && !resumeTracked) d.track?.resume(sceneId, part === 'hand' ? 'hand' : 'dialogue', o.via ?? 'continue', `${caseKey}:${sceneId}:${part}:${p.index}`);
+    resumeTracked = true;
+    if (part === 'hand') {
+      replayCues(preBeats.length);
+      void dir.load(preBeats, preBeats.length, { handAlreadyDone: true });
+      startHand(p.hand); // resumes the exact hand if one was saved, otherwise deals afresh
+    } else if (part === 'end') {
+      replayCues(beats.length);
+      await dir.load(beats, beats.length);
+      if (!disposed) showEndCard();
+    } else {
+      const at = Math.min(p.sceneId === sceneId ? p.index : 0, Math.max(0, beats.length - 1));
+      quietOnce = p.sceneId === sceneId && (at > 0 || part === 'post');
+      replayCues(at);
+      // One speaker on stage: the beat you land on brings its own speaker (no listener is restored).
+      void dir.load(beats, at);
+    }
+
+    root.onclick = (e) => {
+      const act = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act;
+      if (!act) return;
+      if (act === 'story-next') dir.advance();
+      else if (act === 'story-back') dir.back();
+      else if (act === 'story-skip') {
+        // Skip lands on the next decision point (deal card or end card) — never past a hand.
+        dir.settle();
+        if (root.querySelector('.hand-card, .end-card')) return;
+        d.track?.assist(sceneId, `${caseKey}:${sceneId}:${beats === preBeats ? 'pre' : 'post'}`);
+        dir.skipToEnd();
+      } else if (act === 'story-deal') {
+        if (dir.enterHand()) root.querySelector<HTMLElement>('.scene-card-slot')!.innerHTML = '';
+      } else if (act === 'story-onward') {
+        const idx = SCENES_IN_ORDER.indexOf(sceneId);
+        const next = o.replay ? null : SCENES_IN_ORDER[idx + 1] ?? null;
+        dir.cancel();
+        if (next) {
+          persist({ ...p, sceneId: next, part: 'pre', index: 0, outcome: null, hand: null });
+          void open(next);
+        } else {
+          dispose();
+          void renderStoryHome(d);
+        }
+      } else if (act === 'update-now') {
+        d.update?.apply();
+      } else if (act === 'story-file') {
+        dispose();
+        void renderStoryHome(d);
+      }
+    };
+    root.onkeydown = (e) => {
+      if (!root.querySelector('.story-table-host')?.hasAttribute('hidden')) return; // the table owns input during a hand
+      const t = e.target as HTMLElement;
+      // A held key never runs through lines: auto-repeat is ignored (Continue's own Enter included).
+      if (e.repeat && (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowRight')) return void e.preventDefault();
+      if (t.closest('button:not([data-act="story-next"]), dialog, input, select, textarea')) return;
+      // On Continue itself, Enter and Space are the button's own click (one activation, never two).
+      if (e.key === 'ArrowRight' || ((e.key === 'Enter' || e.key === ' ') && !t.closest('button'))) {
+        e.preventDefault();
+        dir.advance();
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        dir.back();
+      }
+    };
+    if (import.meta.env.DEV) (window as unknown as { __sbStory: unknown }).__sbStory = { director: dir, progress: () => p, sceneId };
+  }
+
+  await open(p.sceneId === 'epilogue' && p.part === 'end' && !o.replay ? 'epilogue' : p.sceneId);
+}

@@ -1,0 +1,74 @@
+{
+ "generator": "scripts/build-fonts.py",
+ "fonts": [
+  {
+   "family": "DM Sans",
+   "file": "src/assets/fonts/dm-sans-latin-var.woff2",
+   "source": "dmsans/DMSans[opsz,wght].ttf",
+   "license": "SIL OFL 1.1",
+   "axes": {
+    "opsz": 14,
+    "wght": [
+     400,
+     800
+    ]
+   },
+   "bytes": 21100,
+   "sha256": "3b1cf089a54a78f71b509d6756a3c8dd7ef680c9eb699b987ec0968f73b7cc03",
+   "glyphs": 246,
+   "missingCodepoints": [
+    "0xad",
+    "0x2032",
+    "0x2033"
+   ],
+   "features": [
+    "calt",
+    "ccmp",
+    "kern",
+    "liga",
+    "locl"
+   ],
+   "unitsPerEm": 1000,
+   "ascent": 992,
+   "descent": -310,
+   "lineGap": 0,
+   "xAvgCharWidth": 551
+  },
+  {
+   "family": "Bricolage Grotesque",
+   "file": "src/assets/fonts/bricolage-grotesque-latin-var.woff2",
+   "source": "bricolagegrotesque/BricolageGrotesque[opsz,wdth,wght].ttf",
+   "license": "SIL OFL 1.1",
+   "axes": {
+    "opsz": 48,
+    "wdth": [
+     75,
+     100
+    ],
+    "wght": [
+     600,
+     800
+    ]
+   },
+   "bytes": 60980,
+   "sha256": "a5de03facca8f24b04c53446cd4d22adc203f6ed752d3c00f7f6cd7258debb0d",
+   "glyphs": 235,
+   "missingCodepoints": [
+    "0xa4",
+    "0xad"
+   ],
+   "features": [
+    "case",
+    "kern",
+    "locl",
+    "pnum",
+    "tnum"
+   ],
+   "unitsPerEm": 1000,
+   "ascent": 930,
+   "descent": -270,
+   "lineGap": 0,
+   "xAvgCharWidth": 567
+  }
+ ]
+}

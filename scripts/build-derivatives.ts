@@ -1,0 +1,174 @@
+/**
+ * npm run assets:derive — build runtime WebP derivatives of the runtime art.
+ *
+ * Originals in assets/art/ (and the generated tile atlas PNG) are only READ.
+ * Each derivative is a NEW file under assets/generated/web/ with the SAME pixel
+ * dimensions as its source, so every frame rectangle in the manifest stays
+ * valid. Output metadata (bytes, sha256, encoder settings, measured edge error)
+ * is written to src/assets/derivatives.json, which `npm run assets:verify`
+ * re-checks.
+ *
+ * Quality gates, measured per file (premultiplied RGBA, 0–255):
+ *   - mean absolute error over all pixels;
+ *   - p99 error over EDGE pixels (0 < alpha < 255) — a lossy encoder that
+ *     smears colour into semi-transparent edges is what produces halos;
+ *   - alpha must be bit-exact (alphaQuality 100 / lossless).
+ */
+import { createHash } from 'node:crypto';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import sharp from 'sharp';
+import { ENV_FOCUS, ENV_IDS, portraitCrop } from '../src/assets/focal.ts';
+import { IMAGE_ASSETS } from '../src/assets/manifest.ts';
+import type { ImageAsset } from '../src/assets/types.ts';
+import { cleanCell, type CleanStats } from './lib/clean.ts';
+
+const root = fileURLToPath(new URL('..', import.meta.url));
+
+/** Encoder settings per runtime asset. Lossless for the tile atlas: pip geometry must be exact. */
+export const DERIVE: Record<string, { file: string; lossless?: boolean; quality?: number; maxMeanErr?: number; clean?: boolean }> = {
+  // Opaque backdrops, always shown under a darkening gradient: a slightly looser mean-error gate.
+  'env.neighborhood-patio': { file: 'neighborhood-patio.webp', quality: 82, maxMeanErr: 6 },
+  // Story: the Prologue's dream (always shown dimmed under a night scrim), loaded only when Story opens.
+  'env.cave-waterfall': { file: 'cave-waterfall.webp', quality: 80, maxMeanErr: 6 },
+  // Story chapter backdrops (loaded only when their scene is next; never at startup).
+  'env.back-alley': { file: 'back-alley.webp', quality: 80, maxMeanErr: 6 },
+  'env.moonlit-promenade': { file: 'moonlit-promenade.webp', quality: 80, maxMeanErr: 6 },
+  'env.jungle-camp': { file: 'jungle-camp.webp', quality: 84, maxMeanErr: 6 }, // dense foliage: q80 measured 6.05 mean error
+  'env.executive-terrace': { file: 'executive-terrace.webp', quality: 80, maxMeanErr: 6 },
+  'table.weathered': { file: 'weathered-tabletop.webp', quality: 82, maxMeanErr: 6 },
+  // Cleaned (scripts/lib/clean.ts): stray specks and red/yellow edge fringes removed per frame cell, same size, so
+  // every frame rect and stage box still applies. Gated against the CLEANED pixels. Needed now that dialogue shows him large.
+  'cousin.atlas.portrait': { file: 'cousin-portrait-atlas.webp', quality: 88, clean: true },
+  'cousin.anim.slam': { file: 'cousin-slam-strip.webp', quality: 86 },
+  'fx.sheet': { file: 'effects-sheet.webp', quality: 88 },
+  'tile.atlas': { file: 'double-six-atlas.webp', lossless: true },
+};
+
+const LIMITS = { meanErr: 3, edgeP99: 20 };
+
+async function rgba(buf: Buffer) {
+  const { data, info } = await sharp(buf).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  return { data, w: info.width, h: info.height };
+}
+
+const out: Record<string, unknown>[] = [];
+let failed = false;
+for (const [id, cfg] of Object.entries(DERIVE)) {
+  const src = IMAGE_ASSETS.find((a) => a.id === id);
+  if (!src) throw new Error(`unknown asset ${id}`);
+  const input = readFileSync(join(root, src.path));
+  const path = `assets/generated/web/${cfg.file}`;
+  mkdirSync(dirname(join(root, path)), { recursive: true });
+  // Optional edge cleaning: each frame's cell is cleaned in place on a copy of the decoded pixels.
+  let reference = input;
+  let repairs: CleanStats | null = null;
+  if (cfg.clean) {
+    const { data, info } = await sharp(input).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    repairs = { specks: 0, speckPixels: 0, fringeBefore: 0, fringeAfter: 0, orphanCleared: 0 };
+    for (const f of (src as unknown as ImageAsset).frames ?? []) {
+      const { x, y, w, h } = f.cell;
+      const cell = Buffer.alloc(w * h * 4);
+      for (let r = 0; r < h; r++) data.copy(cell, r * w * 4, ((y + r) * info.width + x) * 4, ((y + r) * info.width + x + w) * 4);
+      const st = cleanCell(cell, w, h);
+      for (const k of Object.keys(repairs) as (keyof CleanStats)[]) repairs[k] += st[k];
+      for (let r = 0; r < h; r++) cell.copy(data, ((y + r) * info.width + x) * 4, r * w * 4, (r + 1) * w * 4);
+    }
+    reference = await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer();
+  }
+  const enc = cfg.lossless
+    ? sharp(reference).webp({ lossless: true, effort: 6, exact: true })
+    : sharp(reference).webp({ quality: cfg.quality, alphaQuality: 100, effort: 6, smartSubsample: true });
+  const webp = await enc.toBuffer();
+  writeFileSync(join(root, path), webp);
+
+  const a = await rgba(reference);
+  const b = await rgba(webp);
+  if (a.w !== b.w || a.h !== b.h) throw new Error(`${id}: derivative changed dimensions`);
+  let sum = 0;
+  let alphaDiff = 0;
+  const edge: number[] = [];
+  for (let i = 0; i < a.data.length; i += 4) {
+    const aa = a.data[i + 3]!;
+    const ba = b.data[i + 3]!;
+    if (aa !== ba) alphaDiff++;
+    let e = 0;
+    for (let c = 0; c < 3; c++) e = Math.max(e, Math.abs((a.data[i + c]! * aa) / 255 - (b.data[i + c]! * ba) / 255));
+    sum += e;
+    if (aa > 0 && aa < 255) edge.push(e);
+  }
+  edge.sort((x, y) => x - y);
+  const meanErr = sum / (a.data.length / 4);
+  const edgeP99 = edge.length ? edge[Math.floor(edge.length * 0.99)]! : 0;
+  const ok = meanErr <= (cfg.maxMeanErr ?? LIMITS.meanErr) && edgeP99 <= LIMITS.edgeP99 && alphaDiff === 0;
+  if (!ok) failed = true;
+  out.push({
+    id,
+    of: id,
+    path,
+    format: 'webp',
+    encoder: cfg.lossless ? 'lossless' : `q${cfg.quality} alphaQuality100 smartSubsample`,
+    width: b.w,
+    height: b.h,
+    bytes: webp.length,
+    sha256: createHash('sha256').update(webp).digest('hex'),
+    sourceBytes: input.length,
+    sourceSha256: createHash('sha256').update(input).digest('hex'),
+    maxMeanErr: cfg.maxMeanErr ?? LIMITS.meanErr,
+    meanErr: +meanErr.toFixed(2),
+    edgeP99: +edgeP99.toFixed(1),
+    edgePixels: edge.length,
+    alphaExact: alphaDiff === 0,
+    ...(repairs ? { cleaned: 'scripts/lib/clean.ts (gated against the cleaned pixels)', repairs } : {}),
+  });
+  console.log(`${ok ? '✓' : '✗'} ${id}: ${(input.length / 1024).toFixed(0)} KB → ${(webp.length / 1024).toFixed(0)} KB, mean err ${meanErr.toFixed(2)}, edge p99 ${edgeP99.toFixed(1)}, alpha ${alphaDiff === 0 ? 'exact' : `${alphaDiff} px differ`}`);
+}
+// Portrait crops of the seven environments (3:4, centred on the focal point from src/assets/focal.ts).
+// A NEW file per environment; the full-frame derivative above stays the landscape version.
+const portrait: Record<string, unknown>[] = [];
+for (const env of ENV_IDS) {
+  const src = IMAGE_ASSETS.find((a) => a.id === env)!;
+  const cfg = DERIVE[env]!;
+  const input = readFileSync(join(root, src.path));
+  const crop = portraitCrop(src.width, src.height, ENV_FOCUS[env].x);
+  const region = sharp(input).extract({ left: crop.x, top: crop.y, width: crop.w, height: crop.h });
+  const ref = await region.clone().ensureAlpha().raw().toBuffer();
+  const webp = await region.clone().webp({ quality: cfg.quality, alphaQuality: 100, effort: 6, smartSubsample: true }).toBuffer();
+  const path = `assets/generated/web/${cfg.file.replace(/\.webp$/, '-portrait.webp')}`;
+  writeFileSync(join(root, path), webp);
+  const dec = await sharp(webp).ensureAlpha().raw().toBuffer();
+  let sum = 0;
+  for (let i = 0; i < ref.length; i += 4) {
+    let e = 0;
+    for (let c = 0; c < 3; c++) e = Math.max(e, Math.abs(ref[i + c]! - dec[i + c]!));
+    sum += e;
+  }
+  const meanErr = sum / (ref.length / 4);
+  const ok = meanErr <= (cfg.maxMeanErr ?? LIMITS.meanErr);
+  if (!ok) failed = true;
+  // The focal point inside the crop, as a CSS background-position.
+  const fx = (ENV_FOCUS[env].x * src.width - crop.x) / crop.w;
+  portrait.push({
+    id: `${env}@portrait`,
+    of: env,
+    path,
+    format: 'webp',
+    encoder: `q${cfg.quality} smartSubsample`,
+    crop,
+    focus: { x: +fx.toFixed(4), y: ENV_FOCUS[env].y },
+    width: crop.w,
+    height: crop.h,
+    bytes: webp.length,
+    sha256: createHash('sha256').update(webp).digest('hex'),
+    sourceSha256: createHash('sha256').update(input).digest('hex'),
+    maxMeanErr: cfg.maxMeanErr ?? LIMITS.meanErr,
+    meanErr: +meanErr.toFixed(2),
+  });
+  console.log(`${ok ? '✓' : '✗'} ${env}@portrait: crop ${crop.w}×${crop.h} at x=${crop.x} → ${(webp.length / 1024).toFixed(0)} KB, mean err ${meanErr.toFixed(2)}`);
+}
+writeFileSync(join(root, 'src/assets/derivatives.json'), JSON.stringify({ generator: 'scripts/build-derivatives.ts', sharp: sharp.versions.sharp, libwebp: sharp.versions.webp, limits: LIMITS, derivatives: out, portrait }, null, 1) + '\n');
+if (failed) {
+  console.error('derivative quality gate failed');
+  process.exit(1);
+}

@@ -1,0 +1,504 @@
+{
+ "generator": "scripts/build-cast.ts",
+ "sharp": "0.35.5",
+ "limits": {
+  "meanErr": 3,
+  "edgeP99": 20,
+  "fringe": 64,
+  "radius": 4
+ },
+ "cast": [
+  {
+   "id": "cast.vale.atlas.web",
+   "of": "cast.vale.atlas",
+   "who": "vale",
+   "name": "Tomás Vale",
+   "path": "assets/generated/web/cast-vale.webp",
+   "format": "webp",
+   "encoder": "q86 alphaQuality100 smartSubsample",
+   "width": 1528,
+   "height": 836,
+   "bytes": 184672,
+   "sha256": "4dfa268c7eafcbebc1bbdf741a771afdaef111fd42d0f2579ab70e6e47089550",
+   "sourceBytes": 1503432,
+   "sourceSha256": "5c197a8e64481c43338073e89824bff6274788f2a186ef452159e5d356247017",
+   "cleanedPngSha256": "907e6f6656d1fded07175510acdba58d3a9a797460644578298667708e411f5b",
+   "meanErr": 1.96,
+   "edgeP99": 11.9,
+   "alphaExact": true,
+   "repairs": {
+    "specksRemoved": 8,
+    "speckPixels": 8,
+    "fringePixelsBefore": 2364,
+    "fringePixelsAfter": 0,
+    "orphanFringeCleared": 0
+   },
+   "sourceDrift": {
+    "baselinePx": 2,
+    "centerPx": 10.9,
+    "figureHeightPx": 5
+   },
+   "defaultFrame": "e1",
+   "expressionLabels": "verified by visual inspection of every frame (src/story/expressions.ts maps dialogue expressions to them)",
+   "frames": [
+    {
+     "id": "e1",
+     "x": 0,
+     "y": 0,
+     "w": 382,
+     "h": 418,
+     "anchorX": 190,
+     "baselineY": 407,
+     "headTopY": 10,
+     "meaning": "composed, level gaze"
+    },
+    {
+     "id": "e2",
+     "x": 382,
+     "y": 0,
+     "w": 382,
+     "h": 418,
+     "anchorX": 190,
+     "baselineY": 407,
+     "headTopY": 10,
+     "meaning": "pleasant public smile"
+    },
+    {
+     "id": "e3",
+     "x": 764,
+     "y": 0,
+     "w": 382,
+     "h": 418,
+     "anchorX": 190,
+     "baselineY": 407,
+     "headTopY": 13,
+     "meaning": "appraising, one brow raised"
+    },
+    {
+     "id": "e4",
+     "x": 1146,
+     "y": 0,
+     "w": 382,
+     "h": 418,
+     "anchorX": 190,
+     "baselineY": 407,
+     "headTopY": 10,
+     "meaning": "self-satisfied smile, chin up"
+    },
+    {
+     "id": "e5",
+     "x": 0,
+     "y": 418,
+     "w": 382,
+     "h": 418,
+     "anchorX": 190,
+     "baselineY": 407,
+     "headTopY": 13,
+     "meaning": "cool, narrowed eyes"
+    },
+    {
+     "id": "e6",
+     "x": 382,
+     "y": 418,
+     "w": 382,
+     "h": 418,
+     "anchorX": 190,
+     "baselineY": 407,
+     "headTopY": 14,
+     "meaning": "hard stare, brows down"
+    },
+    {
+     "id": "e7",
+     "x": 764,
+     "y": 418,
+     "w": 382,
+     "h": 418,
+     "anchorX": 190,
+     "baselineY": 407,
+     "headTopY": 9,
+     "meaning": "startled, eyes wide"
+    },
+    {
+     "id": "e8",
+     "x": 1146,
+     "y": 418,
+     "w": 382,
+     "h": 418,
+     "anchorX": 190,
+     "baselineY": 407,
+     "headTopY": 14,
+     "meaning": "tight smirk"
+    }
+   ]
+  },
+  {
+   "id": "cast.luz.atlas.web",
+   "of": "cast.luz.atlas",
+   "who": "luz",
+   "name": "Luz Rivera",
+   "path": "assets/generated/web/cast-luz.webp",
+   "format": "webp",
+   "encoder": "q86 alphaQuality100 smartSubsample",
+   "width": 1468,
+   "height": 828,
+   "bytes": 166944,
+   "sha256": "eee8322ba04df476a3c0e04b1da42489a68b5d81ee1a4f9af7d88986a329ef43",
+   "sourceBytes": 1458560,
+   "sourceSha256": "3f1eb2364c0ab4194c4262bc136912678e36fa1e7c7984436b5c1d858719e73d",
+   "cleanedPngSha256": "783f27f032cba475886c81d297ff72a687bb0a512d673c44952b949376bfb403",
+   "meanErr": 2.01,
+   "edgeP99": 10.9,
+   "alphaExact": true,
+   "repairs": {
+    "specksRemoved": 18,
+    "speckPixels": 37,
+    "fringePixelsBefore": 193,
+    "fringePixelsAfter": 0,
+    "orphanFringeCleared": 0
+   },
+   "sourceDrift": {
+    "baselinePx": 4,
+    "centerPx": 1.8,
+    "figureHeightPx": 2
+   },
+   "defaultFrame": "e1",
+   "expressionLabels": "verified by visual inspection of every frame (src/story/expressions.ts maps dialogue expressions to them)",
+   "frames": [
+    {
+     "id": "e1",
+     "x": 0,
+     "y": 0,
+     "w": 367,
+     "h": 414,
+     "anchorX": 183,
+     "baselineY": 401,
+     "headTopY": 12,
+     "meaning": "calm, attentive"
+    },
+    {
+     "id": "e2",
+     "x": 367,
+     "y": 0,
+     "w": 367,
+     "h": 414,
+     "anchorX": 183,
+     "baselineY": 401,
+     "headTopY": 12,
+     "meaning": "warm smile"
+    },
+    {
+     "id": "e3",
+     "x": 734,
+     "y": 0,
+     "w": 367,
+     "h": 414,
+     "anchorX": 183,
+     "baselineY": 401,
+     "headTopY": 10,
+     "meaning": "serious, brows drawn"
+    },
+    {
+     "id": "e4",
+     "x": 1101,
+     "y": 0,
+     "w": 367,
+     "h": 414,
+     "anchorX": 183,
+     "baselineY": 401,
+     "headTopY": 11,
+     "meaning": "speaking, open mouth"
+    },
+    {
+     "id": "e5",
+     "x": 0,
+     "y": 414,
+     "w": 367,
+     "h": 414,
+     "anchorX": 183,
+     "baselineY": 401,
+     "headTopY": 10,
+     "meaning": "concerned, brows raised"
+    },
+    {
+     "id": "e6",
+     "x": 367,
+     "y": 414,
+     "w": 367,
+     "h": 414,
+     "anchorX": 183,
+     "baselineY": 401,
+     "headTopY": 10,
+     "meaning": "firm, level"
+    },
+    {
+     "id": "e7",
+     "x": 734,
+     "y": 414,
+     "w": 367,
+     "h": 414,
+     "anchorX": 183,
+     "baselineY": 401,
+     "headTopY": 10,
+     "meaning": "gentle closed smile"
+    },
+    {
+     "id": "e8",
+     "x": 1101,
+     "y": 414,
+     "w": 367,
+     "h": 414,
+     "anchorX": 183,
+     "baselineY": 401,
+     "headTopY": 10,
+     "meaning": "knowing soft smile, eyes narrowed"
+    }
+   ]
+  },
+  {
+   "id": "cast.marisol.atlas.web",
+   "of": "cast.marisol.atlas",
+   "who": "marisol",
+   "name": "Marisol Vélez",
+   "path": "assets/generated/web/cast-marisol.webp",
+   "format": "webp",
+   "encoder": "q86 alphaQuality100 smartSubsample",
+   "width": 1540,
+   "height": 868,
+   "bytes": 250328,
+   "sha256": "0a3c52271cd55da83374db1cf081dd7358e7509273044461273573c4d0adfec8",
+   "sourceBytes": 1783753,
+   "sourceSha256": "49a7e46816c0502fd0662887388a3a6dacc7b6e3930cebdd79f94bb74828acbe",
+   "cleanedPngSha256": "b2e79e7c68a7e7ba8ebf1158a6db981d7653b65da020c5c6360b91e1f46f124f",
+   "meanErr": 2.61,
+   "edgeP99": 14.9,
+   "alphaExact": true,
+   "repairs": {
+    "specksRemoved": 42,
+    "speckPixels": 62,
+    "fringePixelsBefore": 8377,
+    "fringePixelsAfter": 0,
+    "orphanFringeCleared": 7
+   },
+   "sourceDrift": {
+    "baselinePx": 2,
+    "centerPx": 7.7,
+    "figureHeightPx": 0
+   },
+   "defaultFrame": "e1",
+   "expressionLabels": "verified by visual inspection of every frame (src/story/expressions.ts maps dialogue expressions to them)",
+   "frames": [
+    {
+     "id": "e1",
+     "x": 0,
+     "y": 0,
+     "w": 385,
+     "h": 434,
+     "anchorX": 192,
+     "baselineY": 423,
+     "headTopY": 10,
+     "meaning": "composed, slight smile"
+    },
+    {
+     "id": "e2",
+     "x": 385,
+     "y": 0,
+     "w": 385,
+     "h": 434,
+     "anchorX": 192,
+     "baselineY": 423,
+     "headTopY": 10,
+     "meaning": "wry half-smile, eyes squinted"
+    },
+    {
+     "id": "e3",
+     "x": 770,
+     "y": 0,
+     "w": 385,
+     "h": 434,
+     "anchorX": 192,
+     "baselineY": 423,
+     "headTopY": 10,
+     "meaning": "worried, brows raised, lips parted"
+    },
+    {
+     "id": "e4",
+     "x": 1155,
+     "y": 0,
+     "w": 385,
+     "h": 434,
+     "anchorX": 192,
+     "baselineY": 423,
+     "headTopY": 10,
+     "meaning": "determined, set jaw"
+    },
+    {
+     "id": "e5",
+     "x": 0,
+     "y": 434,
+     "w": 385,
+     "h": 434,
+     "anchorX": 192,
+     "baselineY": 423,
+     "headTopY": 10,
+     "meaning": "pained, brows tilted"
+    },
+    {
+     "id": "e6",
+     "x": 385,
+     "y": 434,
+     "w": 385,
+     "h": 434,
+     "anchorX": 192,
+     "baselineY": 423,
+     "headTopY": 10,
+     "meaning": "warm smile"
+    },
+    {
+     "id": "e7",
+     "x": 770,
+     "y": 434,
+     "w": 385,
+     "h": 434,
+     "anchorX": 192,
+     "baselineY": 423,
+     "headTopY": 10,
+     "meaning": "suspicious frown"
+    },
+    {
+     "id": "e8",
+     "x": 1155,
+     "y": 434,
+     "w": 385,
+     "h": 434,
+     "anchorX": 192,
+     "baselineY": 423,
+     "headTopY": 10,
+     "meaning": "broad laughing smile"
+    }
+   ]
+  },
+  {
+   "id": "cast.rafa.atlas.web",
+   "of": "cast.rafa.atlas",
+   "who": "rafa",
+   "name": "Tío Rafa",
+   "path": "assets/generated/web/cast-rafa.webp",
+   "format": "webp",
+   "encoder": "q86 alphaQuality100 smartSubsample",
+   "width": 1552,
+   "height": 826,
+   "bytes": 219616,
+   "sha256": "fce9705afcdd3f5b87ea043aefd91a6e0871c53256fbe5e58c1a1346019a70a3",
+   "sourceBytes": 1780912,
+   "sourceSha256": "fa5a69ffd45798daec5ae13428a2169c7252ff9572199512292cec3a98e57057",
+   "cleanedPngSha256": "6f86e9a4242e7c49d7f8210d3526575f49c558ee23d18b1689ad9914d302c2dc",
+   "meanErr": 2.12,
+   "edgeP99": 11.7,
+   "alphaExact": true,
+   "repairs": {
+    "specksRemoved": 23,
+    "speckPixels": 38,
+    "fringePixelsBefore": 6705,
+    "fringePixelsAfter": 0,
+    "orphanFringeCleared": 0
+   },
+   "sourceDrift": {
+    "baselinePx": 7,
+    "centerPx": 1.6,
+    "figureHeightPx": 4
+   },
+   "defaultFrame": "e1",
+   "expressionLabels": "verified by visual inspection of every frame (src/story/expressions.ts maps dialogue expressions to them)",
+   "frames": [
+    {
+     "id": "e1",
+     "x": 0,
+     "y": 0,
+     "w": 388,
+     "h": 413,
+     "anchorX": 193,
+     "baselineY": 402,
+     "headTopY": 13,
+     "meaning": "calm, looking off"
+    },
+    {
+     "id": "e2",
+     "x": 388,
+     "y": 0,
+     "w": 388,
+     "h": 413,
+     "anchorX": 193,
+     "baselineY": 402,
+     "headTopY": 13,
+     "meaning": "laughing"
+    },
+    {
+     "id": "e3",
+     "x": 776,
+     "y": 0,
+     "w": 388,
+     "h": 413,
+     "anchorX": 193,
+     "baselineY": 402,
+     "headTopY": 13,
+     "meaning": "sly grin"
+    },
+    {
+     "id": "e4",
+     "x": 1164,
+     "y": 0,
+     "w": 388,
+     "h": 413,
+     "anchorX": 193,
+     "baselineY": 402,
+     "headTopY": 12,
+     "meaning": "looking up, wistful"
+    },
+    {
+     "id": "e5",
+     "x": 0,
+     "y": 413,
+     "w": 388,
+     "h": 413,
+     "anchorX": 193,
+     "baselineY": 402,
+     "headTopY": 15,
+     "meaning": "sad, brows tilted"
+    },
+    {
+     "id": "e6",
+     "x": 388,
+     "y": 413,
+     "w": 388,
+     "h": 413,
+     "anchorX": 193,
+     "baselineY": 402,
+     "headTopY": 15,
+     "meaning": "downcast, eyes lowered"
+    },
+    {
+     "id": "e7",
+     "x": 776,
+     "y": 413,
+     "w": 388,
+     "h": 413,
+     "anchorX": 193,
+     "baselineY": 402,
+     "headTopY": 11,
+     "meaning": "proud, chin up"
+    },
+    {
+     "id": "e8",
+     "x": 1164,
+     "y": 413,
+     "w": 388,
+     "h": 413,
+     "anchorX": 193,
+     "baselineY": 402,
+     "headTopY": 14,
+     "meaning": "broad warm smile"
+    }
+   ]
+  }
+ ]
+}

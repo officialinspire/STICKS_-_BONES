@@ -1,0 +1,57 @@
+# Deploy to GitHub Pages (https://<owner>.github.io/<repo>/).
+#
+# Runs ONLY on a push to main (i.e. after the owner merges) or when started by
+# hand from the Actions tab. Requires Settings → Pages → Source: "GitHub Actions".
+# The build uses a relative base ('./'), so it works under the repository's subpath
+# without any path configuration.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build tag (shown as <html data-build> and in the service-worker build)
+        run: echo "SB_BUILD_TAG=${GITHUB_SHA::12}" >> "$GITHUB_ENV"
+      - name: Full check (typecheck, lint, tests, assets, build)
+        run: npm run check
+      - name: Install Playwright Chromium for the smoke test
+        run: |
+          npm install --no-save playwright@1.63.0
+          npx playwright install --with-deps chromium
+      - name: Browser smoke on the built site
+        run: npm run smoke
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

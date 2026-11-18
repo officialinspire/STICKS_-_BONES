@@ -1,0 +1,51 @@
+# CI: typecheck, lint, unit + engine tests, asset-manifest checks, production build
+# (with byte budget and base-path checks) and an essential browser smoke test.
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint (includes engine-purity rules)
+        run: npm run lint
+      - name: Unit and engine tests
+        run: npm test
+      - name: Asset manifest, derivatives and icons
+        run: npm run assets:verify
+      - name: Production build (base-path, byte-budget and PWA checks)
+        run: npm run build
+      - name: Install Playwright Chromium for the smoke test
+        # Playwright is a machine tool, not a project dependency (see scripts/playwright-shim.d.ts).
+        run: |
+          npm install --no-save playwright@1.63.0
+          npx playwright install --with-deps chromium
+      - name: Browser smoke (production build on a GitHub Pages subpath)
+        run: npm run smoke
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results/
+          if-no-files-found: ignore

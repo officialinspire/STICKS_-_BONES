@@ -1,0 +1,368 @@
+{
+  "format": "sticks-and-bones/tile-atlas@1",
+  "pipGeometryVersion": 1,
+  "image": "double-six-atlas.png",
+  "width": 624,
+  "height": 1000,
+  "face": {
+    "width": 96,
+    "height": 192,
+    "padding": 4,
+    "orientation": "portrait; top half shows the high pip, bottom half the low pip"
+  },
+  "order": "canonical tile order t00, t10, t11, t20 … t66 (high ascending, then low ascending), then backs; identity is the id field, never the cell position",
+  "source": {
+    "assetId": "tile.materials",
+    "sha256": "02e9201095d20d4aee06818f2c6b6666665fdfcba6a8b0dd952552822882f0ef",
+    "frames": {
+      "face-ivory-divided": {
+        "x": 52,
+        "y": 104,
+        "w": 342,
+        "h": 678
+      },
+      "back-teal-weave": {
+        "x": 495,
+        "y": 104,
+        "w": 341,
+        "h": 678
+      },
+      "back-walnut-inlay": {
+        "x": 1381,
+        "y": 104,
+        "w": 342,
+        "h": 678
+      }
+    }
+  },
+  "tiles": [
+    {
+      "id": "t00",
+      "high": 0,
+      "low": 0,
+      "rect": {
+        "x": 4,
+        "y": 4,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t10",
+      "high": 1,
+      "low": 0,
+      "rect": {
+        "x": 108,
+        "y": 4,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t11",
+      "high": 1,
+      "low": 1,
+      "rect": {
+        "x": 212,
+        "y": 4,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t20",
+      "high": 2,
+      "low": 0,
+      "rect": {
+        "x": 316,
+        "y": 4,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t21",
+      "high": 2,
+      "low": 1,
+      "rect": {
+        "x": 420,
+        "y": 4,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t22",
+      "high": 2,
+      "low": 2,
+      "rect": {
+        "x": 524,
+        "y": 4,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t30",
+      "high": 3,
+      "low": 0,
+      "rect": {
+        "x": 4,
+        "y": 204,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t31",
+      "high": 3,
+      "low": 1,
+      "rect": {
+        "x": 108,
+        "y": 204,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t32",
+      "high": 3,
+      "low": 2,
+      "rect": {
+        "x": 212,
+        "y": 204,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t33",
+      "high": 3,
+      "low": 3,
+      "rect": {
+        "x": 316,
+        "y": 204,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t40",
+      "high": 4,
+      "low": 0,
+      "rect": {
+        "x": 420,
+        "y": 204,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t41",
+      "high": 4,
+      "low": 1,
+      "rect": {
+        "x": 524,
+        "y": 204,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t42",
+      "high": 4,
+      "low": 2,
+      "rect": {
+        "x": 4,
+        "y": 404,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t43",
+      "high": 4,
+      "low": 3,
+      "rect": {
+        "x": 108,
+        "y": 404,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t44",
+      "high": 4,
+      "low": 4,
+      "rect": {
+        "x": 212,
+        "y": 404,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t50",
+      "high": 5,
+      "low": 0,
+      "rect": {
+        "x": 316,
+        "y": 404,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t51",
+      "high": 5,
+      "low": 1,
+      "rect": {
+        "x": 420,
+        "y": 404,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t52",
+      "high": 5,
+      "low": 2,
+      "rect": {
+        "x": 524,
+        "y": 404,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t53",
+      "high": 5,
+      "low": 3,
+      "rect": {
+        "x": 4,
+        "y": 604,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t54",
+      "high": 5,
+      "low": 4,
+      "rect": {
+        "x": 108,
+        "y": 604,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t55",
+      "high": 5,
+      "low": 5,
+      "rect": {
+        "x": 212,
+        "y": 604,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t60",
+      "high": 6,
+      "low": 0,
+      "rect": {
+        "x": 316,
+        "y": 604,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t61",
+      "high": 6,
+      "low": 1,
+      "rect": {
+        "x": 420,
+        "y": 604,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t62",
+      "high": 6,
+      "low": 2,
+      "rect": {
+        "x": 524,
+        "y": 604,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t63",
+      "high": 6,
+      "low": 3,
+      "rect": {
+        "x": 4,
+        "y": 804,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t64",
+      "high": 6,
+      "low": 4,
+      "rect": {
+        "x": 108,
+        "y": 804,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t65",
+      "high": 6,
+      "low": 5,
+      "rect": {
+        "x": 212,
+        "y": 804,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "t66",
+      "high": 6,
+      "low": 6,
+      "rect": {
+        "x": 316,
+        "y": 804,
+        "w": 96,
+        "h": 192
+      }
+    }
+  ],
+  "backs": [
+    {
+      "id": "back-teal-weave",
+      "rect": {
+        "x": 420,
+        "y": 804,
+        "w": 96,
+        "h": 192
+      }
+    },
+    {
+      "id": "back-walnut-inlay",
+      "rect": {
+        "x": 524,
+        "y": 804,
+        "w": 96,
+        "h": 192
+      }
+    }
+  ]
+}
