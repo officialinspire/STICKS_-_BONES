@@ -463,7 +463,7 @@ export const IMAGE_ASSETS = [
   {
     id: "env.rest-area",
     category: "environment",
-    status: "variant",
+    status: "runtime",
     path: "assets/art/environments/Quiet karst rest area by the cave.png",
     originalName: "Quiet karst rest area by the cave.png",
     bytes: 3371746,
@@ -471,7 +471,7 @@ export const IMAGE_ASSETS = [
     width: 1672,
     height: 941,
     hasAlpha: false,
-    proposedUse: "Modern inspection rest area at the cave entrance (owner upload, Nov 18, 2026) for Chapter 6's post-cave dialogue and hand — the script keeps that hand off the ancient platform. Preserved as supplied; not bundled until its derivatives are built and wired (Stage 3)."
+    proposedUse: "Modern inspection rest area at the cave entrance (owner upload, Nov 18, 2026) for Chapter 6's post-cave dialogue and hand — the script keeps that hand off the ancient platform. Runtime: WebP derivative + 3:4 portrait crop (npm run assets:derive, focal src/assets/focal.ts); the original is never bundled."
   },
   {
     id: "cast.worker.portrait",
@@ -502,7 +502,7 @@ export const IMAGE_ASSETS = [
   {
     id: "prop.evidence-card",
     category: "prop",
-    status: "variant",
+    status: "runtime",
     path: "assets/art/props/Blank evidence card on warm wood.png",
     originalName: "Blank evidence card on warm wood.png",
     bytes: 1983160,
@@ -510,7 +510,7 @@ export const IMAGE_ASSETS = [
     width: 1086,
     height: 1448,
     hasAlpha: false,
-    proposedUse: "Blank evidence card on warm wood (owner upload, Nov 18, 2026): background for the Evidence inspection cards, whose text is rendered by code from the approved excerpts. Preserved as supplied; not bundled until its derivative is built (Stage 3)."
+    proposedUse: "Blank evidence card on warm wood (owner upload, Nov 18, 2026): background for the Evidence inspection cards, whose text is rendered by code from the approved excerpts. Runtime: WebP derivative (npm run assets:derive); the original is never bundled."
   }
 ] as const satisfies readonly ImageAsset[];
 

@@ -2447,7 +2447,7 @@ h1, h2, h3, .title, .chapter-title, .section-h, .score-val, .dest-title, .points
 [data-light='night'] .st-light { background: linear-gradient(180deg, rgba(30, 40, 90, 0.35), rgba(10, 18, 30, 0.88)); }
 [data-light='jungle'] .st-light { background: linear-gradient(180deg, rgba(40, 90, 50, 0.22), rgba(12, 28, 20, 0.85)); }
 [data-light='cave'] .st-light { background: linear-gradient(180deg, rgba(8, 63, 67, 0.35), rgba(8, 20, 24, 0.9)); }
-[data-light='rest-area'] .st-light { background: linear-gradient(180deg, #24383c, #101c20); }
+[data-light='rest-area'] .st-light { background: linear-gradient(180deg, rgba(242, 181, 68, 0.08), rgba(20, 37, 43, 0.76)); } /* Day 2 afternoon at the entrance: daylight, kept low behind the panels */
 [data-light='sunset'] .st-light { background: linear-gradient(180deg, rgba(242, 181, 68, 0.2), rgba(217, 79, 69, 0.12) 40%, rgba(20, 37, 43, 0.82)); }
 [data-light='dinner'] .st-light { background: radial-gradient(ellipse at 50% 70%, rgba(242, 181, 68, 0.22), rgba(10, 18, 30, 0.9) 70%); }
 /* Threshold: the warm line of light (an open door somewhere out of view). */

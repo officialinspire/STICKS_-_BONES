@@ -323,7 +323,7 @@ try {
       check(m.faceCover <= 1, `G ${vp.name} ${name}: the dialogue panel covers the speaker's face by ${m.faceCover.toFixed(0)}px`);
       check(m.underBar <= 1, `G ${vp.name} ${name}: the speaker's head is under the scene bar by ${m.underBar}px`);
       check(m.intoControls <= 0, `G ${vp.name} ${name}: the speaker reaches below the dialogue panel by ${m.intoControls}px`);
-      if (id === 'chapter-6' && name === 'cave-accepted-hand') check(m.env !== 'env.cave-waterfall', `G: chapter 6 rest-area beat still shows the ancient platform (${m.env})`);
+      if (id === 'chapter-6' && name === 'cave-accepted-hand') check(m.env === 'env.rest-area', `G: chapter 6 rest-area beat shows ${m.env}, expected env.rest-area (never the ancient platform)`);
       // The resort and the confrontation are the approved corporate terrace (never the retired leisure patio).
       if (id === 'chapter-3' || id === 'chapter-7') check(m.env === 'env.executive-terrace', `G ${vp.name} ${name}: ${id} shows ${m.env}, not the corporate terrace`);
       await page.screenshot({ path: join(out, `${vp.name}-${name}.png`) });

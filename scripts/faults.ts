@@ -10,7 +10,7 @@
  *                                         Try again clears it only once it is really stored
  *   G  A bed fails while offline        → silence (not "broken"); back online → the current bed starts once;
  *                                         an absent (404) bed is never retried
- *   H  Story table backdrops            → every chapter's hand shows its own place (Chapter 6 drawn, no photo)
+ *   H  Story table backdrops            → every chapter's hand shows its own place (Chapter 6: the entrance rest area)
  *   I  Music fails offline              → transient, not broken; back online → the current track plays, once
  *
  * Usage: npm run faults
@@ -278,7 +278,7 @@ try {
   {
     const { page, errors } = await newPage();
     const order = ['prologue', 'chapter-1', 'chapter-2', 'chapter-3', 'chapter-4', 'chapter-5', 'chapter-6', 'chapter-7'];
-    const want: Record<string, string> = { 'chapter-1': 'env.neighborhood-patio', 'chapter-2': 'env.back-alley', 'chapter-3': 'env.executive-terrace', 'chapter-4': 'env.moonlit-promenade', 'chapter-5': 'env.jungle-camp', 'chapter-6': 'none', 'chapter-7': 'env.executive-terrace' };
+    const want: Record<string, string> = { 'chapter-1': 'env.neighborhood-patio', 'chapter-2': 'env.back-alley', 'chapter-3': 'env.executive-terrace', 'chapter-4': 'env.moonlit-promenade', 'chapter-5': 'env.jungle-camp', 'chapter-6': 'env.rest-area', 'chapter-7': 'env.executive-terrace' };
     const seen: string[] = [];
     for (const [id, env] of Object.entries(want)) {
       await toMenu(page);
@@ -291,8 +291,8 @@ try {
         return { id: h.dataset.envId, bg: getComputedStyle(h).backgroundImage };
       });
       check(got.id === env, `H: ${id} hand shows ${got.id}, expected ${env}`);
-      if (env === 'none') check(!/url\(/.test(got.bg), `H: chapter 6 hand painted a photo backdrop (${got.bg.slice(0, 120)})`);
-      else check(got.bg.includes(env.slice(4)), `H: ${id} hand background is ${got.bg.slice(0, 140)}`);
+      check(got.bg.includes(env.slice(4)), `H: ${id} hand background is ${got.bg.slice(0, 140)}`);
+      if (id === 'chapter-6') check(!/cave-waterfall/.test(got.bg), `H: chapter 6 hand is on the ancient platform (${got.bg.slice(0, 120)})`);
       check(!/neighborhood-patio/.test(got.bg) || env === 'env.neighborhood-patio', `H: ${id} hand fell back to the patio`);
       seen.push(`${id.replace('chapter-', 'Ch')}=${env.replace('env.', '')}`);
       await page.screenshot({ path: join(out, `hand-${id}.png`) });

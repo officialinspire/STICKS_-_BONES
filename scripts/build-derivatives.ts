@@ -37,6 +37,8 @@ export const DERIVE: Record<string, { file: string; lossless?: boolean; quality?
   'env.moonlit-promenade': { file: 'moonlit-promenade.webp', quality: 80, maxMeanErr: 6 },
   'env.jungle-camp': { file: 'jungle-camp.webp', quality: 84, maxMeanErr: 6 }, // dense foliage: q80 measured 6.05 mean error
   'env.executive-terrace': { file: 'executive-terrace.webp', quality: 80, maxMeanErr: 6 },
+  'env.rest-area': { file: 'rest-area.webp', quality: 83, maxMeanErr: 6 }, // dense foliage and gravel: q80 measured 6.39, q82 6.06 mean error
+  'prop.evidence-card': { file: 'evidence-card.webp', quality: 80, maxMeanErr: 6 },
   'table.weathered': { file: 'weathered-tabletop.webp', quality: 82, maxMeanErr: 6 },
   // Cleaned (scripts/lib/clean.ts): stray specks and red/yellow edge fringes removed per frame cell, same size, so
   // every frame rect and stage box still applies. Gated against the CLEANED pixels. Needed now that dialogue shows him large.

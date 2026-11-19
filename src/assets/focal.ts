@@ -1,9 +1,9 @@
 /**
- * Focal points of the six runtime environment backdrops (fractions of the image), the single source for
+ * Focal points of the seven runtime environment backdrops (fractions of the image), the single source for
  * both the staging (`background-position`) and the portrait crops built by `npm run assets:derive`.
  * A test keeps src/story/staging.ts in step with this table.
  */
-export const ENV_IDS = ['env.neighborhood-patio', 'env.cave-waterfall', 'env.back-alley', 'env.moonlit-promenade', 'env.jungle-camp', 'env.executive-terrace'] as const;
+export const ENV_IDS = ['env.neighborhood-patio', 'env.cave-waterfall', 'env.back-alley', 'env.moonlit-promenade', 'env.jungle-camp', 'env.executive-terrace', 'env.rest-area'] as const;
 export type EnvId = (typeof ENV_IDS)[number];
 
 export const ENV_FOCUS: Readonly<Record<EnvId, { readonly x: number; readonly y: number }>> = {
@@ -14,6 +14,8 @@ export const ENV_FOCUS: Readonly<Record<EnvId, { readonly x: number; readonly y:
   'env.jungle-camp': { x: 0.5, y: 0.45 },
   // The corporate read: the glass lobby, its canopy and the hotel tower (left third), not the open sea.
   'env.executive-terrace': { x: 0.27, y: 0.5 },
+  // Chapter 6's modern rest area: the shelter and its bench (left of centre), with the path toward the entrance.
+  'env.rest-area': { x: 0.4, y: 0.5 },
 };
 
 /** Portrait crops are 3:4 (width / height), so they cover every viewport up to a 3:4 tablet in portrait. */
