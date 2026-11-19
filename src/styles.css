@@ -477,6 +477,11 @@ body {
   --hand-w: 42px;
   height: 100vh;
   height: 100dvh;
+  /* Large text on the smallest screens can make the table taller than the viewport: then the table itself
+     scrolls (the page stays locked), so the hand and every control stay reachable. At normal sizes nothing
+     overflows (npm run qa asserts it), so nothing scrolls. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
   max-width: 1280px;
   margin: 0 auto;
   display: grid;

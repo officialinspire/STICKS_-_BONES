@@ -753,7 +753,7 @@ export class TableScreen {
     }
     if (v.legalMoves.length) {
       const partner = v.seatCount === 4 ? this.#s.rules.teams.find((t) => t.includes(v.viewer))?.find((x) => x !== v.viewer) : undefined;
-      return partner !== undefined ? `Tap a glowing tile. ${this.#name(partner as SeatIndex)} (Partner, across from you) scores with you.` : 'Tap a glowing tile — only tiles that match an end glow.';
+      return partner !== undefined ? `Tap a glowing tile. ${this.#name(partner as SeatIndex)} is your partner, across from you.` : 'Tap a glowing tile — only tiles that match an end glow.';
     }
     return canDraw ? 'Nothing fits: tap Draw.' : 'Nothing fits: tap Pass.';
   }

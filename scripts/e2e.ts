@@ -1687,7 +1687,7 @@ try {
       for (let k = 0; k < 100 && !(await page.locator('.hand-tile.is-legal').count()); k++) await page.waitForTimeout(100);
       const tip = page.locator('.table-tip');
       const text = ((await tip.textContent().catch(() => '')) ?? '').trim();
-      check(/Tap a glowing tile/.test(text) && /Partner, across from you/.test(text), `tips ${vp.width}×${vp.height}: first-turn tip "${text}"`);
+      check(/Tap a glowing tile/.test(text) && /is your partner, across from you/.test(text), `tips ${vp.width}×${vp.height}: first-turn tip "${text}"`);
       // Never covers play: the tip lives in the controls; the hand and the hide button are on screen and usable.
       const box = await page.locator('[data-act="tips-off"]').boundingBox();
       check(!!box && box.x >= 0 && box.y >= 0 && box.x + box.width <= vp.width + 1 && box.y + box.height <= vp.height + 1, `tips ${vp.width}×${vp.height}: Hide tips off screen ${JSON.stringify(box)}`);

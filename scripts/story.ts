@@ -815,11 +815,15 @@ try {
       await q.waitForSelector('.table-screen');
       await q.evaluate(() => (document.documentElement.style.fontSize = '130%'));
       const inView = async (sel: string) => {
+        // Reachable = on screen, or brought on screen by scrolling the table (large text on a small phone).
+        await q.locator(sel).first().scrollIntoViewIfNeeded().catch(() => undefined);
         const b = await q.locator(sel).first().boundingBox();
         return !!b && b.x >= -1 && b.y >= -1 && b.x + b.width <= vp.width + 1 && b.y + b.height <= vp.height + 1;
       };
       for (let k = 0; k < 60 && !(await q.locator('.table-tip').count()); k++) await q.waitForTimeout(100);
       const tipOk = (await q.locator('.table-tip').count()) === 0 || (await inView('[data-act="tips-off"]'));
+      const handOk = await inView('.hand-tile');
+      check(handOk, `P ${vp.width}×${vp.height}: the hand can't be reached at 130 % text`);
       await q.click('[data-act="pause"]');
       await q.waitForSelector('dialog.pause[open]');
       const finishOk = await inView('dialog.pause [data-act="assist-finish"]');
