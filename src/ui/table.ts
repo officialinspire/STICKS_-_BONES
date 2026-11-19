@@ -189,6 +189,7 @@ export class TableScreen {
     });
     let lastFit = -1;
     let rowsFrame = 0;
+    let boardFrame = 0;
     this.#ro = new ResizeObserver(() => {
       // Next frame, outside the observer callback: the row change resizes the observed board.
       cancelAnimationFrame(rowsFrame);
@@ -199,7 +200,16 @@ export class TableScreen {
       if (w === lastWidth && fit === lastFit) return;
       lastWidth = w;
       lastFit = fit;
-      this.#renderBoard();
+      // Next frame as well: re-rendering the board inside the callback can resize the element being observed,
+      // which WebKit reports as "ResizeObserver loop completed with undelivered notifications" (pwa § update).
+      cancelAnimationFrame(boardFrame);
+      boardFrame = requestAnimationFrame(() => {
+        if (this.#q('board')) this.#renderBoard();
+      });
+    });
+    this.#unsub.push(() => {
+      cancelAnimationFrame(rowsFrame);
+      cancelAnimationFrame(boardFrame);
     });
     this.#ro.observe(this.#q('board-wrap'));
     // Cousin: compact bust on small screens, full figure on wide ones; same stable stage either way.

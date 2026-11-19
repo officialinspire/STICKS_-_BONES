@@ -40,7 +40,7 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import { showMenuItem } from './lib/menu-navigation';
-import { engine, HARNESS, launchOptions, unsupported } from './lib/engine';
+import { engine, HARNESS, isWebkitFailedLoadReport, launchOptions, unsupported } from './lib/engine';
 
 type Page = import('playwright').Page;
 type BrowserContext = import('playwright').BrowserContext;
@@ -251,7 +251,7 @@ async function persistentContext(offline = false): Promise<{ ctx: BrowserContext
 function watchErrors(page: Page) {
   const errs: string[] = [];
   errorsOf.set(page, errs);
-  page.on('pageerror', (e: Error) => errs.push(`page error: ${e.message}`));
+  page.on('pageerror', (e: Error) => isWebkitFailedLoadReport('pwa', e) || errs.push(`page error: ${e.message}`));
 }
 const seenTexts = (page: Page): Promise<string[]> => page.evaluate(() => (window as unknown as { __offlineTexts: string[] }).__offlineTexts ?? []);
 
@@ -721,8 +721,9 @@ try {
 
   step('4. Quota');
   if (run('4')) {
-    // a) The browser's estimate says it won't fit: nothing is downloaded, and the player is told.
-    const { ctx, page } = await newContext(`if (navigator.storage) navigator.storage.estimate = async () => ({ quota: 4_000_000, usage: 3_000_000 });`);
+    // a) The browser's estimate says it won't fit: nothing is downloaded, and the player is told. (Faked on the
+    //    prototype: WebKit can hand out a fresh navigator.storage object, which drops an instance-level fake.)
+    const { ctx, page } = await newContext(`if (self.StorageManager) StorageManager.prototype.estimate = async () => ({ quota: 4_000_000, usage: 3_000_000 });`);
     const at = state.log.length;
     await page.goto(`${ORIGIN}${APP}`);
     await enterMenu(page);
@@ -735,7 +736,7 @@ try {
   }
   if (run('4') && !HARNESS.cdp) unsupported('pwa', 'storage quota too small for the pack / for the shell (step 4b)', 'the quota override is a DevTools (Chromium) feature');
   if (run('4') && HARNESS.cdp) for (const [label, quota, init, expect] of [
-    ['the pack does not fit (worker quota error)', 4_000_000, `if (navigator.storage) navigator.storage.estimate = async () => ({ quota: 1e10, usage: 0 });`, /^Quick Play is ready offline\. Not enough storage for the full game: it needs [\d.]+ MB more/],
+    ['the pack does not fit (worker quota error)', 4_000_000, `if (self.StorageManager) StorageManager.prototype.estimate = async () => ({ quota: 1e10, usage: 0 });`, /^Quick Play is ready offline\. Not enough storage for the full game: it needs [\d.]+ MB more/],
     ['the shell does not fit', 40_000, '', /Not enough storage on this device for the offline files\. The game still works online/],
   ] as const) {
     const { ctx, page } = await newContext(init);
@@ -826,7 +827,7 @@ try {
   if (run('7')) {
     // Also: the persistent-storage prompt is never answered (Firefox keeps persist() pending until the player
     // responds). Download must still start on the tap.
-    const { ctx, page } = await newContext(`Object.defineProperty(navigator, 'connection', { configurable: true, get: () => ({ saveData: true, effectiveType: '4g', addEventListener() {}, removeEventListener() {} }) }); if (navigator.storage) navigator.storage.persist = () => new Promise(() => {});`);
+    const { ctx, page } = await newContext(`Object.defineProperty(navigator, 'connection', { configurable: true, get: () => ({ saveData: true, effectiveType: '4g', addEventListener() {}, removeEventListener() {} }) }); if (self.StorageManager) StorageManager.prototype.persist = () => new Promise(() => {});`);
     const at = state.log.length;
     await page.goto(`${ORIGIN}${APP}`);
     await enterMenu(page);

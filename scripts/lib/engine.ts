@@ -62,3 +62,19 @@ export function isWebkitNavigationCancel(suite: string, message: string): boolea
   unsupported(suite, 'a clean console while a navigation cancels in-flight requests', `WebKit reports a cancelled same-origin request as an access-control error (e.g. ${m[1]})`);
   return true;
 }
+
+/**
+ * WebKit (under Playwright) reports a resource load that a SERVICE WORKER could not satisfy — the origin unreachable,
+ * a file missing — as a "page error" with no JavaScript stack ("TypeError: Load failed", "Connection terminated
+ * unexpectedly", "Cannot load …", or the bare URL), where Chromium reports a console resource error. A real exception
+ * thrown by page code has a stack, so it never matches. Recorded with unsupported(); any other error still fails.
+ */
+export function isWebkitFailedLoadReport(suite: string, e: { message: string; stack?: string }): boolean {
+  if (ENGINE !== 'webkit') return false;
+  const stack = (e.stack ?? '').replace(e.message, '').trim();
+  if (stack) return false;
+  const m = e.message.trim();
+  if (!/^(TypeError: Load failed|Connection terminated unexpectedly|Cannot load .*|\/{0,2}(?:https?:\/\/)?localhost:\d+\/\S+\.)$/.test(m)) return false;
+  unsupported(suite, 'no page errors while loads fail (origin unreachable or a file missing)', 'WebKit reports a failed service-worker load as a stackless page error (Chromium: a console resource error)');
+  return true;
+}
