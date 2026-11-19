@@ -2295,3 +2295,81 @@ rerun on `1996e8f` (the catalogue and the settings fix).
 
 Not available here: Firefox/WebKit, real devices, audio listening.
 
+### Release
+PR #6 merged into `main` as `86df38a` (merge commit). CI green on the branch (`d9ed9ef`) and on `main`.
+"Deploy to GitHub Pages" (run 44474606924) succeeded. Live: `<html data-build>` = `86df38a33be4`; "Ready." →
+menu; service worker scope `/STICKS_-_BONES/`; 0 page errors (Chromium through this environment's proxy).
+
+
+## Stage 3 — owner art, evidence cards, credits (2026-11-19)
+
+Release plan Stage 3 (`docs/RELEASE_PLAN.md`); branch `claude/stage-3-assets-credits` on top of Stage 2.
+
+### Upload audit (first)
+- **Images:** the four uploads of 2026-11-18 (`745b198`) were the only new files. All four are kept byte-identical
+  under `assets/art/` with bytes, SHA-256, dimensions and alpha (`b61bddb`). Reused approved work: the derivative
+  builder, focal table, portrait crops, sample globs, menu pagination, wordmark and AudioManager. Nothing was
+  re-encoded in place.
+- **Audio:** none. `assets/audio/originals/` holds the same 13 uploads as before. There is **no case-complete music or
+  foley** to integrate.
+
+### Completed
+- **Chapter 6 rest area:** `env.rest-area` → `rest-area.webp` (q83) + `rest-area-portrait.webp` via
+  `assets:derive`. The cut to the entrance rest area and the hand use it; the hand is never on the ancient platform
+  (`staging.test`, `story:e2e` § G, `faults` § H). The rest-area grade is now a translucent daylight wash.
+- **Evidence inspection cards:** the case file's Evidence page shows reached items only, one card each, over
+  `evidence-card.webp`. The exact approved caption is code-rendered on the card's paper (measured insets), using
+  the existing pagination.
+- **Title reprise and credits:** on the epilogue's end card, "Title and credits" shows the existing wordmark rising
+  in, then paginated credits, then returns to the Case file. Every name and licence is tested against its source
+  record (sound manifest, music manifest and artist tags, OFL files). The reveal is CSS only; any tap or key
+  finishes it, and it is instant under reduced motion. It writes nothing, and notices wait for the Case file.
+- **Case-complete audio:** `AudioManager.caseComplete()` (music-bus cue after the scene music fades, plus SFX-bus
+  foley; once; cancelled on any scene, profile or visibility change or reset). Explicit loop points apply only when
+  marked auditioned. Builder path in `build-owner-audio.py` (conservative trims, natural tails, gain only lowered to
+  ≤ −1 dBTP). With no files supplied, nothing changes and nothing is synthesized.
+- **Unchanged:** Chapters 5–7 result-cue policy, the authored knock timings, the Story save format, the offline
+  pack mechanism (new files are listed and verified automatically) and app-only repair.
+- **Budgets:** Chapter 6 1,150 KB (was 1,000) and total 21,250 KB (was 21,100), both for the owner's art at the
+  smallest passing encode (`docs/PERFORMANCE.md`); no other limit moved.
+
+### Defects found by the new tests and fixed
+- Evidence cards at 568×320: the longest excerpt overflowed one menu page (`story:e2e` § Q). Short landscape now
+  uses a wider card.
+- Credits: the reveal-finishing tap and Escape only listened on the inner panel (§ Q). They are now
+  document-level and removed on leaving.
+- An achievement notice popped over the reprise (§ Q fails without the fix). Notices now wait for the Case file.
+
+### Commands run and results (Chromium)
+
+All on `fccc846` (identical tree after merging `main` `86df38a`).
+
+| Command | Result |
+| --- | --- |
+| `npm run assets:derive` | pass: the rest area (q83, mean error 5.91; crop 5.94) and the card (q80, 2.62); every existing derivative rebuilt byte-identically |
+| `python3 scripts/build-owner-audio.py --check` | pass: every owner-audio derivative reproduced byte-identically; the new ending-cue path verified on synthetic files only (no upload) |
+| `npm run check` (incl. `assets:verify`) | pass: 556 unit tests in 48 files; all budgets (two raised, measured, above) |
+| `npm run smoke` | pass |
+| `npm run audio` | pass |
+| `npm run audio:report` | pass: 38 files measured (not listened to) |
+| `npm run story:e2e` | pass, including new § Q (evidence cards, reprise, credits, cue fallback) and § G/H (Chapter 6 on the rest area) |
+| `npm run story:sweep` | pass |
+| `npm run story:route` | pass |
+| `npm run qa` | pass: 0 failures, 0 comfort warnings |
+| `npm run a11y` | pass: 0 failures |
+| `npm run faults` | pass (§ H: Chapter 6's hand on `env.rest-area`, never the cave) |
+| `npm run e2e` | pass |
+| `npm run matches` | pass |
+| `npm run pwa` | pass: offline pack 21,469,239 B, byte ranges and app-only repair |
+| `npm run offline:tour` | pass: the whole case offline after a cold relaunch, including Chapter 6 |
+
+Not available here: Firefox/WebKit, real devices, a listening pass (nothing is marked auditioned).
+
+### Missing uploads (listed separately)
+- **Case-complete music** (`docs/MUSIC_BRIEFS.md`: 6–10 s, warm, settled) and **case-complete foley**: wired and
+  waiting; nothing fabricated.
+- Still missing from earlier lists: the optional chapter-card cue; recorded domino foley for pick-up, place, slide
+  and draw; the contractor speaker recording (caption-only by design until supplied); a listening pass for every
+  measured sound, seam and loop.
+- Supplied but intentionally unused: the worker and representative portraits (optional; the script plays both as
+  text and off-camera voices).
