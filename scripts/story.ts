@@ -11,6 +11,10 @@
  *  E. Reduced motion: short simple fades, no text reveal, no establishing move.
  *  F. Orientation change and repeated navigation: no overflow, no errors, one director.
  *  G. Compositions: each staged moment from the brief, portrait 390×844 and landscape 844×390.
+ *  O. Finish hand with AI (Story pause): fixed Chapter 2 deals whose assisted result is a win, a loss and a tie
+ *     — the real result, its insert, one advance, "Finished with AI assistance", no win counted; Take over
+ *     returns control (no further assisted move); a reload mid-assist keeps the label but not the assistant;
+ *     leaving mid-decision lands nothing.
  *  N. Chapter replay from the case file (Chapter 6): it starts at its first beat, plays its hand and the
  *     insert to the end card, withholds the result cue (a serious hand), returns to the case file, and leaves
  *     the case position, completed chapters, statistics and achievements exactly as they were; a double tap
@@ -43,9 +47,9 @@ await server.listen();
 const BASE = 'http://localhost:5188/';
 const browser = await chromium.launch();
 
-async function newPage(o: { width?: number; height?: number; reduce?: boolean; blockImages?: boolean } = {}) {
+async function newPage(o: { width?: number; height?: number; reduce?: boolean; blockImages?: boolean; storySeed?: string } = {}) {
   const ctx = await browser.newContext({ viewport: { width: o.width ?? 390, height: o.height ?? 844 }, reducedMotion: o.reduce ? 'reduce' : 'no-preference', deviceScaleFactor: 2 });
-  await ctx.addInitScript('window.__name = (f) => f; window.__sbStoryFast = true; window.__sbIntroVideo = null;');
+  await ctx.addInitScript(`window.__name = (f) => f; window.__sbStoryFast = true; window.__sbIntroVideo = null;${o.storySeed ? ` window.__sbStorySeed = ${JSON.stringify(o.storySeed)};` : ''}`);
   const page = await ctx.newPage();
   const errors: string[] = [];
   page.on('pageerror', (e: Error) => errors.push(e.message));
@@ -663,6 +667,97 @@ try {
     keys.forEach((k, i) => check(before[i] === after[i], `N: replay changed ${k}`));
     check(errors.length === 0, `N: page errors ${errors.join(' | ')}`);
     notes.push(`N: Chapter 6 replayed from the case file (double tap → one run, from beat 1): hand "${outcome}", insert, end card "Back to the case file"; result cue withheld; story position, completed chapters, statistics and achievements byte-identical afterwards`);
+    await page.context().close();
+  }
+  // ---- O. Finish hand with AI: the real result, labelled, counted once; take over; reload; leave -----------
+  {
+    // Chapter 2 (Block vs Marisol) deals whose assisted result is known (found with the same session + policy).
+    const SEEDS = { win: 'as3', loss: 'as0', tie: 'as37' } as const;
+    const seg2 = segments(scene('chapter-2'));
+    const completed = ['prologue', 'chapter-1'];
+    const achCounts = (page: Page) => page.evaluate(() => (JSON.parse(localStorage.getItem('sticks-and-bones.achievements') || 'null')?.data?.counts ?? {}) as Record<string, number>);
+    const openHand = async (page: Page) => {
+      await toMenu(page);
+      await seed(page, { sceneId: 'chapter-2', part: 'hand', index: 0, completed, outcomes: {}, assisted: [] });
+      await openStory(page);
+      await page.waitForSelector('.table-screen');
+    };
+    const finishWithAi = async (page: Page) => {
+      await page.click('[data-act="pause"]');
+      await page.waitForSelector('dialog.pause[open] [data-act="assist-finish"]');
+      await page.click('dialog.pause [data-act="assist-finish"]');
+    };
+    const rows: string[] = [];
+    for (const [want, s] of Object.entries(SEEDS) as ['win' | 'loss' | 'tie', string][]) {
+      const { page, errors } = await newPage({ storySeed: s });
+      await openHand(page);
+      const before = await achCounts(page);
+      await finishWithAi(page);
+      const stop = await page.locator('[data-act="assist-stop"]').count();
+      const moves = await page.evaluate(() => document.querySelectorAll('.hand-tile.is-legal').length);
+      await page.waitForSelector('dialog.results[open]', { timeout: 120_000 });
+      const sheet = (await page.textContent('dialog.results')) ?? '';
+      const p = await prog(page);
+      const after = await achCounts(page);
+      const gained = Object.keys(after).filter((k) => (after[k] ?? 0) !== (before[k] ?? 0));
+      check(stop === 1 && moves === 0, `O ${want}: while assisting, Take over ${stop}× and ${moves} selectable tiles (want 1 and 0)`);
+      check(/Finished with AI assistance/.test(sheet), `O ${want}: the results sheet is not labelled`);
+      check(p?.outcome === want && (p as unknown as { outcomes: Record<string, string> }).outcomes['chapter-2'] === want, `O ${want}: recorded ${p?.outcome}`);
+      check((p as unknown as { assisted: string[] }).assisted.includes('chapter-2') && p!.completed.filter((c) => c === 'chapter-2').length === 1, `O ${want}: assistance/completion not recorded once`);
+      check(!gained.some((k) => /win|domino|tranque|hand/i.test(k)), `O ${want}: the assisted hand counted ${gained.join(', ')}`);
+      // Continue the case: the matching insert, exactly one step on.
+      await page.click('dialog.results [data-act="story-hand-done"]');
+      await waitState(page, 'presenting');
+      const ins = insertLines(seg2.inserts[want]!)[0]!;
+      const line = (await page.textContent('.dialogue-panel')) ?? '';
+      const p2 = await prog(page);
+      check(line.includes((ins.text ?? '').replace(/^“|”$/g, '').slice(0, 24)), `O ${want}: first line after the hand "${line.slice(0, 60)}" is not the ${want} insert`);
+      check(p2?.part === 'post' && p2.index === 0, `O ${want}: advanced to ${p2?.part} ${p2?.index}`);
+      check(errors.length === 0, `O ${want}: page errors ${errors.join(' | ')}`);
+      rows.push(`${want} (${s}): ${gained.length ? gained.join('+') : 'no achievement counts'}`);
+      await page.context().close();
+    }
+    notes.push(`O: Finish hand with AI on fixed Chapter 2 deals — ${rows.join('; ')}; each labelled "Finished with AI assistance", its own insert next, one advance, completion once`);
+
+    // Take over, reload mid-assist, leave mid-decision.
+    const { page, errors } = await newPage({ storySeed: SEEDS.loss });
+    await openHand(page);
+    await finishWithAi(page);
+    await page.waitForFunction(() => (JSON.parse(localStorage.getItem('sticks-and-bones.story') || 'null')?.data?.hand?.assisted ?? false) === true, null, { timeout: 30_000 });
+    await page.click('[data-act="assist-stop"]');
+    const taken = await page.evaluate(() => document.querySelectorAll('[data-act="assist-stop"]').length);
+    type Sess = { seq: number; turn: number; phase: string; canAct(seat: number): boolean };
+    const sess = () => page.evaluate(() => {
+      const x = (window as unknown as { __sb: { session: Sess } }).__sb.session;
+      return { seq: x.seq, turn: x.turn, phase: x.phase, canAct: x.canAct(0) };
+    });
+    // Wait for Cousin's own turn (the opponent may move first), then nothing may move for 2.5 s.
+    await page.waitForFunction(() => {
+      const x = (window as unknown as { __sb: { session: Sess } }).__sb.session;
+      return x.phase !== 'playing' || x.canAct(0);
+    }, null, { timeout: 30_000 });
+    const seqAt = await sess();
+    await page.waitForTimeout(2500);
+    const still = await sess();
+    check(taken === 0 && seqAt.phase === 'playing' && seqAt.canAct && still.seq === seqAt.seq && still.canAct, `O take over: ${JSON.stringify({ taken, seqAt, still })} (want the player on turn and nothing moved)`);
+    // Reload with an assisted hand: the label stays, the assistant does not.
+    await page.reload();
+    await page.click('.start-button');
+    await openStory(page);
+    await page.waitForSelector('.table-screen');
+    const resumed = await page.evaluate(() => ({ stop: document.querySelectorAll('[data-act="assist-stop"]').length, used: (window as unknown as { __sb: { session: { assistUsed: boolean } } }).__sb.session.assistUsed }));
+    check(resumed.stop === 0 && resumed.used, `O reload: ${JSON.stringify(resumed)} (want the player in control, the assisted label kept)`);
+    // Leave while the assistant is deciding: nothing lands afterwards.
+    await finishWithAi(page);
+    await page.click('[data-act="pause"]');
+    await page.click('dialog.pause [data-act="menu"]');
+    await page.click('dialog.confirm[open] [data-act="confirm-yes"]');
+    const handAt = await page.evaluate(() => JSON.stringify(JSON.parse(localStorage.getItem('sticks-and-bones.story') || 'null')?.data?.hand?.state ?? null));
+    await page.waitForTimeout(2500);
+    const handLater = await page.evaluate(() => JSON.stringify(JSON.parse(localStorage.getItem('sticks-and-bones.story') || 'null')?.data?.hand?.state ?? null));
+    check(handAt === handLater && handAt !== 'null', 'O leave: a move landed after leaving the table');
+    check(errors.length === 0, `O: page errors ${errors.join(' | ')}`);
+    notes.push('O: Take over stops the assistant at once (no further assisted move); a reload mid-hand keeps "assisted" but returns control; leaving while it decides lands nothing');
     await page.context().close();
   }
 } catch (e) {

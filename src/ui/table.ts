@@ -455,11 +455,17 @@ export class TableScreen {
     const ends = v.openEnds
       ? `<button type="button" class="btn-ghost small" data-act="focus-end" data-end="head" aria-label="Show the ${v.openEnds.head} end (upper-left branch)">↖ ${v.openEnds.head}</button><button type="button" class="btn-ghost small" data-act="focus-end" data-end="tail" aria-label="Show the ${v.openEnds.tail} end (lower-right branch)">${v.openEnds.tail} ↘</button>`
       : '';
+    // "Finish hand with AI" is running: the assistant plays Cousin's moves; one control hands them back.
+    const assisting = this.#assisting() && v.phase === 'playing';
+    const actions = assisting
+      ? `<button type="button" class="btn" data-act="assist-stop">Take over</button>
+        <div class="reasons"><p class="reason assist-note" role="status">The AI is finishing this hand for you, with the same fair rules.</p></div>`
+      : `${hasDraw ? `<button type="button" class="btn" data-act="draw" ${c.draw.enabled ? '' : 'disabled'} aria-describedby="reason-0">Draw</button>` : ''}
+        <button type="button" class="btn" data-act="pass" ${c.pass.enabled ? '' : 'disabled'} aria-describedby="reason-${hasDraw && reasons.length > 1 ? 1 : 0}">Pass</button>
+        <div class="reasons">${reasons.map((r, i) => `<p id="reason-${i}" class="reason">${esc(r)}</p>`).join('')}${this.#status ? `<p class="status" role="status">${esc(this.#status)}</p>` : ''}</div>`;
     this.#q('controls').innerHTML = `
       <div class="actions">
-        ${hasDraw ? `<button type="button" class="btn" data-act="draw" ${c.draw.enabled ? '' : 'disabled'} aria-describedby="reason-0">Draw</button>` : ''}
-        <button type="button" class="btn" data-act="pass" ${c.pass.enabled ? '' : 'disabled'} aria-describedby="reason-${hasDraw && reasons.length > 1 ? 1 : 0}">Pass</button>
-        <div class="reasons">${reasons.map((r, i) => `<p id="reason-${i}" class="reason">${esc(r)}</p>`).join('')}${this.#status ? `<p class="status" role="status">${esc(this.#status)}</p>` : ''}</div>
+        ${actions}
       </div>
       <div class="view-tools">
         <button type="button" class="btn-ghost small" data-act="sort">${esc(SORT_LABELS[this.#sort])}</button>
@@ -632,7 +638,8 @@ export class TableScreen {
         ? `<button type="button" class="btn" data-act="new-match">Rematch</button><button type="button" class="btn-ghost" data-act="menu-now">Menu</button>`
         : `<button type="button" class="btn" data-act="next-hand">Next hand</button>`;
     const mood: Mood = resultMood(this.#side(), r.winnerTeam === null ? 'tie' : this.#hostTeam() === r.winnerTeam ? 'host-won' : 'host-lost', over);
-    dlg.innerHTML = `<div class="results-head"><div class="results-host" data-mood="${mood}">${hostFigureHtml(mood, 'full')}</div><div><h2 id="results-title">${esc(title)}</h2><p class="why">${esc(why)}</p></div></div>${hands}${teamLine}<p class="points">${pts}</p><p class="scores-line">${scores} · to ${v.targetScore}</p>${matchLine}<div class="sheet-actions">${buttons}</div>`;
+    const assisted = this.#cb.story && this.#s.assistUsed ? '<p class="kicker assist-label">Finished with AI assistance</p>' : '';
+    dlg.innerHTML = `<div class="results-head"><div class="results-host" data-mood="${mood}">${hostFigureHtml(mood, 'full')}</div><div><h2 id="results-title">${esc(title)}</h2>${assisted}<p class="why">${esc(why)}</p></div></div>${hands}${teamLine}<p class="points">${pts}</p><p class="scores-line">${scores} · to ${v.targetScore}</p>${matchLine}<div class="sheet-actions">${buttons}</div>`;
     if (!dlg.open) dlg.showModal();
     this.#cb.audio?.scene('results');
     // The result cue, only for a hand that resolved live at this table (a results sheet restored after a reload
@@ -673,11 +680,18 @@ export class TableScreen {
     const dlg = this.#q<HTMLDialogElement>('pause');
     this.#c.pause('dialog');
     const rules = this.#s.rules;
+    // Story only: let the AI finish this hand (or hand control back). Never offered in Quick Play or two-player.
+    const assist = this.#cb.story && this.#s.phase === 'playing'
+      ? this.#assisting()
+        ? '<button type="button" class="btn-ghost dark" data-act="assist-stop">Take back control</button>'
+        : '<button type="button" class="btn-ghost dark" data-act="assist-finish" aria-describedby="assist-help">Finish hand with AI</button>'
+      : '';
+    const assistHelp = assist ? '<p id="assist-help" class="note">Finish hand with AI: the computer plays Cousin’s remaining moves with the same fair rules (it sees only Cousin’s tiles). The real result moves the case on, marked as assisted; you can take over at any time.</p>' : '';
     dlg.innerHTML = `<h2 id="pause-title">Paused</h2>
-      <div class="pause-actions"><button type="button" class="btn" data-act="pause-resume">Resume</button><button type="button" class="btn-ghost dark" data-act="restart">Restart match</button><button type="button" class="btn-ghost dark" data-act="menu">Leave to menu</button></div>
+      <div class="pause-actions"><button type="button" class="btn" data-act="pause-resume">Resume</button>${assist}<button type="button" class="btn-ghost dark" data-act="restart">Restart match</button><button type="button" class="btn-ghost dark" data-act="menu">Leave to menu</button></div>
       ${menuPages('Pause menu', [
         { title: 'Match', html: `<div class="update-banner" data-region="update" ${this.#cb.update?.ready() ? '' : 'hidden'}><p><strong>Update available.</strong> Your game is saved and the hands are hidden before the new version loads.</p><button type="button" class="btn-ghost dark" data-act="update-now">Update now</button></div>
-          <p>Change your settings or review the rules while your match is paused.</p>` },
+          <p>Change your settings or review the rules while your match is paused.</p>${assistHelp}` },
         { title: 'Rules', html: rulesPageItems(rules), layout: 'rules-card' },
         ...settingsSections(this.#cb.settings.get()),
       ])}`;
@@ -720,6 +734,15 @@ export class TableScreen {
   }
 
   // ---------------------------------------------------------------------------
+
+  /** The Story player's own seat (the one the assistant may play). */
+  #playerSeat(): SeatIndex {
+    return (this.#s.humanSeats[0] ?? 0) as SeatIndex;
+  }
+  /** The assistant is playing the player's seat right now (Story only). */
+  #assisting(): boolean {
+    return !!this.#cb.story && this.#s.isAssisted(this.#playerSeat());
+  }
 
   /** Whose side the host figure is on (src/ui/host-mood.ts). */
   #side(): HostSide {
@@ -973,6 +996,19 @@ export class TableScreen {
       case 'pause-resume':
         this.#closePause();
         break;
+      case 'assist-finish':
+        // Close the sheet first (resume), then hand the seat over: the assistant's first decision starts fresh.
+        this.#closePause();
+        this.#s.assist(this.#playerSeat());
+        (this.#root.querySelector('[data-act="assist-stop"]') as HTMLElement | null)?.focus({ preventScroll: true });
+        break;
+      case 'assist-stop': {
+        const fromPause = this.#q<HTMLDialogElement>('pause').open;
+        this.#s.stopAssist(this.#playerSeat()); // a decision in flight becomes stale and is discarded
+        if (fromPause) this.#closePause();
+        this.#focusHand();
+        break;
+      }
       case 'story-hand-done':
         this.#q<HTMLDialogElement>('results').close();
         this.#cb.story?.onContinue();

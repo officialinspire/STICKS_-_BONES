@@ -264,3 +264,90 @@ describe('presentation helpers', () => {
     expect(whyNotPlayable(other, other.myHand[0]!)).toBe('It isn’t your turn.');
   });
 });
+
+describe('Finish hand with AI (assist)', () => {
+  /** A Draw hand where the human (seat 0) is on turn. */
+  function humanFirst(sched: Scheduler, runner?: AiRunner) {
+    for (let i = 0; i < 50; i++) {
+      const s = new GameSession({ mode: 'draw2', opponent: 'ai', seed: `assist-${i}`, aiSeed: 'z' }, { scheduler: sched, ...(runner ? { runner } : {}) });
+      if (s.canAct(0)) return s;
+      s.dispose();
+    }
+    throw new Error('no seed found');
+  }
+  const until = async (s: GameSession, flush: () => void, pending: () => number, done: () => boolean) => {
+    for (let i = 0; i < 5000 && !done(); i++) {
+      if (pending() === 0) await tick();
+      else flush();
+    }
+  };
+
+  it('plays the human seat legally through normal commands to the real result, then hands control back', async () => {
+    const { sched, flush, pending } = manualScheduler();
+    const s = humanFirst(sched);
+    const events: GameEvent[] = [];
+    s.subscribe((e) => events.push(...e));
+    expect(s.assistUsed).toBe(false);
+    expect(s.assist(0)).toBe(true);
+    expect(s.assist(0)).toBe(false); // once
+    expect(s.canAct(0)).toBe(false); // no manual move can interleave with the assistant
+    expect(s.play(0, s.debugState().hand.hands[0]![0]!, 'head')).toBe(false);
+    await until(s, flush, pending, () => s.debugState().phase === 'hand-resolved');
+    const st = s.debugState();
+    expect(st.phase).toBe('hand-resolved');
+    expect(checkInvariants(st)).toEqual([]);
+    expect(s.assistUsed).toBe(true);
+    expect(s.isAssisted(0)).toBe(false); // control returned when the hand ended
+    expect(events.filter((e) => e.type === 'hand-resolved')).toHaveLength(1); // one result, never re-applied
+    expect(events.some((e) => (e.type === 'tile-played' || e.type === 'tile-drawn' || e.type === 'passed') && e.seat === 0)).toBe(true);
+  });
+
+  it('decides for the human seat from that seat’s observation only (never another hand or the stock)', async () => {
+    const { sched } = manualScheduler();
+    const d = deferredRunner();
+    const s = humanFirst(sched, d.runner);
+    s.assist(0);
+    const req = d.requests.at(-1)!.req;
+    expect(req.obs).toEqual(buildObservation(seatView(s.debugState(), 0), s.rules));
+    expect(JSON.stringify(req.obs)).not.toContain(JSON.stringify(s.debugState().hand.hands[1]));
+  });
+
+  it('taking over (or pausing) makes a decision in flight stale: it is discarded, nothing moves', async () => {
+    const { sched, flush } = manualScheduler();
+    const d = deferredRunner();
+    const s = humanFirst(sched, d.runner);
+    const before = s.debugState();
+    s.assist(0);
+    expect(s.stopAssist(0)).toBe(true);
+    expect(s.canAct(0)).toBe(true);
+    d.answer(0);
+    await tick();
+    flush();
+    expect(s.debugState()).toBe(before);
+    expect(s.assistUsed).toBe(false); // no assisted move happened: no label
+    expect(s.stats.staleDiscarded).toBe(1);
+    // Pause while assisting: the decision is dropped; resume continues the assist exactly once.
+    s.assist(0);
+    s.pause();
+    d.answer(d.requests.length - 1);
+    await tick();
+    expect(s.debugState()).toBe(before);
+    s.resume();
+    d.answer(d.requests.length - 1);
+    await tick();
+    flush();
+    expect(s.debugState().seq).toBe(before.seq + 1);
+    expect(s.assistUsed).toBe(true);
+  });
+
+  it('a restored hand keeps its assisted label; ordinary sessions never assist by themselves', () => {
+    const { sched } = manualScheduler();
+    const s = humanFirst(sched);
+    const r = new GameSession({ state: s.debugState(), opponent: 'ai', assistUsed: true }, { scheduler: sched });
+    expect(r.assistUsed).toBe(true);
+    expect(r.isAssisted(0)).toBe(false); // control is the player's after a reload
+    expect(r.canAct(0)).toBe(true);
+    expect(s.assistUsed).toBe(false);
+    expect(s.assist(1)).toBe(false); // not a human seat
+  });
+});

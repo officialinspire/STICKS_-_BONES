@@ -94,8 +94,8 @@ export interface StoryHandRequest {
   /** The hand's explicit backdrop (STAGING handEnv); null = drawn, no photo. */
   readonly env: RuntimeAssetId | null;
   onSnapshot(h: StoryHand): void;
-  /** The hand resolved (any result advances the story). */
-  onResolved(winnerTeam: number | null, playerTeam: number): void;
+  /** The hand resolved (any result advances the story). `assisted`: the AI finished some of Cousin's moves. */
+  onResolved(winnerTeam: number | null, playerTeam: number, assisted: boolean): void;
   /** "Continue the case" on the results sheet. */
   onContinue(): void;
   /** Left the table from the pause sheet (the hand is kept for Continue Case). */
@@ -131,7 +131,8 @@ export interface StoryDeps {
   readonly update?: { ready(): boolean; apply(): void };
   /** Story analytics (separate from Quick Play; disabled adapter until the owner's contract). Keys are local only. */
   readonly track?: {
-    chapterComplete(scene: SceneId, outcome: Outcome | 'none', replay: boolean, caseKey: string): void;
+    /** `assisted`: the hand was finished with AI help — it completes the chapter but isn't the player's own win. */
+    chapterComplete(scene: SceneId, outcome: Outcome | 'none', replay: boolean, caseKey: string, assisted?: boolean): void;
     caseComplete(caseKey: string): void;
     resume(scene: SceneId, part: 'dialogue' | 'hand', via: 'continue' | 'update', positionKey: string): void;
     assist(scene: SceneId, key: string): void;

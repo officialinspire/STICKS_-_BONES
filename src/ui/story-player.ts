@@ -621,14 +621,25 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
         onSnapshot: (h) => {
           if (!o.replay && outcome === null) persist({ ...p, sceneId, part: 'hand', index: 0, hand: h });
         },
-        onResolved: (winnerTeam, playerTeam) => {
+        onResolved: (winnerTeam, playerTeam, assisted) => {
           if (outcome !== null) return; // once
           outcome = outcomeFor(winnerTeam, playerTeam);
           phaseEnd(sceneId, 'hand');
           phaseStart(sceneId, 'post');
-          d.track?.chapterComplete(sceneId, outcome, !!o.replay, caseKey);
-          // One write: outcome + completion + position. A reload can't replay the completion.
-          persist({ ...p, sceneId, part: 'post', index: 0, outcome, hand: null, completed: [...new Set([...p.completed, sceneId])] });
+          d.track?.chapterComplete(sceneId, outcome, !!o.replay, caseKey, assisted);
+          // One write: outcome + completion + position (+ this scene's outcome and assistance for the
+          // transcript). A reload can't replay the completion.
+          persist({
+            ...p,
+            sceneId,
+            part: 'post',
+            index: 0,
+            outcome,
+            hand: null,
+            completed: [...new Set([...p.completed, sceneId])],
+            outcomes: { ...p.outcomes, [sceneId]: outcome },
+            assisted: assisted ? [...new Set([...p.assisted, sceneId])] : p.assisted.filter((x) => x !== sceneId),
+          });
         },
         onContinue: () => {
           d.endHand();
