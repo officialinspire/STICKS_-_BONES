@@ -382,7 +382,7 @@ async function stopWorkers(page: Page) {
 }
 const openSettings = async (page: Page) => {
   await page.click('[data-go="settings"]');
-  await page.locator('.offline-panel').waitFor();
+  await page.locator('.offline-panel').first().waitFor({ state: 'attached' }); // two paginated pages: 'Offline play' and 'Storage'
 };
 const seedStory = (page: Page, sceneId: string, index = 0, part = 'pre') =>
   page.evaluate(([sc, i, pt]: readonly [string, number, string]) => localStorage.setItem('sticks-and-bones.story', JSON.stringify({ format: 'sticks-and-bones/story', version: 2, data: { sceneId: sc, part: pt, index: i, outcome: null, completed: ['prologue'], textScale: 1, startedAt: 1, hand: null } })), [sceneId, index, part] as const);
