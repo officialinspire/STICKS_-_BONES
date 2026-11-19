@@ -2365,6 +2365,12 @@ All on `fccc846` (identical tree after merging `main` `86df38a`).
 
 Not available here: Firefox/WebKit, real devices, a listening pass (nothing is marked auditioned).
 
+### Release
+PR #7 merged into `main` as `418be75` (merge commit). CI green on the branch and on `main`. "Deploy to GitHub
+Pages" (run 44480530409) succeeded. Live: `<html data-build>` = `418be7559d86`; "Ready." → menu; service worker scope
+`/STICKS_-_BONES/`; 0 page errors; the offline pack lists the rest-area images and the evidence card (Chromium
+through this environment's proxy).
+
 ### Missing uploads (listed separately)
 - **Case-complete music** (`docs/MUSIC_BRIEFS.md`: 6–10 s, warm, settled) and **case-complete foley**: wired and
   waiting; nothing fabricated.
