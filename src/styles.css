@@ -2447,7 +2447,7 @@ h1, h2, h3, .title, .chapter-title, .section-h, .score-val, .dest-title, .points
 [data-light='night'] .st-light { background: linear-gradient(180deg, rgba(30, 40, 90, 0.35), rgba(10, 18, 30, 0.88)); }
 [data-light='jungle'] .st-light { background: linear-gradient(180deg, rgba(40, 90, 50, 0.22), rgba(12, 28, 20, 0.85)); }
 [data-light='cave'] .st-light { background: linear-gradient(180deg, rgba(8, 63, 67, 0.35), rgba(8, 20, 24, 0.9)); }
-[data-light='rest-area'] .st-light { background: linear-gradient(180deg, #24383c, #101c20); }
+[data-light='rest-area'] .st-light { background: linear-gradient(180deg, rgba(242, 181, 68, 0.08), rgba(20, 37, 43, 0.76)); } /* Day 2 afternoon at the entrance: daylight, kept low behind the panels */
 [data-light='sunset'] .st-light { background: linear-gradient(180deg, rgba(242, 181, 68, 0.2), rgba(217, 79, 69, 0.12) 40%, rgba(20, 37, 43, 0.82)); }
 [data-light='dinner'] .st-light { background: radial-gradient(ellipse at 50% 70%, rgba(242, 181, 68, 0.22), rgba(10, 18, 30, 0.9) 70%); }
 /* Threshold: the warm line of light (an open door somewhere out of view). */
@@ -2814,6 +2814,30 @@ menu-pages {
 .case-menu [data-act="story-replay"] { min-height: 44px; margin-top: 4px; }
 .case-menu menu-pages { color: var(--sb-ivory); }
 .case-menu .evidence-list { color: var(--sb-ink); }
+/* Evidence inspection cards: code-rendered excerpt text over the blank card art (ivory paper if the art is missing). */
+.case-menu .evidence-cards { list-style: none; padding: 0; display: grid; gap: 12px; justify-items: center; }
+.evidence-card { width: min(100%, 420px); }
+/* The art's paper sits inside wood bands of 7.8 % / 8.0 % (left / right of its width) and 8.4 % / 8.7 % (top / bottom
+   of its height), measured from the source. Padding keeps every glyph on the paper: in portrait the card is 3:4 like
+   the art (it only grows taller when text needs it, and then cover-scaling narrows the bands); in landscape the card
+   is wide, cover crops the top and bottom wood away, and only the side bands remain. */
+.evidence-card-paper {
+  display: grid; align-content: start; gap: 8px; min-height: 8rem;
+  padding: max(13%, 2.5rem) 12%;
+  border-radius: 6px; color: var(--sb-ink); background-color: var(--sb-ivory);
+  background-image: var(--evidence-card, none); background-size: cover; background-position: center;
+  box-shadow: 0 4px 14px rgba(10, 18, 22, 0.35);
+}
+@media (orientation: portrait) { .evidence-card-paper { aspect-ratio: 1086 / 1448; } }
+@media (orientation: landscape) { .evidence-card-paper { padding-block: 1.25rem; } }
+/* Short landscape (568×320): a wider card keeps the longest excerpt to three lines inside one menu page. */
+@media (orientation: landscape) and (max-height: 480px) {
+  .evidence-card { width: min(100%, 600px); }
+  .evidence-card-paper { padding-block: 0.75rem; gap: 4px; min-height: 0; }
+  .evidence-card-text { line-height: 1.4; }
+}
+.evidence-card-kicker { margin: 0; font: 800 0.8rem / 1.2 var(--display); text-transform: uppercase; letter-spacing: 0.08em; color: var(--sb-deep-sea); }
+.evidence-card-text { margin: 0; line-height: 1.5; overflow-wrap: anywhere; }
 /* Transcript (case file): verbatim lines, captions in italics, each hand's actual result. */
 .case-menu .transcript-list { color: var(--sb-ink); list-style: none; padding-inline-start: 12px; }
 .transcript-scene { margin-top: 6px; }
@@ -2888,3 +2912,21 @@ dialog.pause .pause-actions > button { min-height: 44px; padding-inline: 4px; }
   .home-nav .dest-sub { display: none; }
   .home-nav .resume .note { display: none; }
 }
+
+/* ---- Epilogue title reprise and credits (src/ui/credits.ts) -------------------------------------------------
+   The title rises in, then the pages fade up. CSS only and never awaited: any tap or key sets data-reveal="done";
+   reduced motion (the setting or the system preference) shows everything at once. Text pairings: ivory / gold on
+   the dark scrim panels (docs/DESIGN.md). */
+.credits-screen[data-reveal='play'] .credits-title { animation: credits-title 1400ms ease-out both; }
+.credits-screen[data-reveal='play'] menu-pages { animation: credits-pages 700ms ease-out 900ms both; }
+.credits-screen[data-reveal='done'] .credits-title, .credits-screen[data-reveal='done'] menu-pages { animation: none; }
+@keyframes credits-title { from { opacity: 0; transform: translateY(10px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes credits-pages { from { opacity: 0; } to { opacity: 1; } }
+.credits-end { justify-items: start; }
+.credits-end .case-complete { font-size: 2rem; }
+.case-menu .credits-list { list-style: none; padding: 16px; display: grid; gap: 12px; align-content: start; }
+.credits-h { font: 800 1.3rem / 1.1 var(--display); color: var(--sb-gold); }
+.credit { display: grid; gap: 2px; }
+.credit-role { font: 800 0.8rem / 1.2 var(--display); text-transform: uppercase; letter-spacing: 0.08em; }
+.credit-name { font-weight: 700; font-size: 1.05rem; overflow-wrap: anywhere; }
+.credit-note { font-size: 0.88rem; overflow-wrap: anywhere; }

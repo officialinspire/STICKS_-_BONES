@@ -76,12 +76,34 @@ Status: see `docs/BUILD_STATUS.md` → "Stage 2 — Story assistance".
 - [x] Status and results updated (`docs/BUILD_STATUS.md` → "Stage 2 — Story assistance").
 - [x] All 13 AGENTS-required checks run locally: all pass, after one fix found by `smoke` (settings page overflow
       at 568×320) and rerun.
-- [ ] Review branch pushed; CI green.
-- [ ] Merged into the latest `main`; Pages deployment; deployed `data-build` = `main`; live startup.
+- [x] Review branch pushed; CI green on `d9ed9ef` (run 44472838994).
+- [x] Merged into the latest `main` via PR #6 → `86df38a` (merge commit, no force-push); CI green on `main`.
+- [x] Pages deployment "Deploy to GitHub Pages" run 44474606924: success.
+- [x] Live https://officialinspire.github.io/STICKS_-_BONES/ reports `data-build` `86df38a33be4` (= `main`).
+- [x] Live startup: "Ready." → start → menu; service worker scoped to the subpath; 0 page errors (Chromium via
+      this environment's proxy).
 
-### Stage 3 — not yet defined
+Status: **complete** (recorded on the Stage 3 branch).
 
-The owner has not supplied this stage's scope. It inherits the contract and the checklist above.
+### Stage 3 — Owner art, evidence cards, title reprise and credits, case-complete audio (2026-11-19)
+
+Scope (owner): audit uploads first and reuse approved work; preserve originals; register new assets (provenance,
+hashes, dimensions, frame mappings, derivatives) through the existing builders. The supplied modern entrance rest
+area for Chapter 6's post-cave dialogue and hand (never the ancient platform); supporting portraits optional;
+SPEAKER is a device, not a character. Reached evidence as paginated inspection cards (approved exact text rendered
+by code). An epilogue title reprise (existing logo) and paginated credits from verified names/licences, then back to
+the Case file; cancellable, reduced-motion friendly, independent of game state. Supplied case-complete music/foley
+via AudioManager (conservative trims, natural tails, no clipping, explicit loop points, no overlapping/stale cues);
+Chapter 5–7 restrained result audio and the authored knocks preserved; honest fallback for missing media; nothing
+marked auditioned without a listening pass. Both image orientations, lazy chunks and all runtime media in the
+verified offline pack; byte ranges and app-only repair preserved. No budget raised merely to pass.
+
+Status: see `docs/BUILD_STATUS.md` → "Stage 3 — owner art, evidence cards, credits".
+
+- [x] Review branch `claude/stage-3-assets-credits` on top of Stage 2 (`d9ed9ef`), `main` (`86df38a`) merged in.
+- [x] Status and results updated (`docs/BUILD_STATUS.md` → "Stage 3 — owner art, evidence cards, credits").
+- [x] All 13 AGENTS-required checks plus `audio:report` and the builders run locally: all pass.
+- [ ] Review branch pushed; CI green; merged into the latest `main`; Pages deployment; live `data-build`; startup.
 
 ### Stage 4 — not yet defined
 

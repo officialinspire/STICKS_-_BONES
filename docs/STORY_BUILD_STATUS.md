@@ -98,8 +98,12 @@ v0.2, committed to `main` by the owner as 242ee60). The general project log stay
 | | Media: absent vs broken vs transient failures; bounded recovery after a gesture or reconnection (current scene only, never replays cues or SFX) | ✅ (Chromium; **not auditioned by ear**) |
 | | Loading: image deadlines and once-only completion; Story, script and achievement chunk failures show Retry / Back (Retry reloads into the same screen if the browser keeps refusing); a late chunk never remounts an abandoned screen | ✅ |
 | | Saves: per-record write health (one success never hides another failure), retries of the latest value, alert reserves its room | ✅ |
-| | Every story hand's backdrop explicit (Ch. 6 drawn rest area); no patio defaults, including rotation | ✅ |
+| | Every story hand's backdrop explicit (Ch. 6 at the entrance rest area — its own art since Stage 3, never the ancient platform); no patio defaults, including rotation | ✅ |
 | | Evidence list: verbatim on-screen captions of six approved evidence beats, shown only once reached (no spoilers, no new save field) | ✅ |
+| **Stage 3 (2026-11-19)** | Evidence as paginated inspection cards over the owner's blank card art, text code-rendered (exact captions), every glyph on the paper at 320×568 → desktop | ✅ |
+| | Chapter 6's cut to the entrance rest area and its hand use the owner's rest-area art (both orientations) | ✅ |
+| | Epilogue: "Title and credits" → wordmark reprise + paginated credits from verified provenance → Case file; cancellable, reduced-motion instant, writes nothing | ✅ |
+| | Case-complete cue and foley through AudioManager (honest fallback until supplied) | ✅ wiring; **files missing** |
 | | Version alignment (package vs release notes) | ☐ |
 | | Representative human playtest timing (target 90–110 min, under 120) | ☐ |
 | **Full-game audit (2026-11-19)** | The whole case through the real UI on the production build, **offline after a cold relaunch** (`npm run offline:tour`): intro, every scene, seven hands, inserts, end cards, Case complete, resume, achievements, four screen sizes, rotation; 0 network requests | ✅ (Chromium) |
@@ -131,9 +135,9 @@ stage entry of `docs/BUILD_STATUS.md` and `docs/AUDIO.md` § Verification.
 | ~~**Expression labels** for the four cast atlases~~ | Done by visual inspection in this build (`docs/ASSETS.md` "Expression verification"). The owner may still correct any reading; the mapping is one data file. |
 | Owner's listening approval of the selected sounds and bed seams | Marking any sound `final` / any seam `auditioned` |
 | Permission to read `officialinspire/SPIRITBALL` (`js/analytics.js`, `js/attribution.js`), or the analytics contract itself (service + key for this game, consent, event mapping, attribution) | Turning analytics on (the session's attempt to attach SPIRITBALL was refused) |
-| Portraits for Worker, Representative, the contractor speaker | Those speakers (name tags today) |
+| ~~Portraits for Worker, Representative~~ — supplied 2026-11-18 (catalogued as optional variants, not wired: the script allows both as text and off-camera voices). SPEAKER is an amplified device, not a character: no portrait | Those speakers (name tags today) |
 | Recorded domino foley for picking up, placing, sliding and drawing a tile (the slam and the deal are now the owner's recordings) | Replacing the remaining casino-chip stand-ins |
-| ~~Night-investigation bed, cave suspense bed, round stingers~~ — delivered (owner audio stage). Still missing: the case-complete cue, the optional chapter-card cue, edited loops / endings for the two beds (`docs/MUSIC_BRIEFS.md`) | Chapter 4 and 6 music, results and case-complete cues |
+| ~~Night-investigation bed, cave suspense bed, round stingers~~ — delivered (owner audio stage). Still missing: the case-complete cue and its foley (wired since Stage 3, see `docs/AUDIO.md`), the optional chapter-card cue, edited loops / endings for the two beds (`docs/MUSIC_BRIEFS.md`) | Chapter 4 and 6 music, results and case-complete cues |
 | The contractor speaker recording (voice + repeating cough), if the owner wants it voiced | Chapter 6 (caption-only until then; never impersonated) |
 | ~~INSPIRE intro video `assets/video/inspiresoftwareintro.mp4`~~ — delivered (copied from `officialinspire/Inspire-card-parlor@cdc789b`, verified) | The studio credit |
 | INSPIRE analytics contract | Analytics (still disabled) |

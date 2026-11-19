@@ -40,7 +40,7 @@ export const BUDGET = {
   fontsKB: 100, // self-hosted DM Sans + Bricolage Grotesque WOFF2 subsets (measured 82 KB)
   imagesKB: 3300, // CORE images: menu, table, Cousin, effects, tiles + the seven full-frame backdrops (measured ~3,050 KB; unchanged)
   storyImagesKB: 1600, // Story-only additions, on demand per chapter: 7 portrait crops + 4 cleaned cast sheets = 1,474 KB measured
-  chapterImagesKB: 1000, // the most ONE chapter downloads (full-frame backdrop + its cast sheets); measured max 923 KB (Chapter 3)
+  chapterImagesKB: 1150, // the most ONE chapter downloads (full-frame backdrops + its cast sheets). Stage 3: 1,122 KB measured for Chapter 6, the only chapter the script sets in TWO places (the cave, then the modern entrance rest area where its hand is played); the rest area is encoded at the lowest WebP quality that passes the derivative gate (q83, 429 KB). Every other chapter is unchanged (max 848 KB, Chapter 3). Was 1000
   singleImageKB: 450, // largest single image (Stage 13: jungle backdrop 428 KB at q84 — q80 failed the derivative quality gate)
   startupKB: 975, // initialization, raw bytes: core code + fonts + ONE patio variant (the larger: landscape) + Cousin's portrait + the tile atlas (startup stage: the tiles are decoded before the start prompt; measured ~931 KB, was 900 without the atlas)
   mediaKB: 13500, // music, streamed on demand only, never at startup: 12,757 KB measured = the two approved songs 7,331 + the owner's two scene beds 5,335 (stream-copied, audio bit-identical to the uploads; cover art removed saved 1.9 MB) + two result cues 90. Re-encoding the owner's masters lower was rejected (generation loss; the briefs ask ≥ 192 kbps)
@@ -50,7 +50,7 @@ export const BUDGET = {
   iconsKB: 140, // PWA icons (PNG by spec), generated from approved art (measured 113 KB)
   swKB: 48, // service worker + build manifest: 43 KB measured (full offline pack: every shipped file with its size AND SHA-256 — 81 × 64 hex chars in each file — plus verification, byte ranges, retention; was 19 KB)
   offlinePackKB: 21000, // everything the whole-game offline download saves (= every shipped file except sw.js/build.json): 20,403 KB measured. The owner authorized full offline storage; it starts only after the menu is up
-  totalKB: 21100, // whole dist: 20,446 KB measured after the full-offline stage (the owner audio stage added 5.4 MB of on-demand scene music and cues; this stage +24 KB of worker/manifest). Nothing beyond the startup set loads before the menu
+  totalKB: 21250, // whole dist: 21,173 KB measured after Stage 3 (+647 KB of owner-supplied art: the rest area full frame 429 + 3:4 crop 171, the evidence card 47); was 21100. Before that: 20,446 KB measured after the full-offline stage (the owner audio stage added 5.4 MB of on-demand scene music and cues; this stage +24 KB of worker/manifest). Nothing beyond the startup set loads before the menu
 };
 const size = (f) => statSync(f).size;
 const rel = (f) => f.slice(dist.length);
@@ -92,7 +92,7 @@ const CHAPTER_IMAGES = {
   'chapter-3': ['executive-terrace', 'vale', 'marisol', 'rafa'],
   'chapter-4': ['moonlit-promenade', 'rafa', 'marisol'],
   'chapter-5': ['jungle-camp', 'luz', 'marisol'],
-  'chapter-6': ['cave-waterfall', 'marisol', 'luz'],
+  'chapter-6': ['cave-waterfall', 'rest-area', 'marisol', 'luz'],
   'chapter-7': ['executive-terrace', 'vale', 'marisol', 'rafa'],
   epilogue: ['neighborhood-patio', 'marisol'],
 };

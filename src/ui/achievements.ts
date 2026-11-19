@@ -72,7 +72,8 @@ class Notices {
   /** Never over a private handoff, a Story scene, an open sheet, the start screen, or a hidden page. */
   static canShow(starting = true): boolean {
     if (document.hidden) return false;
-    if (document.querySelector('#app.is-start, .privacy-cover:not([hidden]), dialog[open]')) return false;
+    // The epilogue's title reprise and credits are the Story's ending: notices wait for the Case file.
+    if (document.querySelector('#app.is-start, .privacy-cover:not([hidden]), dialog[open], .credits-screen')) return false;
     const stage = document.querySelector<HTMLElement>('.story-stage');
     if (stage && !stage.hidden && !document.querySelector('#app .table-screen')) return false;
     // At the table, never while the player can act: the notice must not sit over a tile or control

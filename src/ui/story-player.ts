@@ -12,6 +12,7 @@
  * colour scenes fade through). Every layer except the controls is
  * pointer-events: none. Presentation never decides a hand.
  */
+import { showCredits } from './credits';
 import { urlFor, type RuntimeAssetId } from '../assets';
 import { envKey, envPosition, onViewportShape } from '../assets/env';
 import { warm, warmState } from '../assets/warm';
@@ -564,7 +565,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
       root.querySelector<HTMLElement>('.dialogue-panel')!.hidden = true; // the panel (and Continue) persist, hidden behind the card
       const nb = seg.notebook ? `<div class="notebook is-inline"><p class="notebook-chapter">Notebook · ${esc(label(scene))}</p><p class="notebook-text">${esc(seg.notebook.raw.replace(/^Notebook:\s*/, ''))}</p></div>` : '';
       const fin = sceneId === 'epilogue' ? `<p class="case-complete">Case complete.</p>` : '';
-      slot.innerHTML = `<section class="end-card" aria-labelledby="end-h"><h2 id="end-h" class="section-h">End of ${esc(label(scene))}</h2>${fin}${takeRecap()}${nb}${next ? chapterCardHtml(sceneOf(next), 'next') : ''}<button type="button" class="btn primary" data-act="story-onward">${next ? `Continue to ${esc(label(sceneOf(next)))}` : 'Back to the case file'}</button></section>`;
+      slot.innerHTML = `<section class="end-card" aria-labelledby="end-h"><h2 id="end-h" class="section-h">End of ${esc(label(scene))}</h2>${fin}${takeRecap()}${nb}${next ? chapterCardHtml(sceneOf(next), 'next') : ''}<button type="button" class="btn primary" data-act="story-onward">${next ? `Continue to ${esc(label(sceneOf(next)))}` : sceneId === 'epilogue' ? 'Title and credits' : 'Back to the case file'}</button></section>`;
       (slot.querySelector('[data-act="story-onward"]') as HTMLElement).focus({ preventScroll: true });
       root.querySelector<HTMLElement>('[data-act="story-next"]')!.hidden = true;
       pos();
@@ -728,6 +729,10 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
         if (next) {
           persist({ ...p, sceneId: next, part: 'pre', index: 0, outcome: null, hand: null });
           void open(next);
+        } else if (sceneId === 'epilogue') {
+          // "Cut to title, then credits." The case is already saved (end card); the credits only present.
+          dispose();
+          showCredits({ root, reduceMotion: d.reduceMotion(), onReprise: () => d.caseComplete?.(), onDone: () => void renderStoryHome(d) });
         } else {
           dispose();
           void renderStoryHome(d);

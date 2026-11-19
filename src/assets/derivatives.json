@@ -116,6 +116,42 @@
    "alphaExact": true
   },
   {
+   "id": "env.rest-area",
+   "of": "env.rest-area",
+   "path": "assets/generated/web/rest-area.webp",
+   "format": "webp",
+   "encoder": "q83 alphaQuality100 smartSubsample",
+   "width": 1672,
+   "height": 941,
+   "bytes": 439502,
+   "sha256": "2be2b1636c2ac9e183e751389dba40466a1c173711224170e89809bbe0673030",
+   "sourceBytes": 3371746,
+   "sourceSha256": "a499e9461acf48e1336725b369599a248d05a03d4f399a640958dd31aa1f7450",
+   "maxMeanErr": 6,
+   "meanErr": 5.91,
+   "edgeP99": 0,
+   "edgePixels": 0,
+   "alphaExact": true
+  },
+  {
+   "id": "prop.evidence-card",
+   "of": "prop.evidence-card",
+   "path": "assets/generated/web/evidence-card.webp",
+   "format": "webp",
+   "encoder": "q80 alphaQuality100 smartSubsample",
+   "width": 1086,
+   "height": 1448,
+   "bytes": 47710,
+   "sha256": "edb2be33a56b426b88c6a491b24b0502510a497060d01a005fa574e69112a992",
+   "sourceBytes": 1983160,
+   "sourceSha256": "8c9e5cd86e925232d959df9f0b777cb545737b3031b3c9201742377e984977ab",
+   "maxMeanErr": 6,
+   "meanErr": 2.62,
+   "edgeP99": 0,
+   "edgePixels": 0,
+   "alphaExact": true
+  },
+  {
    "id": "table.weathered",
    "of": "table.weathered",
    "path": "assets/generated/web/weathered-tabletop.webp",
@@ -358,6 +394,30 @@
    "sourceSha256": "ef862bdfed3c129277ac39312f681d91f0daf4ec3357bed6fc49f3435ad6e70d",
    "maxMeanErr": 6,
    "meanErr": 4.89
+  },
+  {
+   "id": "env.rest-area@portrait",
+   "of": "env.rest-area",
+   "path": "assets/generated/web/rest-area-portrait.webp",
+   "format": "webp",
+   "encoder": "q83 smartSubsample",
+   "crop": {
+    "x": 316,
+    "y": 0,
+    "w": 706,
+    "h": 941
+   },
+   "focus": {
+    "x": 0.4997,
+    "y": 0.5
+   },
+   "width": 706,
+   "height": 941,
+   "bytes": 175432,
+   "sha256": "06107e29a35ab7ede91745e8592029f26ea5279443897302e94448264f828035",
+   "sourceSha256": "a499e9461acf48e1336725b369599a248d05a03d4f399a640958dd31aa1f7450",
+   "maxMeanErr": 6,
+   "meanErr": 5.94
   }
  ]
 }

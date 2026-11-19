@@ -33,7 +33,9 @@ describe('cinematic staging is anchored to the approved script', () => {
 
   it('chapter 6 is never played on the ancient platform', () => {
     expect(STAGING['chapter-6'].env).toBe('env.cave-waterfall');
-    expect(STAGING['chapter-6'].handEnv).toBeNull(); // the hand uses the modern rest-area grade, not the cave image
+    expect(STAGING['chapter-6'].handEnv).toBe('env.rest-area'); // the modern entrance rest area, not the cave image
+    const cut = STAGING['chapter-6'].cues.find((c) => c.at.startsWith('[Cut to the entrance rest area.'));
+    expect(cut?.cues).toContainEqual(expect.objectContaining({ kind: 'backdrop', env: 'env.rest-area' }));
     expect(STAGING['chapter-6'].handNote).toMatch(/rest area/);
   });
 });
@@ -88,10 +90,10 @@ describe('every story hand has an explicit, mapped backdrop', () => {
     for (const id of handScenes) expect('handEnv' in STAGING[id], `${id} handEnv`).toBe(true);
   });
 
-  it("each hand is played at its chapter's location; Chapter 6 at the drawn rest area, never the platform", () => {
+  it("each hand is played at its chapter's location; Chapter 6 at the entrance rest area, never the platform", () => {
     for (const id of handScenes) {
       const h = STAGING[id].handEnv;
-      if (id === 'chapter-6') expect(h).toBeNull();
+      if (id === 'chapter-6') expect(h).toBe('env.rest-area');
       else expect(h, id).toBe(STAGING[id].env);
     }
     expect(STAGING['chapter-3'].env).toBe('env.executive-terrace');

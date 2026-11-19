@@ -45,8 +45,8 @@ export interface SceneStaging {
   /**
    * Backdrop while this scene's hand is played: explicit for every chapter with a hand (tested), passed to the
    * story table as-is; no table ever falls back to the patio. Each hand is played where the script puts it
-   * (its chapter's location). `null` = no photographic backdrop: Chapter 6's modern rest area has no art of
-   * its own, and it is never the ancient platform, so its table is drawn (gradient) instead.
+   * (its chapter's location). `null` = no photographic backdrop (the drawn gradient). Chapter 6's hand is at the
+   * modern rest area by the entrance (`env.rest-area`), never the ancient platform.
    */
   readonly handEnv?: RuntimeAssetId | null;
   readonly handNote?: string;
@@ -146,8 +146,8 @@ export const STAGING: Readonly<Record<SceneId, SceneStaging>> = {
     focus: '50% 40%',
     establishing: 'push',
     cousin: true,
-    // The hand is played at the modern rest area near the entrance — never on the ancient platform.
-    handEnv: null,
+    // The hand is played at the modern rest area near the entrance (its own art) — never on the ancient platform.
+    handEnv: 'env.rest-area',
     handNote: 'Modern inspection rest area near the entrance. The ancient platform stays untouched.',
     cues: [
       // The contractor speaker's voice and repeating cough: CAPTION ONLY (no recording supplied; never impersonated).
@@ -159,7 +159,7 @@ export const STAGING: Readonly<Record<SceneId, SceneStaging>> = {
       { at: '[The reflection brightens as if a door has opened farther.', cues: [{ kind: 'threshold', to: 'bright' }, { kind: 'boundary', show: true }] },
       { at: '[Roberto kneels on the modern walkway, staying behind the agreed boundary.]', cues: [{ kind: 'boundary', show: true }, { kind: 'expr', mood: 'thinking' }] },
       { at: '[The lifted water lowers.', cues: [{ kind: 'water', to: 'recede' }, { kind: 'threshold', to: 'dim' }, { kind: 'pulse' }, { kind: 'boundary', show: false }, { kind: 'audio', cue: 'knock-one' }] },
-      { at: '[Cut to the entrance rest area.', cues: [{ kind: 'threshold', to: 'off' }, { kind: 'water', to: 'none' }, { kind: 'backdrop', env: null, light: 'rest-area' }, { kind: 'warmth', on: true }, { kind: 'audio', cue: 'music-off' }] },
+      { at: '[Cut to the entrance rest area.', cues: [{ kind: 'threshold', to: 'off' }, { kind: 'water', to: 'none' }, { kind: 'backdrop', env: 'env.rest-area', light: 'rest-area', focus: '40% 50%' }, { kind: 'warmth', on: true }, { kind: 'audio', cue: 'music-off' }] },
       { at: '[She takes his hand. He lets her.]', cues: [{ kind: 'expr', mood: 'neutral' }] },
     ],
   },

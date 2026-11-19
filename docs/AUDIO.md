@@ -301,6 +301,25 @@ true peak), edits and boundaries, with each derivative's source hash. `npm run a
   decodes identically to "(Alt)", so it is catalogued as a **duplicate**.
 - **No case-complete music** was supplied, and none is fabricated.
 
+**Case-complete cue and foley (Stage 3, ready for files that have not been supplied):**
+- **When:** once, at the epilogue's title reprise ("Title and credits" on its end card), through
+  `AudioManager.caseComplete()`; no second playback system.
+- **What plays:** `case-complete` on the music bus and `case-complete-foley` on the SFX bus, from
+  `assets/audio/cues/` (the sample globs). The scene's patio track fades out first (the `music-off` path), and the cue
+  starts after that fade on the audio clock: never two music sources at once.
+- **Never synthesized, never queued, never stale:** a second call replaces the first; leaving (scene or profile
+  change, backgrounding, reset) stops it, so nothing follows the player to the case file.
+- **Missing files (today):** `caseComplete()` changes nothing — the patio track and bed carry on — and counts
+  `caseCompleteMissing` (`story:e2e` § Q checks it). No stand-in.
+- **Building them:** add the uploads to `ENDINGS` in `scripts/build-owner-audio.py`. Conservative trims only: lead
+  near-silence before the first onset (−50 dB re peak, 20 ms pre-roll); the natural tail kept to −60 dB re peak
+  plus 200 ms, with the only fade inside that margin; gain only ever lowered so the encoded file is ≤ −1 dBTP (no
+  clipping). Verified on synthetic files in this stage (lead trimmed to 20 ms before the onset; a 0 dBTP source
+  lowered 1.00 dB to −1.2 dBTP); `--check` still rebuilds every existing derivative byte-identically.
+- **Loop points:** explicit data only (`ENDINGS` → `owner-audio.json` `cues[].loop` → `CUE_LOOPS` in
+  `src/audio/case-complete.ts`, kept equal by a test). The Web Audio backend loops a buffer only between points a
+  person has marked `auditioned: true` after listening; otherwise the cue plays once through its tail.
+
 **How a result cue plays** (`AudioManager.resultCue`):
 - **When:** once, when the results sheet opens for a hand that resolved live at that table. A results sheet
   restored after a reload never replays it.
@@ -394,7 +413,7 @@ an owner listening pass remains open.
 | Synthesized SFX (`src/audio/synth.ts`) | code | **fallback only** (decoding / missing file) |
 | Chapter 4 and 6 scene beds | **Owner uploads** "Promenade After Dark" and "The Lit Threshold (Alt)" (stream-copied, audio bit-identical) | selected by measurement, **not auditioned** |
 | Round result cues (`result-win`, `result-other`) | **Owner uploads** "Round Win (Puerto Rico Vibe)" and "Round Other (Musical Shrug)", final cadence extracted (1.95 s / 1.78 s) | measured, **not auditioned** |
-| Case-complete music, chapter-card cue | — | **missing** (not supplied; nothing fabricated): the end card stays on the bed |
+| Case-complete music and foley, chapter-card cue | — | **missing** (not supplied; nothing fabricated). The reprise is wired to play them through `AudioManager.caseComplete()` once built; until then the patio track and bed carry on |
 | Contractor speaker voice and cough; trail voice | — | **missing**: caption only, never impersonated |
 | Studio intro | `assets/video/inspiresoftwareintro.mp4` (owner's INSPIRE credit, copied from the verified source commit) | **final**; the 1.6 s typeset credit is only its fallback |
 

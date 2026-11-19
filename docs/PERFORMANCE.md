@@ -258,3 +258,15 @@ styles; 1 KB of styles for the removed statistics table was deleted. Startup sta
 - **Startup: 960 KB (was 900).** The start prompt now waits until the tile atlas (115 KB) is decoded, so
   the atlas is counted.
   - Measured: code + fonts + the larger patio variant + Cousin's portrait + tile atlas.
+
+**Stage 3 (2026-11-19): owner art for Chapter 6 and the evidence cards.** +647 KB, all on demand:
+the rest area full frame 429 KB (q83, the lowest WebP quality that passes the derivative gate: q80 measured 6.39,
+q82 6.06 mean error against a limit of 6) and its 3:4 crop 171 KB; the evidence card 47 KB.
+- **Largest chapter 1,150 KB (was 1,000)**, measured 1,122 KB: Chapter 6 is the only chapter the script sets in two
+  places (the cave, then the modern entrance rest area where its hand is played). Every other chapter is unchanged
+  (max 848 KB, Chapter 3).
+- **Total 21,250 KB (was 21,100)**, measured 21,173 KB. Offline pack 20,959 KB / 21,000 (unchanged limit), story
+  images 1,581 KB / 1,600 (unchanged), core images 3,153 KB / 3,300 (unchanged), largest image 429 KB / 450.
+- Both raises are for the owner-supplied art this stage requires, measured after choosing the smallest passing
+  encode; nothing else grew to fit. Nothing new loads at startup.
+

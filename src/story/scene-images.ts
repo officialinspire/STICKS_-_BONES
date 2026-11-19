@@ -13,7 +13,7 @@ export const SCENE_IMAGES: Readonly<Record<SceneId, { readonly env: readonly Run
   'chapter-3': { env: ['env.executive-terrace'], cast: ['cast.vale.atlas', 'cast.marisol.atlas', 'cast.rafa.atlas'] },
   'chapter-4': { env: ['env.moonlit-promenade'], cast: ['cast.rafa.atlas', 'cast.marisol.atlas'] },
   'chapter-5': { env: ['env.jungle-camp'], cast: ['cast.luz.atlas', 'cast.marisol.atlas'] },
-  'chapter-6': { env: ['env.cave-waterfall'], cast: ['cast.marisol.atlas', 'cast.luz.atlas'] },
+  'chapter-6': { env: ['env.cave-waterfall', 'env.rest-area'], cast: ['cast.marisol.atlas', 'cast.luz.atlas'] },
   'chapter-7': { env: ['env.executive-terrace'], cast: ['cast.vale.atlas', 'cast.marisol.atlas', 'cast.rafa.atlas'] },
   epilogue: { env: ['env.neighborhood-patio'], cast: ['cast.marisol.atlas'] },
 };

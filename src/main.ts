@@ -436,6 +436,7 @@ function openStory(): void {
       audio.setScene(id ? 'story' : 'menu');
     },
     beat: () => audio.beat(),
+    caseComplete: () => void audio.caseComplete(),
     endHand: endStoryHand,
     playHand: (req) => {
       endStoryHand();

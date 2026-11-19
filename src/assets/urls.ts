@@ -27,6 +27,10 @@ export const RUNTIME_ASSET_URLS = {
   'env.moonlit-promenade': new URL('../../assets/generated/web/moonlit-promenade.webp', import.meta.url).href,
   'env.jungle-camp': new URL('../../assets/generated/web/jungle-camp.webp', import.meta.url).href,
   'env.executive-terrace': new URL('../../assets/generated/web/executive-terrace.webp', import.meta.url).href,
+  // Chapter 6 after the cave: the modern rest area at the entrance (its post-cave dialogue and its hand).
+  'env.rest-area': new URL('../../assets/generated/web/rest-area.webp', import.meta.url).href,
+  // Evidence inspection cards: the blank card behind the code-rendered excerpt text (Case file → Evidence).
+  'prop.evidence-card': new URL('../../assets/generated/web/evidence-card.webp', import.meta.url).href,
   // Story cast portraits: REPACKED derivatives (src/assets/cast.json — cleaned edges, uniform baseline-aligned
   // cells), so their frame rects come from cast.json, not the source manifest. Loaded per scene, never at startup.
   'cast.vale.atlas': new URL('../../assets/generated/web/cast-vale.webp', import.meta.url).href,
@@ -48,6 +52,7 @@ export const PORTRAIT_URLS = {
   'env.moonlit-promenade@portrait': new URL('../../assets/generated/web/moonlit-promenade-portrait.webp', import.meta.url).href,
   'env.jungle-camp@portrait': new URL('../../assets/generated/web/jungle-camp-portrait.webp', import.meta.url).href,
   'env.executive-terrace@portrait': new URL('../../assets/generated/web/executive-terrace-portrait.webp', import.meta.url).href,
+  'env.rest-area@portrait': new URL('../../assets/generated/web/rest-area-portrait.webp', import.meta.url).href,
 } as const;
 
 export type PortraitKey = keyof typeof PORTRAIT_URLS;

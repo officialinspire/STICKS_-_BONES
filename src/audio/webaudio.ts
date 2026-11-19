@@ -300,10 +300,17 @@ export class WebAudioBackend implements AudioBackend {
       const src = ctx.createBufferSource();
       src.buffer = buf;
       src.playbackRate.value = v.rate;
+      // Explicit, auditioned loop points only (src/audio/case-complete.ts): it then sounds until stopped.
+      const loop = v.loop && v.loop.end <= buf.duration ? v.loop : null;
+      if (loop) {
+        src.loop = true;
+        src.loopStart = loop.start;
+        src.loopEnd = loop.end;
+      }
       src.connect(gain);
       src.start(startAt);
       sources = [src];
-      seconds = buf.duration / v.rate;
+      seconds = loop ? Infinity : buf.duration / v.rate;
     } else {
       // Not decoded (yet), missing or broken: the synthesized placeholder, one voice per sound.
       if (v.sample && !this.#buffers.has(v.sample)) this.#decode(v.sample, sampleUrl(v.sample));
@@ -319,7 +326,7 @@ export class WebAudioBackend implements AudioBackend {
       // Disconnect after any release ramp has finished.
       window.setTimeout(() => gain.disconnect(), 120);
     };
-    const timer = window.setTimeout(finish, (startAt - ctx.currentTime + seconds) * 1000 + 60);
+    const timer = Number.isFinite(seconds) ? window.setTimeout(finish, (startAt - ctx.currentTime + seconds) * 1000 + 60) : 0;
     return {
       stop: () => {
         if (done) return;

@@ -48,6 +48,6 @@ export const ALL_SAMPLES: readonly string[] = [...Object.keys(sfxFiles), ...Obje
  * when a table opens, story accents when Story plays. (Each file is fetched and decoded once.)
  */
 export function samplesFor(group: 'ui' | 'table' | 'story'): string[] {
-  const re = group === 'ui' ? /^ui-/ : group === 'table' ? /^(tile-|pass-knock-|result-)/ : /^(motif-|water-|glass-)/;
+  const re = group === 'ui' ? /^ui-/ : group === 'table' ? /^(tile-|pass-knock-|result-)/ : /^(motif-|water-|glass-|case-complete)/;
   return ALL_SAMPLES.filter((id) => re.test(id));
 }
