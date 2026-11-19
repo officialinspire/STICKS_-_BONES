@@ -47,7 +47,16 @@ Status: see `docs/BUILD_STATUS.md` → "Stage 1 — integration".
 
 - [x] Review branch `claude/stage-1-release-integration` from `main` (f89914d); branch merged with
       semantic conflict resolution (4 files); one harness regression fixed (`pwa` pagination locator).
-- [ ] End-of-stage checklist (above).
+- [x] Status and results updated (`docs/BUILD_STATUS.md` → "Stage 1 — integration").
+- [x] All 13 AGENTS-required checks run locally: all pass (after one harness fix in `pwa`).
+- [x] Review branch pushed; CI green on every commit (`6de297c`, `d95cad9`, `2de17c1`).
+- [x] Merged into the latest `main` via PR #4 → `8d6493f` (merge commit, no force-push); CI green on `main`.
+- [x] Pages deployment "Deploy to GitHub Pages" run 44451111469: success.
+- [x] Live https://officialinspire.github.io/STICKS_-_BONES/ reports `data-build` `8d6493f9e100` (= `main`).
+- [x] Live startup: "Ready." → start → menu; service worker scoped to the subpath; "✓ Full game ready offline
+      (19.8 MB on this device)."; 0 page errors (Chromium via this environment's proxy).
+
+Status: **complete** (this status note is itself shipped by a follow-up docs-only merge, verified the same way).
 
 ### Stage 2 — not yet defined
 

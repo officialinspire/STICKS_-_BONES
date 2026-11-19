@@ -2221,3 +2221,10 @@ saved-data recovery notices. Four conflicts, resolved semantically:
 | CI (`ci.yml`) on the branch | green for `6de297c` and `d95cad9` |
 
 Unavailable here: Firefox/WebKit and real devices; audio listening (no output device).
+
+**Release (end-of-stage contract):** PR #4 merged into `main` as `8d6493f` (merge commit; `main` had not moved
+from `f89914d`). CI green on the branch and on `main`. "Deploy to GitHub Pages" (run 44451111469) succeeded.
+Live https://officialinspire.github.io/STICKS_-_BONES/: `<html data-build>` = `8d6493f9e100`; start screen
+"Ready." → menu; service worker scope `/STICKS_-_BONES/`; the whole-game download verified live ("✓ Full game
+ready offline (19.8 MB on this device)."); 0 page errors. Checked with Chromium through this environment's
+proxy; no other browser or real device was used.
