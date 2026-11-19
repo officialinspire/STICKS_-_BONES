@@ -21,7 +21,7 @@ import { countBlobs } from './lib/raster.ts';
 import { getAsset } from '../src/assets/index.ts';
 import { bustBox, stageFor } from '../src/render/stage.ts';
 import { showMenuItem } from './lib/menu-navigation';
-import { engine, ENGINE, launchOptions, unsupported } from './lib/engine';
+import { engine, ENGINE, isWebkitNavigationCancel, launchOptions, unsupported } from './lib/engine';
 
 type Page = import('playwright').Page;
 type Ctx = { message: string; type(): string; text(): string };
@@ -44,11 +44,11 @@ const browser = await engine.launch(launchOptions());
 async function newPage(viewport: { width: number; height: number }, dsf = 1, opts: { blockedImages?: boolean } = {}): Promise<Page> {
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: dsf });
   const page = await ctx.newPage();
-  page.on('pageerror', (e: Ctx) => failures.push(`page error: ${e.message}`));
+  page.on('pageerror', (e: Ctx) => (isWebkitNavigationCancel('e2e', e.message) || failures.push(`page error: ${e.message}`)));
   page.on('console', (m: Ctx) => {
     // When a test deliberately blocks images, the browser's own load errors are expected.
     if (opts.blockedImages && /Failed to load resource/.test(m.text())) return;
-    if (m.type() === 'error') failures.push(`console error: ${m.text()}`);
+    if (m.type() === 'error' && !isWebkitNavigationCancel('e2e', m.text())) failures.push(`console error: ${m.text()}`);
   });
   return page;
 }
@@ -173,8 +173,13 @@ async function playRound(page: Page, label: string, opts: { checkHidden?: boolea
     if (await legal.count()) {
       if (!(await tryClick(legal.first()))) continue;
       const slots = page.locator('.end-slot.is-legal');
+      // The rule: a SELECTED legal tile shows at least one legal end. (A click can land on a tile the computer's
+      // move just re-rendered away — WebKit is slow enough to show it — so the selection is checked, not assumed.)
+      await slots.first().waitFor({ timeout: 1500 }).catch(() => undefined);
       const n = await slots.count();
-      check(n >= 1, `${label}: selecting a legal tile showed no legal end`);
+      const selected = (await page.locator('.hand-tile.is-selected').count()) > 0;
+      check(n >= 1 || !selected, `${label}: selecting a legal tile showed no legal end`);
+      if (!n) continue;
       if (await tryClick(opts.preferTail || actions % 2 ? slots.last() : slots.first())) actions++;
       continue;
     }
@@ -793,7 +798,7 @@ try {
     // 6d. Reduced motion: no effects, no slam, static art; controls unchanged.
     const ctx = await browser.newContext({ viewport: { width: 1366, height: 900 }, reducedMotion: 'reduce' });
     const p4 = await ctx.newPage();
-    p4.on('pageerror', (e: { message: string }) => failures.push(`page error: ${e.message}`));
+    p4.on('pageerror', (e: { message: string }) => (isWebkitNavigationCancel('e2e', e.message) || failures.push(`page error: ${e.message}`)));
     await p4.addInitScript(() => {
       const w = window as unknown as { __fx: number; __slam: number };
       w.__fx = 0;
@@ -889,9 +894,9 @@ try {
       const ctx = await browser.newContext({ viewport: vp, reducedMotion: reduced ? 'reduce' : 'no-preference', ...(mobile ? { isMobile: true, hasTouch: true } : {}) });
       await ctx.addInitScript('window.__name = (f) => f;'); // tsx wraps named inner functions in page callbacks
       const page = await ctx.newPage();
-      page.on('pageerror', (e: { message: string }) => failures.push(`page error: ${e.message}`));
+      page.on('pageerror', (e: { message: string }) => (isWebkitNavigationCancel('e2e', e.message) || failures.push(`page error: ${e.message}`)));
       page.on('console', (m: Ctx) => {
-        if (m.type() === 'error' && !(route !== 'ok' && /Failed to load resource|404/.test(m.text()))) failures.push(`console error: ${m.text()}`);
+        if (m.type() === 'error' && !(route !== 'ok' && /Failed to load resource|404/.test(m.text())) && !isWebkitNavigationCancel('e2e', m.text())) failures.push(`console error: ${m.text()}`);
       });
       await page.addInitScript(INSTRUMENT);
       // 'real': the bundled INSPIRE credit (assets/video/inspiresoftwareintro.mp4). 'none': the video is missing.
@@ -1007,7 +1012,7 @@ try {
     {
       const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
       const page = await ctx.newPage();
-      page.on('pageerror', (e: { message: string }) => failures.push(`page error: ${e.message}`));
+      page.on('pageerror', (e: { message: string }) => (isWebkitNavigationCancel('e2e', e.message) || failures.push(`page error: ${e.message}`)));
       let portraitTries = 0;
       let tilesDown = true;
       await page.route('**/cousin-portrait-atlas*.webp', (r: { abort(): Promise<void>; continue(): Promise<void> }) => (++portraitTries <= 2 ? r.abort() : r.continue()));
@@ -1040,7 +1045,7 @@ try {
     for (const reduced of [false, true]) {
       const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: reduced ? 'reduce' : 'no-preference' });
       const page = await ctx.newPage();
-      page.on('pageerror', (e: { message: string }) => failures.push(`page error: ${e.message}`));
+      page.on('pageerror', (e: { message: string }) => (isWebkitNavigationCancel('e2e', e.message) || failures.push(`page error: ${e.message}`)));
       await page.addInitScript(INSTRUMENT);
       await page.addInitScript(() => ((window as unknown as { __sbIntroVideo: null }).__sbIntroVideo = null)); // the text credit
       await page.goto(BASE);
@@ -1162,6 +1167,9 @@ try {
           await new Promise((res) => setTimeout(res, 1500));
           await r.continue();
         });
+        // Reload only once the first load has settled: a reload that cancels the dev server's module requests
+        // mid-flight makes WebKit fail the next document's imports (dev-server only; production is a few chunks).
+        await page.waitForLoadState('networkidle').catch(() => undefined);
         await page.reload();
         await page.waitForSelector('.start-button[disabled]');
         await page.keyboard.down('Enter');

@@ -469,17 +469,30 @@ export class TableScreen {
       : `${hasDraw ? `<button type="button" class="btn" data-act="draw" ${c.draw.enabled ? '' : 'disabled'} aria-describedby="reason-0">Draw</button>` : ''}
         <button type="button" class="btn" data-act="pass" ${c.pass.enabled ? '' : 'disabled'} aria-describedby="reason-${hasDraw && reasons.length > 1 ? 1 : 0}">Pass</button>
         <div class="reasons">${reasons.map((r, i) => `<p id="reason-${i}" class="reason">${esc(r)}</p>`).join('')}${this.#status ? `<p class="status" role="status">${esc(this.#status)}</p>` : ''}</div>`;
-    this.#q('controls').innerHTML = `
-      <div class="actions">
-        ${actions}
-      </div>
-      <div class="view-tools">
+    const tools = `
         <button type="button" class="btn-ghost small" data-act="sort">${esc(SORT_LABELS[this.#sort])}</button>
         ${ends}
         <button type="button" class="btn-ghost small" data-act="zoom-out" aria-label="Zoom board out" ${this.#unit <= unitFloor() ? 'disabled' : ''}>−</button>
-        <button type="button" class="btn-ghost small" data-act="zoom-in" aria-label="Zoom board in" ${this.#unit >= UNIT_MAX ? 'disabled' : ''}>+</button>
-      </div>`;
+        <button type="button" class="btn-ghost small" data-act="zoom-in" aria-label="Zoom board in" ${this.#unit >= UNIT_MAX ? 'disabled' : ''}>+</button>`;
+    // Each part is rewritten only when its own markup changes, so a button the player is pressing is not replaced
+    // under the finger by an unrelated update (while "Finish hand with AI" plays, every move used to rebuild
+    // "Take over" — a tap whose press and release landed on two different copies did nothing).
+    const box = this.#q('controls');
+    let actionsEl = box.querySelector<HTMLElement>(':scope > .actions');
+    let toolsEl = box.querySelector<HTMLElement>(':scope > .view-tools');
+    if (!actionsEl || !toolsEl) {
+      box.innerHTML = '<div class="actions"></div><div class="view-tools"></div>';
+      actionsEl = box.querySelector<HTMLElement>(':scope > .actions')!;
+      toolsEl = box.querySelector<HTMLElement>(':scope > .view-tools')!;
+    }
+    for (const [el, html] of [[actionsEl, actions], [toolsEl, tools]] as const) {
+      if (this.#partHtml.get(el) === html) continue;
+      el.innerHTML = html;
+      this.#partHtml.set(el, html);
+    }
   }
+  /** The markup each controls part was last rendered with (see #renderControls). */
+  #partHtml = new WeakMap<HTMLElement, string>();
 
   #renderHand(v: SeatView): void {
     const el = this.#q('hand');

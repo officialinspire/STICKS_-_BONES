@@ -48,3 +48,17 @@ export function unsupported(suite: string, check: string, why: string): void {
   appendFileSync(join(out, `unsupported-${ENGINE}.jsonl`), JSON.stringify({ suite, check, why, at: new Date().toISOString() }) + '\n');
   console.log(`  ⚠ UNSUPPORTED in ${ENGINE} (${suite}): ${check} — ${why}`);
 }
+
+/**
+ * WebKit reports a SAME-ORIGIN request that a navigation (reload, goto) cancelled as "… due to access control
+ * checks." This app makes no cross-origin requests, so on our own localhost origin that message can only be such a
+ * cancellation. True (and recorded with unsupported(), never dropped silently) only for exactly that, in WebKit;
+ * any other message, any other engine or origin stays a failure.
+ */
+export function isWebkitNavigationCancel(suite: string, message: string): boolean {
+  if (ENGINE !== 'webkit') return false;
+  const m = /(?:^|\s)(?:Cannot load |Failed to load resource: )?(?:https?:)?\/{1,2}localhost:\d+(\/\S*) due to access control checks\.?$/.exec(message.trim());
+  if (!m) return false;
+  unsupported(suite, 'a clean console while a navigation cancels in-flight requests', `WebKit reports a cancelled same-origin request as an access-control error (e.g. ${m[1]})`);
+  return true;
+}

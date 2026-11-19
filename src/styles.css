@@ -2418,6 +2418,10 @@ h1, h2, h3, .title, .chapter-title, .section-h, .score-val, .dest-title, .points
  * ===================================================================================== */
 #app.is-playing { background: var(--sb-ink); }
 .story-stage { position: relative; isolation: isolate; }
+/* Nothing on the stage may widen the page. WebKit kept the full box of a figure's SVG <image> (the whole 1254-px
+   portrait sheet behind a one-frame viewBox) in the scrollable overflow after a rotation: 133 px of sideways scroll at
+   390×844. Clipping (not hidden: no scroll container, vertical overflow untouched) keeps every engine at the viewport. */
+.story-stage { overflow-x: clip; }
 .st-layers, .st-curtain { position: fixed; inset: 0; pointer-events: none; }
 .st-layers { z-index: -1; overflow: hidden; }
 .st-backdrop { position: absolute; inset: -3%; transform-origin: 50% 45%; }
