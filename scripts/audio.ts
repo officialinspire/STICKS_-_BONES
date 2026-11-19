@@ -17,7 +17,6 @@
  *  J. Bed loops: decoded length, loop bounds and the wrap jump measured with the browser's own decoder.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
@@ -26,10 +25,9 @@ import { MOTIF } from '../src/audio/motif.ts';
 import { insertLines, segments } from '../src/story/chapters.ts';
 import type { Scene } from '../src/story/parse.ts';
 import scriptJson from '../src/story/script.json' with { type: 'json' };
+import { engine, launchOptions } from './lib/engine';
 
 type Page = import('playwright').Page;
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright') as typeof import('playwright');
 const root = fileURLToPath(new URL('..', import.meta.url));
 const out = join(root, 'test-results/audio');
 mkdirSync(out, { recursive: true });
@@ -41,7 +39,7 @@ const check = (ok: boolean, msg: string) => ok || failures.push(msg);
 const server = await createServer({ root, logLevel: 'error', server: { port: 5189, strictPort: true } });
 await server.listen();
 const BASE = 'http://localhost:5189/';
-const browser = await chromium.launch();
+const browser = await engine.launch(launchOptions());
 
 /** Records every buffer source on the audio clock, and every voice the backend is asked for. */
 const INIT = `

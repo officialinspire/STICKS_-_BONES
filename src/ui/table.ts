@@ -132,7 +132,7 @@ export class TableScreen {
     r.innerHTML = `
       <div class="privacy-cover" data-region="cover" hidden></div>
       <div class="table-screen" data-region="table">
-        <h1 class="sr-only">STICKS &amp; BONES — the table</h1>
+        <h1 class="sr-only" tabindex="-1" data-region="table-title">STICKS &amp; BONES — the table</h1>
         <header class="hud">
           <button type="button" class="btn-ghost" data-act="pause" aria-label="Pause — rules, settings, restart, leave">❚❚<span class="pause-text"> Pause</span></button>
           <div class="scoreboard" data-region="scores"></div>
@@ -239,6 +239,12 @@ export class TableScreen {
     const table = assetUrl('table.weathered');
     if (table) r.style.setProperty('--table-image', `url("${table}")`);
     this.render();
+    // The screen changed under the player's focus (the Deal button, the Story's deal card, Resume are gone): start
+    // keyboard and screen-reader navigation at the table's heading. Without this, Chromium restarts Tab from the
+    // top of the page but Firefox continues from where the removed button was — past the hand's legal tiles — and
+    // then leaves the page. A cover or dialog that took focus during the first render keeps it.
+    const a = document.activeElement;
+    if (!a || a === document.body || !a.isConnected) this.#q('table-title')?.focus({ preventScroll: true });
   }
 
   destroy(): void {

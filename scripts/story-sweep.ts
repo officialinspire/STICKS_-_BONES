@@ -13,7 +13,6 @@
  * Pass 2: Chapters 3 and 7 (pre and the win route) at the seven QA viewports.
  * Usage: npm run story:sweep
  */
-import { createRequire } from 'node:module';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,10 +21,9 @@ import { insertLines, segments } from '../src/story/chapters.ts';
 import { playerCaption } from '../src/story/captions.ts';
 import { castFrameFor, lineExpression, lineNumbers } from '../src/story/expressions.ts';
 import type { Block, Scene } from '../src/story/parse.ts';
+import { engine, launchOptions } from './lib/engine';
 
 type Page = import('playwright').Page;
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright') as typeof import('playwright');
 const root = fileURLToPath(new URL('..', import.meta.url));
 const out = join(root, 'test-results/story-sweep');
 mkdirSync(out, { recursive: true });
@@ -49,7 +47,7 @@ const CHAR: Record<string, 'vale' | 'luz' | 'marisol' | 'rafa'> = { 'cast.vale.a
 const server = await createServer({ root, logLevel: 'error', server: { port: 5195, strictPort: true } });
 await server.listen();
 const BASE = 'http://localhost:5195/';
-const browser = await chromium.launch();
+const browser = await engine.launch(launchOptions());
 
 type Probe = {
   card: string | null; index: number; text: string; caption: string; speaking: string; expression: string;

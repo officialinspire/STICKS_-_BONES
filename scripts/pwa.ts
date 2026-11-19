@@ -40,11 +40,11 @@ import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'vite';
 import { showMenuItem } from './lib/menu-navigation';
+import { engine, HARNESS, launchOptions, unsupported } from './lib/engine';
 
 type Page = import('playwright').Page;
 type BrowserContext = import('playwright').BrowserContext;
 const require = createRequire(import.meta.url);
-const { chromium } = require('playwright') as typeof import('playwright');
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const out = join(root, 'test-results/pwa');
@@ -218,7 +218,7 @@ const server: Server = createServer((req, res: ServerResponse) => {
 await new Promise<void>((r) => server.listen(PORT, r));
 const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
 
-const browser = await chromium.launch();
+const browser = await engine.launch(launchOptions());
 const errorsOf = new WeakMap<Page, string[]>();
 /** Records every text the offline line shows (a fast local download can pass a state between polls). */
 const TEXT_LOG = `window.__name = (f) => f;
@@ -241,7 +241,8 @@ async function newContext(init = ''): Promise<{ ctx: BrowserContext; page: Page 
 /** A context on an on-disk profile, so the whole browser can be closed and relaunched (a true cold start). */
 const PROFILE = join(out, 'profile');
 async function persistentContext(offline = false): Promise<{ ctx: BrowserContext; page: Page }> {
-  const ctx = await chromium.launchPersistentContext(PROFILE, { viewport: { width: 390, height: 844 }, offline });
+  if (offline && !HARNESS.offlineNavigation) unsupported('pwa', 'browser-wide offline emulation on the cold relaunch', 'Playwright WebKit fails navigations under offline emulation; the origin is unreachable instead (no network for the app)');
+  const ctx = await engine.launchPersistentContext(PROFILE, { viewport: { width: 390, height: 844 }, offline: offline && HARNESS.offlineNavigation });
   await ctx.addInitScript(TEXT_LOG);
   const page = ctx.pages()[0] ?? (await ctx.newPage());
   watchErrors(page);
@@ -368,7 +369,8 @@ async function newGame(page: Page, opponent: 'ai' | 'local' = 'ai') {
 }
 async function goOffline(ctx: BrowserContext, on: boolean) {
   state.down = on;
-  await ctx.setOffline(on);
+  if (HARNESS.offlineNavigation) await ctx.setOffline(on);
+  else if (on) unsupported('pwa', 'browser-wide offline emulation (steps going offline)', 'Playwright WebKit fails navigations under offline emulation; the origin is unreachable instead (no network for the app)');
 }
 /** The browser stops this origin's workers (as it does to idle or long-running ones). Change offline emulation before, not after. */
 function within<T>(p: Promise<T>, what: string): Promise<T> {
@@ -486,10 +488,12 @@ try {
   notes.push(`first visit (online, subpath): startup → menu with no Story/media file requested before it; then "${texts[iSave]}" → "${texts[iCheck]}" → "${first}"; worker scope ${new URL(reg.scope!).pathname}`);
   notes.push(`offline pack verified in the page (bytes + SHA-256 + MIME for every file): ${urls.length} files, ${(cacheBytes / 1048576).toFixed(2)} MB = build.json total; caches ${ours.map((c) => `${c.name.replace('inspire:sticks-and-bones:', '')}=${c.urls.length}`).join(', ')}; the retired audio:v1 copy of ${legacy[0].split('/').pop()} was adopted (not re-downloaded) and the cache removed after verification`);
   // Installable from the subpath, and our own Install button when the browser offers it.
-  const cdp = await ctx.newCDPSession(page);
-  const inst = (await cdp.send('Page.getInstallabilityErrors')) as { installabilityErrors: { errorId: string }[] };
-  check(inst.installabilityErrors.length === 0, `not installable: ${inst.installabilityErrors.map((e) => e.errorId).join(', ')}`);
-  await cdp.detach();
+  if (HARNESS.cdp) {
+    const cdp = await ctx.newCDPSession(page);
+    const inst = (await cdp.send('Page.getInstallabilityErrors')) as { installabilityErrors: { errorId: string }[] };
+    check(inst.installabilityErrors.length === 0, `not installable: ${inst.installabilityErrors.map((e) => e.errorId).join(', ')}`);
+    await cdp.detach();
+  } else unsupported('pwa', 'browser installability report', 'a DevTools (Chromium) query; install is on the real-device checklist (item 9)');
   await page.evaluate(() => {
     const e = new Event('beforeinstallprompt', { cancelable: true });
     Object.assign(e, { prompt: async () => void ((window as unknown as { __prompted: boolean }).__prompted = true), userChoice: Promise.resolve({ outcome: 'accepted' }) });
@@ -729,7 +733,8 @@ try {
     notes.push(`quota by the browser's estimate (1 MB free): "${s}" — no Story or media file downloaded`);
     await ctx.close();
   }
-  if (run('4')) for (const [label, quota, init, expect] of [
+  if (run('4') && !HARNESS.cdp) unsupported('pwa', 'storage quota too small for the pack / for the shell (step 4b)', 'the quota override is a DevTools (Chromium) feature');
+  if (run('4') && HARNESS.cdp) for (const [label, quota, init, expect] of [
     ['the pack does not fit (worker quota error)', 4_000_000, `if (navigator.storage) navigator.storage.estimate = async () => ({ quota: 1e10, usage: 0 });`, /^Quick Play is ready offline\. Not enough storage for the full game: it needs [\d.]+ MB more/],
     ['the shell does not fit', 40_000, '', /Not enough storage on this device for the offline files\. The game still works online/],
   ] as const) {
@@ -819,7 +824,9 @@ try {
   state.site = SITE_A; // §5 left the server on build B
   step('7. Data Saver: the pack waits for the player; chapters still save as they are played');
   if (run('7')) {
-    const { ctx, page } = await newContext(`Object.defineProperty(navigator, 'connection', { configurable: true, get: () => ({ saveData: true, effectiveType: '4g', addEventListener() {}, removeEventListener() {} }) });`);
+    // Also: the persistent-storage prompt is never answered (Firefox keeps persist() pending until the player
+    // responds). Download must still start on the tap.
+    const { ctx, page } = await newContext(`Object.defineProperty(navigator, 'connection', { configurable: true, get: () => ({ saveData: true, effectiveType: '4g', addEventListener() {}, removeEventListener() {} }) }); if (navigator.storage) navigator.storage.persist = () => new Promise(() => {});`);
     const at = state.log.length;
     await page.goto(`${ORIGIN}${APP}`);
     await enterMenu(page);
@@ -870,7 +877,8 @@ try {
   // ---- 8a. Whole-game download stopped by the browser mid-way, then resumed -------------------
 
   step('8a. Whole-game download stopped by the browser mid-way, then resumed');
-  if (run('8a')) {
+  if (run('8a') && !HARNESS.cdp) unsupported('pwa', 'whole-game download stopped by the browser mid-way (step 8a)', 'stopping the service worker on demand is a DevTools (Chromium) feature');
+  if (run('8a') && HARNESS.cdp) {
     const { ctx, page } = await newContext();
     state.slow = new Set(['.mp3']);
     await page.goto(`${ORIGIN}${APP}`);

@@ -99,6 +99,8 @@ describe('Story analytics (separate from Quick Play)', () => {
     expect(sanitizeEvent({ name: 'story_encounter_start', scene: 'chapter-99', mode: 'draw2', replay: false })).toBeNull();
     expect(sanitizeEvent({ name: 'story_resume', scene: 'chapter-1', part: 'dialogue', via: 'continue', progress: '{"raw":"save"}' })).toEqual({ name: 'story_resume', scene: 'chapter-1', part: 'dialogue', via: 'continue' });
     expect(sanitizeEvent({ name: 'story_case_complete', seed: 'abc' })).toEqual({ name: 'story_case_complete' });
+    // Dialogue, captions, hidden hands, seeds and personal data never pass, whatever field they arrive in.
+    expect(sanitizeEvent({ name: 'story_assist', scene: 'chapter-6', kind: 'skip_scene', line: 'SPEAKER: “Go back. Go back.”', text: 'caption', hands: [['t66']], stock: ['t00'], rngState: [1, 2], email: 'a@b.c', player: 'Ana' })).toEqual({ name: 'story_assist', scene: 'chapter-6', kind: 'skip_scene' });
   });
   it('de-duplicates: one encounter per dealt hand, one completion per case + chapter, one case completion, one resume per position', () => {
     const { a, sent } = make();
@@ -113,7 +115,9 @@ describe('Story analytics (separate from Quick Play)', () => {
     a.storyResume('chapter-2', 'hand', 'update', 'k');
     a.storyResume('chapter-2', 'hand', 'update', 'k');
     a.storyAssist('chapter-2', 'skip_scene', 's');
-    expect(sent.map((e) => e.name)).toEqual(['story_encounter_start', 'story_encounter_start', 'story_chapter_complete', 'story_chapter_complete', 'story_case_complete', 'story_resume', 'story_assist']);
+    a.storyAssist('chapter-2', 'skip_scene', 's'); // the same skip reported twice (re-render, double tap)
+    a.storyAssist('chapter-2', 'skip_scene', 's2'); // a different segment skipped
+    expect(sent.map((e) => e.name)).toEqual(['story_encounter_start', 'story_encounter_start', 'story_chapter_complete', 'story_chapter_complete', 'story_case_complete', 'story_resume', 'story_assist', 'story_assist']);
     expect(sent.every((e) => e.app === 'sticks-and-bones')).toBe(true);
     expect(sent.some((e) => String(e.name).startsWith('match_'))).toBe(false);
   });

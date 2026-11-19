@@ -33,6 +33,11 @@
  *     the previous build's copy of the same asset (images, sounds and video only — never code).
  *   - Byte ranges: a single range gets 206 with Content-Range, an unsatisfiable one 416 with
  *     `bytes *\/<length>`, anything else the full 200 (ranges may be ignored, RFC 9110 §14.2).
+ *   - A byte-range request (a media element) for a file no cache of ours holds is NOT intercepted while
+ *     online: the browser fetches it exactly as it would without a worker. Passing it through the worker
+ *     added nothing, and Firefox reports an intercepted media response that the element cancels mid-way
+ *     (ordinary buffering) as a failed load. Offline, or before the worker knows what it holds, it is
+ *     intercepted as before (a stored copy, or the previous build's).
  *   - Quota errors stop the download and are reported; missing (404) files are counted; corrupt copies
  *     are deleted and fetched again once. Nothing here ever throws to the page.
  */
@@ -115,7 +120,20 @@ async function putVerified(cache, f, buf) {
   if (buf.byteLength !== f.bytes) throw fail('corrupt', `incomplete: ${buf.byteLength} of ${f.bytes} bytes`);
   if ((await sha256(buf)) !== f.sha) throw fail('corrupt', 'checksum mismatch');
   await cache.put(f.url, stored(f, buf));
+  held?.add(keyOf(f.url));
 }
+
+/**
+ * Keys of the files our caches hold (any build), for the synchronous byte-range decision in `fetch`. Filled once
+ * when the worker starts and kept up to date as files are stored; null until the scan finishes (then everything
+ * is intercepted, as before). A copy deleted later only means a range request is intercepted needlessly.
+ */
+let held = null;
+(async () => {
+  const keys = new Set();
+  for (const name of await ownNames()) for (const r of await (await caches.open(name)).keys()) keys.add(keyOf(r.url));
+  held = keys;
+})().catch(() => undefined);
 
 /** The stored copy is this build's file (cheap check: the checksum header written when it was verified). */
 async function isGood(cache, f) {
@@ -505,6 +523,8 @@ self.addEventListener('fetch', (event) => {
   }
   const f = FILES.get(key);
   if (!f) return; // unlisted: network only
+  // A media range request we can't answer from a stored copy: online, leave it to the browser (see the header).
+  if (req.headers.has('range') && self.navigator.onLine && held && !held.has(key)) return;
   event.respondWith(
     (async () => {
       const hit = await lookup(f);

@@ -16,15 +16,13 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { showMenuItem } from './lib/menu-navigation';
+import { engine, ENGINE, HARNESS, launchOptions, unsupported } from './lib/engine';
 
 type Page = import('playwright').Page;
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright') as typeof import('playwright');
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const outDir = join(root, 'test-results/qa');
@@ -62,7 +60,7 @@ const textNotes: string[] = [];
 const server = await createServer({ root, logLevel: 'error', server: { port: 5198, strictPort: true } });
 await server.listen();
 const BASE = 'http://localhost:5198/';
-const browser = await chromium.launch();
+const browser = await engine.launch(launchOptions());
 const DPR = Number(process.env.QA_DPR ?? 2);
 
 async function tryClick(loc: { click(o: { timeout: number }): Promise<void> }): Promise<boolean> {
@@ -465,12 +463,20 @@ try {
   // Vertical scrolling is fine; horizontal overflow, clipped text or clipped controls are not.
   if (!only || only.some((o) => 'text-scale'.includes(o) || o === 'all')) {
     for (const pct of [150, 200]) {
-      const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+      // The browser's own default text size (what a player changes in settings): DevTools in Chromium, the
+      // font-size preference in Firefox. WebKit offers the harness neither: recorded, not passed.
+      if (!HARNESS.cdp && ENGINE !== 'firefox') {
+        unsupported('qa', `browser default text size ${pct}%`, 'no Playwright control for the browser text size in WebKit (release:sweep covers 130 % root text in every engine)');
+        continue;
+      }
+      const textBrowser = HARNESS.cdp ? null : await engine.launch(launchOptions({ textScalePct: pct }));
+      const ctx = await (textBrowser ?? browser).newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
       const page = await ctx.newPage();
-      // The browser's own default text size (what a player changes in settings), via DevTools.
-      const cdp = await ctx.newCDPSession(page);
-      await cdp.send('Page.enable');
-      await cdp.send('Page.setFontSizes', { fontSizes: { standard: Math.round((16 * pct) / 100), fixed: Math.round((13 * pct) / 100) } });
+      if (HARNESS.cdp) {
+        const cdp = await ctx.newCDPSession(page);
+        await cdp.send('Page.enable');
+        await cdp.send('Page.setFontSizes', { fontSizes: { standard: Math.round((16 * pct) / 100), fixed: Math.round((13 * pct) / 100) } });
+      }
       await page.goto(BASE);
       const rootPx = (await page.evaluate('getComputedStyle(document.documentElement).fontSize')) as string;
       if (rootPx !== `${Math.round((16 * pct) / 100)}px`) failures.push(`text ${pct}%: browser text size did not apply (root ${rootPx})`);
@@ -500,6 +506,7 @@ try {
       await grab('setup');
       textNotes.push(`${pct}% browser text size (root ${rootPx}): menu, story case file, story scene, setup`);
       await ctx.close();
+      await textBrowser?.close();
     }
     // Typography facts: tabular score digits, and layout shift while the web fonts swap in.
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
@@ -519,12 +526,14 @@ try {
       const family = getComputedStyle(probe).fontFamily;
       probe.remove();
       const loaded = [...document.fonts].filter((f) => f.status === 'loaded').map((f) => f.family.replace(/"/g, ''));
-      return { widths, family, loaded, cls: window.__cls };
-    })()`)) as { widths: string[]; family: string; loaded: string[]; cls: number };
+      return { widths, family, loaded, cls: window.__cls, clsMeasurable: (PerformanceObserver.supportedEntryTypes ?? []).includes('layout-shift') };
+    })()`)) as { widths: string[]; family: string; loaded: string[]; cls: number; clsMeasurable: boolean };
+    // Layout-shift entries exist only where the engine implements them: elsewhere CLS is unmeasured, never "0".
+    if (!typo.clsMeasurable) unsupported('qa', 'layout shift (CLS) during load and font swap', `${ENGINE} does not implement the layout-shift performance entry`);
     if (new Set(typo.widths).size !== 1) failures.push(`score digits are not tabular: ${typo.widths.join(',')} (${typo.family})`);
     if (!typo.loaded.includes('DM Sans') || !typo.loaded.includes('Bricolage Grotesque')) failures.push(`web fonts not loaded: ${typo.loaded.join(', ')}`);
     if (typo.cls > 0.1) failures.push(`layout shift during load/font swap: CLS ${typo.cls.toFixed(3)}`);
-    textNotes.push(`score digits ${typo.widths[0]} px each (tabular, ${typo.family.split(',')[0]}); fonts loaded: ${typo.loaded.join(', ')}; CLS to menu ${typo.cls.toFixed(4)}`);
+    textNotes.push(`score digits ${typo.widths[0]} px each (tabular, ${typo.family.split(',')[0]}); fonts loaded: ${typo.loaded.join(', ')}; CLS to menu ${typo.clsMeasurable ? typo.cls.toFixed(4) : 'not measurable in this engine'}`);
     await ctx.close();
   }
 

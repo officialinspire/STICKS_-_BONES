@@ -25,7 +25,6 @@
  */
 import { createReadStream, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { createRequire } from 'node:module';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PROFILES, type StoryProfileId } from '../src/audio/profiles.ts';
@@ -34,11 +33,10 @@ import { insertLines, segments, type Outcome } from '../src/story/chapters.ts';
 import { playerCaption } from '../src/story/captions.ts';
 import type { Scene } from '../src/story/parse.ts';
 import { showMenuItem } from './lib/menu-navigation';
+import { engine, HARNESS, unsupported } from './lib/engine';
 
 type Page = import('playwright').Page;
 type BrowserContext = import('playwright').BrowserContext;
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright') as typeof import('playwright');
 const root = fileURLToPath(new URL('..', import.meta.url));
 const dist = join(root, 'dist');
 if (!existsSync(join(dist, 'index.html'))) {
@@ -205,9 +203,10 @@ const bedFile = (b: string | null) => (b ? `${b}.mp3` : null);
 // ---- helpers ------------------------------------------------------------------------------------------
 const PROFILE_DIR = join(out, 'profile');
 async function launch(offline: boolean, viewport = { width: 390, height: 844 }): Promise<{ ctx: BrowserContext; page: Page; errors: string[] }> {
-  const ctx = await chromium.launchPersistentContext(PROFILE_DIR, {
+  if (offline && !HARNESS.offlineNavigation) unsupported('offline:tour', 'browser-wide offline emulation on the cold relaunch', 'Playwright WebKit fails navigations under offline emulation; the server is down instead (no network for the app)');
+  const ctx = await engine.launchPersistentContext(PROFILE_DIR, {
     viewport,
-    offline,
+    offline: offline && HARNESS.offlineNavigation,
   });
   await ctx.addInitScript(INSTRUMENT);
   const page = ctx.pages()[0] ?? (await ctx.newPage());

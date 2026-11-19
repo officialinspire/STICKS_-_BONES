@@ -10,16 +10,14 @@
  * Rematch is labelled "rematch", and a double-tapped "Deal the tiles" starts once.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { showMenuItem } from './lib/menu-navigation';
+import { engine, launchOptions } from './lib/engine';
 
 type Page = import('playwright').Page;
 type Ev = { name: string; [k: string]: unknown };
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright') as typeof import('playwright');
 const root = fileURLToPath(new URL('..', import.meta.url));
 const out = join(root, 'test-results/matches');
 mkdirSync(out, { recursive: true });
@@ -30,7 +28,7 @@ const check = (ok: boolean, msg: string) => ok || failures.push(msg);
 const server = await createServer({ root, logLevel: 'error', server: { port: 5193, strictPort: true } });
 await server.listen();
 const BASE = 'http://localhost:5193/';
-const browser = await chromium.launch();
+const browser = await engine.launch(launchOptions());
 
 async function newPage() {
   const ctx = await browser.newContext({ viewport: { width: 1024, height: 768 } });

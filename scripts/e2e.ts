@@ -13,7 +13,6 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PNG } from 'pngjs';
@@ -22,12 +21,11 @@ import { countBlobs } from './lib/raster.ts';
 import { getAsset } from '../src/assets/index.ts';
 import { bustBox, stageFor } from '../src/render/stage.ts';
 import { showMenuItem } from './lib/menu-navigation';
+import { engine, ENGINE, launchOptions, unsupported } from './lib/engine';
 
 type Page = import('playwright').Page;
 type Ctx = { message: string; type(): string; text(): string };
 
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright') as typeof import('playwright');
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const outDir = process.argv[2] ?? join(root, 'test-results/e2e');
@@ -41,7 +39,7 @@ const check = (ok: boolean, msg: string) => {
 const server = await createServer({ root, logLevel: 'error', server: { port: 5199, strictPort: true } });
 await server.listen();
 const BASE = 'http://localhost:5199/';
-const browser = await chromium.launch();
+const browser = await engine.launch(launchOptions());
 
 async function newPage(viewport: { width: number; height: number }, dsf = 1, opts: { blockedImages?: boolean } = {}): Promise<Page> {
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: dsf });
@@ -337,9 +335,12 @@ try {
     await page.screenshot({ path: join(outDir, `${label}-results.png`) });
     const title = await page.textContent('#results-title');
     const longest = await page.evaluate(() => Math.max(0, ...(window as unknown as { __lt: number[] }).__lt));
+    // Long-task entries exist only where the engine implements them: elsewhere the figure is unmeasured, not 0 ms.
+    const ltMeasurable = (await page.evaluate(() => (PerformanceObserver.supportedEntryTypes ?? []).includes('longtask'))) as boolean;
+    if (!ltMeasurable) unsupported('e2e', `main-thread long tasks during play (${label})`, `${ENGINE} does not implement the longtask performance entry`);
     const stats = await page.evaluate(() => (window as unknown as { __sb: { session: { stats: { aiDecisions: number; staleDiscarded: number } } } }).__sb.session.stats);
     check(longest < 250, `${label}: main thread blocked for ${longest.toFixed(0)} ms`);
-    notes.push(`${label}: round finished after ${actions} human actions, ${stats.aiDecisions} AI decisions, longest main-thread task ${longest.toFixed(0)} ms — "${title}"`);
+    notes.push(`${label}: round finished after ${actions} human actions, ${stats.aiDecisions} AI decisions, longest main-thread task ${ltMeasurable ? `${longest.toFixed(0)} ms` : 'not measurable in this engine'} — "${title}"`);
     await page.click('[data-act="next-hand"], [data-act="new-match"]');
     await page.waitForTimeout(300);
     const meta = await page.textContent('.score-meta');

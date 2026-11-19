@@ -1,0 +1,63 @@
+# Release workflow: the full release suite set in Chromium, Firefox and WebKit (scripts/release.ts).
+# Run it from the Actions tab ("Run workflow") before tagging a release; each engine is its own job, and every job
+# uploads its report (exact browser builds, results, checks an engine could not perform) and logs.
+# Headless engines under emulation: this is NOT real-device testing (docs/RELEASE_CHECKLIST.md).
+name: Release suites
+
+on:
+  workflow_dispatch:
+    inputs:
+      engines:
+        description: 'Engines (comma-separated): chromium, firefox, webkit'
+        default: 'chromium,firefox,webkit'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      engines: ${{ steps.m.outputs.engines }}
+    steps:
+      - id: m
+        run: echo "engines=$(echo '${{ inputs.engines }}' | jq -cR 'split(",") | map(gsub("\\s"; "")) | map(select(. == "chromium" or . == "firefox" or . == "webkit"))')" >> "$GITHUB_OUTPUT"
+  suites:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: ${{ fromJson(needs.prepare.outputs.engines) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install Playwright and ${{ matrix.engine }}
+        # Playwright is a machine tool, not a project dependency (see scripts/playwright-shim.d.ts).
+        run: |
+          npm install --no-save playwright@1.63.0
+          npx playwright install --with-deps ${{ matrix.engine }}
+      - name: Audio tools for audio:report
+        run: sudo apt-get install -y ffmpeg && pip install numpy
+      - name: A virtual sound card (headless Firefox cannot start an AudioContext without an output device)
+        run: |
+          sudo apt-get install -y pulseaudio
+          pulseaudio -D --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=virtual
+          pactl set-default-sink virtual
+      - name: Release suites (${{ matrix.engine }})
+        run: npm run release -- --engines ${{ matrix.engine }}
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.engine }}
+          path: |
+            test-results/release/
+            test-results/release-sweep/
+          if-no-files-found: warn
