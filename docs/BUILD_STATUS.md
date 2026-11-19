@@ -2043,10 +2043,95 @@ Not re-run this stage (no Story presentation, rules or AI change): `story:sweep`
   by **Repair** (deep re-hash), not on every launch.
 - The free-space figure is the browser's estimate for the whole origin (shared with other INSPIRE apps).
 
+## Full-game audit through the real UI (2026-11-19)
+
+Audit of the whole game as a player meets it — the approved script, the audio and effects map, robustness,
+and the full offline pack — with focused fixes and regressions. Chromium only (the only browser here); no
+audio output device, so listening was not possible.
+
+### Defects found and fixed
+
+1. **Celebratory result cues after serious hands.** The win/other stinger played after every story hand,
+   including Chapter 5 and 6's deliberately music-free hands (the jungle; the rest area after the
+   encounter) and Chapter 7's public confrontation with Vale. Now a profile property
+   (`SceneProfile.resultCue`, `src/audio/profiles.ts`): withheld after Chapters 5–7 (also in replays);
+   Chapters 1–4 and the tables keep it. Unit test (all seven chapters) + browser checks in
+   `npm run offline:tour` and `story:e2e` § N.
+2. **Roberto laughing at Vale's domino.** In Story the table's host figure is Roberto — the player's own
+   character — but its moods were Quick Play's (where Cousin is the AI opponent): when Vale went out,
+   Roberto was drawn laughing, and the results sheet showed his gloat. Moods now follow the host's side
+   (`src/ui/host-mood.ts`): Story — delighted for his team, thoughtful when it loses, surprised by a block;
+   Quick Play unchanged except that Cousin is surprised (not laughing) when the player's AI partner goes
+   out in solo Partnership. Unit tests + a per-hand `data-mood` check across all seven story hands offline.
+3. **A sound that never played.** `slide` (three card-slide stand-ins, 65 KB) shipped and was stored
+   offline, but nothing triggered it; the `tap` id was dead too. Retired through the builder; a test now
+   fails if a shipped sample has no caller or a sound id has none.
+4. **Dead air in the beyond-knock.** Its chain padded 1 s for an echo tail that the 1.40 s fade-out then
+   silenced: 1.2 s of digital zeros. Padding removed — audio bit-identical over the sound (max difference
+   0.0), 48 KB smaller; every other SFX and bed rebuilt byte-identical.
+
+### Verified (and how)
+
+- **Script and routes:** `story:route` plays the whole case in the UI (every scene, the insert matching
+  each real result, notebook end cards, Case complete) and opens all 21 chapter × win/loss/tie routes;
+  `story:sweep` walks every beat (verbatim text, tagged expression, one speaker, Continue-only, corporate
+  terrace for Chapters 3 and 7). The Chapter 6 hand stays at the drawn modern rest area.
+- **Audio map** (`docs/AUDIO.md` "The complete map"): in the production build, offline, every scene's
+  playing music and looping bed were sampled at its first line and in its hand and matched its profile;
+  knocks on the audio clock 0.62 / 0.62 s with the answer +1.15 s (Prologue on a fresh case, Chapter 6).
+- **Robustness:** rapid Continue / Skip, Back, reload mid-dialogue and mid-hand, risky-moment reloads,
+  rotation, backgrounding, mute, missing media and refused saves are covered by `story:e2e`, `audio`,
+  `faults`, `e2e`; **chapter replay** was untested and is now `story:e2e` § N (a double tap opens one run
+  from beat 1; story position, completed chapters, stats and achievements byte-identical afterwards).
+  Taps during a scene's ~550 ms entrance are ignored by design (never queued) — noted, not changed.
+- **Offline cold launch** (`npm run offline:tour`, new): after the whole-game download the browser
+  relaunches offline with the server down; the intro plays out from the cache (5.9 s), menu music, a
+  Quick Play hand (tile sounds, impact effects, a result cue), the whole case with seven hands, both knock
+  motifs, offline resume of a story hand and a match (identical), achievements (24 of 100) across a
+  reload, every scene at 844×390, 360×800, 768×1024 and 1366×768 over its own backdrop, rotation
+  mid-line, a desktop Chapter 7 hand — **0 app requests reached the network, 0 page errors**.
+- **Measured audition** (`npm run audio:report`, new): 38 runtime files — loudness, true peak (none
+  clipping), dead air, cut-off tails, bed seams as played (wrap steps within each bed's own variation),
+  motif knocks peak-matched (0.0 dB spread). The owner's trimmed slam/drop clips: 0–1 ms lead, faded
+  tails, no cut-off.
+
+**Branch / commits:** `claude/inspiring-bardeen-4yfmu5` — checkpoint `970a39b`, then the follow-up with
+these notes. Not merged or deployed.
+
+### Commands run and results (Chromium)
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | pass: typecheck, lint, **534 passed unit tests** (new: per-chapter result-cue policy, host moods by side, sample-to-caller mapping), assets verified, build + budgets (sfx 466 / 720 KB, offline pack 20,296 / 21,000 KB, total 20,509 / 21,100 KB, code 318 / 330) |
+| `npm run audio:report` (new) | pass: 38 files measured (not heard) |
+| `npm run audio` | pass |
+| `npm run e2e` | pass |
+| `npm run faults` | pass |
+| `npm run story:e2e` | pass, incl. the new § N (chapter replay) |
+| `npm run story:sweep` | pass |
+| `npm run story:route` | pass: whole case + all 21 chapter routes |
+| `npm run offline:tour` (new) | pass: whole case offline on the production build; Roberto's moods win→delighted, loss→thinking on all seven hands; 0 network requests, 0 page errors |
+| `npm run smoke` | pass |
+| `npm run pwa` | pass (13 scenarios; pack 20,782,609 B after retiring the slide sounds) |
+| `npm run matches` | pass (run at the start of this stage; nothing since touches rules or AI) |
+
+Not re-run: `qa` / `a11y` (no layout change; the results sheet gained only a `data-mood` attribute), `perf`.
+
+### Not verified (honestly)
+
+- **Listening:** no audio output here. Track transitions, loop seams, levels, the trimmed clips and the
+  knocks' character were measured, **not heard**. The owner's listening pass remains open.
+- **Browsers and devices:** Firefox, WebKit/Safari, and real phones/tablets were not available; phone,
+  tablet and desktop were emulated viewports in Chromium.
+- **Human pacing:** bot timing only; the 90–110 minute target still needs real playtests.
+
 ## Next stage
 
 The detailed list is in `docs/STORY_BUILD_STATUS.md`:
-- real-device checks of full offline storage (iOS Safari install/eviction, Android Chrome, Firefox);
+- **the owner's listening pass** (transitions, seams, levels, trimmed clips, knocks), using `npm run audio:report`
+  as the measured reference;
+- real-device checks of full offline storage and the whole game (iOS Safari install/eviction, Android Chrome,
+  Firefox), e.g. by repeating `npm run offline:tour`'s route by hand;
 - Finish Hand with AI assistance, and skip with recap;
 - version alignment (package vs release notes);
 - release reconciliation and the handoff document.
