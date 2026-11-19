@@ -911,6 +911,8 @@ try {
       check(st.reveal === (reduce ? 'done' : 'play') && st.focus === 'credits-done' && st.title && /Case complete\./.test(st.done), `Q credits ${vp.width}×${vp.height}: ${JSON.stringify(st)}`);
       const missing = ((await page.evaluate(`window.__sbAudio?.audio.stats.caseCompleteMissing ?? -1`)) as number) - missing0;
       check(missing === 1, `Q credits: the case-complete cue should report its missing file once (${missing})`);
+      await page.waitForTimeout(1500); // the seeded save's earlier-games notice is queued: it must wait for the Case file
+      check((await page.locator('.ach-toast').count()) === 0, `Q credits ${vp.width}×${vp.height}: an achievement notice covers the reprise`);
       await page.screenshot({ path: join(out, `credits-${vp.width}x${vp.height}.png`) });
       if (!reduce) {
         await page.mouse.click(5, vp.height - 5);
