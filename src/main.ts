@@ -132,10 +132,11 @@ const audioApi = {
 
 const settingsApi = {
   get: () => settings,
-  set: (p: Partial<Settings>) => {
+  set: (p: Partial<Settings>, o?: { quiet?: boolean }) => {
     settings = { ...settings, ...p };
     persistSettings();
     audio.setLevels(settings.audio);
+    if (o?.quiet) return; // the game's own change (tips off after a hand): not the player exploring Settings
     achievements.note('explore.settings');
     if ('storyTextScale' in p || 'instantText' in p) achievements.note('explore.storyText');
   },
@@ -364,7 +365,7 @@ function endStoryHand(): void {
   audio.setScene(audio.profile ? 'story' : 'menu');
 }
 /** Story tables never show Quick Play banter: Roberto is the player here, and serious scenes stay serious. */
-const storySettingsApi = { get: () => ({ ...settings, banter: false }), set: (p: Partial<Settings>) => settingsApi.set(p) };
+const storySettingsApi = { get: () => ({ ...settings, banter: false }), set: (p: Partial<Settings>, o?: { quiet?: boolean }) => settingsApi.set(p, o) };
 /** Set by an update reload: the case file reopens the saved scene once, without a tap. */
 let autoContinueOnce = false;
 /** The Story screens are open (case file or a run). */

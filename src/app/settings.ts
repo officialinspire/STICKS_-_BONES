@@ -41,6 +41,8 @@ export interface Settings {
   readonly storyTextScale: StoryTextScale;
   /** Story lines appear at once instead of revealing progressively. */
   readonly instantText: boolean;
+  /** Short table tips during the player's first hand (tile, end, draw/pass, partner); off once dismissed or a hand is completed. */
+  readonly tableTips: boolean;
 }
 
 export const STORY_TEXT_SCALES = [1, 1.15, 1.3] as const;
@@ -56,6 +58,7 @@ export const DEFAULT_SETTINGS: Settings = {
   haptics: true,
   storyTextScale: 1,
   instantText: false,
+  tableTips: true,
 };
 
 const level = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : d);
@@ -91,17 +94,19 @@ function normalise(raw: unknown): Settings | null {
       haptics: typeof p.haptics === 'boolean' ? p.haptics : DEFAULT_SETTINGS.haptics,
       storyTextScale: STORY_TEXT_SCALES.includes(p.storyTextScale as StoryTextScale) ? (p.storyTextScale as StoryTextScale) : DEFAULT_SETTINGS.storyTextScale,
       instantText: typeof p.instantText === 'boolean' ? p.instantText : DEFAULT_SETTINGS.instantText,
+      tableTips: typeof p.tableTips === 'boolean' ? p.tableTips : DEFAULT_SETTINGS.tableTips,
   };
 }
 
 export const SETTINGS_SPEC: RecordSpec<Settings> = {
   key: SETTINGS_KEY,
   format: 'sticks-and-bones/settings',
-  version: 3,
+  version: 4,
   validate: normalise,
   // v0 = the un-enveloped settings object written before versioning; v2 lacks only the Story text
   // fields (normalise fills the defaults; main.ts adopts the text size the Story record held).
-  migrate: (from, data) => (from === 0 || from === 2 ? data : null),
+  // v4 adds table tips: anyone with saved settings has already played, so tips start off for them.
+  migrate: (from, data) => (from === 0 || from === 2 || from === 3 ? { ...(typeof data === 'object' && data ? data : {}), tableTips: false } : null),
 };
 
 export function loadSettingsResult(store: SettingsStore | null): { settings: Settings; status: ReadStatus } {

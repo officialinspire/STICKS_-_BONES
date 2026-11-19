@@ -455,6 +455,8 @@ export class TableScreen {
     const ends = v.openEnds
       ? `<button type="button" class="btn-ghost small" data-act="focus-end" data-end="head" aria-label="Show the ${v.openEnds.head} end (upper-left branch)">↖ ${v.openEnds.head}</button><button type="button" class="btn-ghost small" data-act="focus-end" data-end="tail" aria-label="Show the ${v.openEnds.tail} end (lower-right branch)">${v.openEnds.tail} ↘</button>`
       : '';
+    const tip = this.#tip(v, c.draw.enabled);
+    const tipHtml = tip ? `<p class="reason table-tip"><strong>Tip:</strong> ${esc(tip)} <button type="button" class="btn-ghost small dark" data-act="tips-off">Hide tips</button></p>` : '';
     // "Finish hand with AI" is running: the assistant plays Cousin's moves; one control hands them back.
     const assisting = this.#assisting() && v.phase === 'playing';
     const actions = assisting
@@ -462,7 +464,7 @@ export class TableScreen {
         <div class="reasons"><p class="reason assist-note" role="status">The AI is finishing this hand for you, with the same fair rules.</p></div>`
       : `${hasDraw ? `<button type="button" class="btn" data-act="draw" ${c.draw.enabled ? '' : 'disabled'} aria-describedby="reason-0">Draw</button>` : ''}
         <button type="button" class="btn" data-act="pass" ${c.pass.enabled ? '' : 'disabled'} aria-describedby="reason-${hasDraw && reasons.length > 1 ? 1 : 0}">Pass</button>
-        <div class="reasons">${reasons.map((r, i) => `<p id="reason-${i}" class="reason">${esc(r)}</p>`).join('')}${this.#status ? `<p class="status" role="status">${esc(this.#status)}</p>` : ''}</div>`;
+        <div class="reasons">${reasons.map((r, i) => `<p id="reason-${i}" class="reason">${esc(r)}</p>`).join('')}${this.#status ? `<p class="status" role="status">${esc(this.#status)}</p>` : ''}${tipHtml}</div>`;
     this.#q('controls').innerHTML = `
       <div class="actions">
         ${actions}
@@ -735,6 +737,25 @@ export class TableScreen {
 
   // ---------------------------------------------------------------------------
 
+  /**
+   * First-hand guidance (Settings → Table tips): one short line for the step the player is on. It never covers
+   * the table — it sits in the reasons line under Draw / Pass — and never delays anything.
+   */
+  #tip(v: SeatView, canDraw: boolean): string | null {
+    if (!this.#cb.settings.get().tableTips || !this.#c.canAct() || v.phase !== 'playing') return null;
+    if (this.#selected) {
+      const ends = new Set(v.legalMoves.filter((m) => m.tile === this.#selected).map((m) => m.end));
+      // The status line already says where to tap; the tip adds only how to find each end of the line.
+      return ends.size > 1 ? 'Both glowing ends fit; the ↖ and ↘ buttons below jump to each end of the line.' : null;
+    }
+    if (v.legalMoves.length) {
+      const partner = v.seatCount === 4 ? this.#s.rules.teams.find((t) => t.includes(v.viewer))?.find((x) => x !== v.viewer) : undefined;
+      const team = partner !== undefined ? ` ${this.#name(partner as SeatIndex)} is your partner (marked Partner, sitting across from you): you score together.` : '';
+      return `Tap a glowing tile to choose it — only tiles that match an open end glow.${team}`;
+    }
+    return canDraw ? 'Nothing fits: tap Draw to take a tile from the boneyard.' : 'Nothing fits: tap Pass to knock, and play moves on.';
+  }
+
   /** The Story player's own seat (the one the assistant may play). */
   #playerSeat(): SeatIndex {
     return (this.#s.humanSeats[0] ?? 0) as SeatIndex;
@@ -833,6 +854,8 @@ export class TableScreen {
           break;
         case 'hand-resolved':
           this.#liveResult = e.result.handNumber; // observed live: the results sheet may play its cue once
+          // The first hand is done: the table tips have served their purpose (Settings can turn them back on).
+          if (this.#cb.settings.get().tableTips) this.#cb.settings.set({ tableTips: false }, { quiet: true });
           if (e.result.winnerTeam === null) say('tie');
           break;
         case 'match-won': {
@@ -995,6 +1018,12 @@ export class TableScreen {
         break;
       case 'pause-resume':
         this.#closePause();
+        break;
+      case 'tips-off':
+        this.#cb.settings.set({ tableTips: false }, { quiet: true });
+        this.applySettings();
+        this.#renderControls(this.#c.view());
+        this.#focusHand();
         break;
       case 'assist-finish':
         // Close the sheet first (resume), then hand the seat over: the assistant's first decision starts fresh.

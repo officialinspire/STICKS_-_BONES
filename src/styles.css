@@ -1567,6 +1567,13 @@ label.check {
   inset: -10px;
   border-radius: 12px;
 }
+/* Short landscape phones shrink the board unit: grow the open-end target to ≥ 44 px tall there. The two ends
+   flank at least one tile, so the larger areas never overlap each other. */
+@media (orientation: landscape) and (max-height: 430px) {
+  .end-slot.is-legal::before {
+    inset: -12px;
+  }
+}
 /* Results and other long sheets: the actions stay reachable without scrolling past the title. */
 .sheet .sheet-actions {
   position: sticky;
@@ -2790,6 +2797,17 @@ menu-pages {
 .case-menu [data-act="story-replay"] { min-height: 44px; margin-top: 4px; }
 .case-menu menu-pages { color: var(--sb-ivory); }
 .case-menu .evidence-list { color: var(--sb-ink); }
+/* Transcript (case file): verbatim lines, captions in italics, each hand's actual result. */
+.case-menu .transcript-list { color: var(--sb-ink); list-style: none; padding-inline-start: 12px; }
+.transcript-scene { margin-top: 6px; }
+.transcript-line, .transcript-caption, .transcript-result { margin: 0; line-height: 1.45; }
+.transcript-caption { font-style: italic; color: var(--ink-soft); }
+.transcript-result { font-weight: 700; color: var(--sb-deep-sea); }
+/* Recap after Skip (deal / end card): approved evidence excerpts from the skipped part only. */
+.skip-recap { margin: 0; padding: 8px 10px; border: 2px dashed var(--sb-deep-sea); border-radius: 8px; background: rgba(255, 242, 216, 0.95); color: var(--sb-ink); }
+.skip-recap h3 { margin: 0 0 4px; font: 800 0.95rem / 1.2 var(--display); color: var(--sb-deep-sea); }
+.skip-recap ul { margin: 0; padding-inline-start: 18px; }
+.skip-recap .row { margin-top: 6px; }
 
 dialog.pause[open] {
   display: flex;

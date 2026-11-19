@@ -27,6 +27,7 @@ import { wordmarkHtml } from './brand';
 import { esc } from './svg';
 import { confirmSheet } from './confirm';
 import { menuPages } from './menu-pages';
+import { reachedTranscript, type TranscriptEntry } from '../story/transcript';
 
 // ---- speakers -----------------------------------------------------------------------
 const NAMES: Record<string, { label: string; tone: string }> = {
@@ -62,6 +63,25 @@ export function chapterCardHtml(s: Scene, status: ChapterStatus, opts: { compact
 }
 
 const chapterLabel = (id: SceneId): string => (id.startsWith('chapter-') ? `Chapter ${id.slice(8)}` : id === 'prologue' ? 'Prologue' : 'Epilogue');
+
+const RESULT_WORDS: Record<Outcome, string> = { win: 'Cousin’s side won the hand', loss: 'Cousin’s side lost the hand', tie: 'Blocked tie' };
+/** The reached-only transcript as list items: verbatim lines, player captions, each hand's actual result. */
+export function transcriptHtml(scenes: readonly Scene[], entries: readonly TranscriptEntry[]): string {
+  if (!entries.length) return '<li class="evidence-empty">Nothing yet. Lines appear here as you read them.</li>';
+  const out: string[] = [];
+  let scene: string | null = null;
+  for (const e of entries) {
+    if (e.scene !== scene) {
+      scene = e.scene;
+      const sc = scenes.find((x) => x.id === e.scene);
+      out.push(`<li class="transcript-scene notebook-chapter">${esc(chapterLabel(e.scene))}${sc ? ` · ${esc(sc.title)}` : ''}</li>`);
+    }
+    if (e.kind === 'line') out.push(`<li class="transcript-line"><strong>${esc(speakerOf(e.speaker).label)}:</strong> ${esc(e.text)}</li>`);
+    else if (e.kind === 'caption') out.push(`<li class="transcript-caption">${esc(e.text)}</li>`);
+    else out.push(`<li class="transcript-result">${e.outcome ? esc(RESULT_WORDS[e.outcome]) : 'Hand result not recorded on this device (played before results were kept)'}${e.assisted ? ' · finished with AI assistance' : ''}</li>`);
+  }
+  return out.join('');
+}
 
 export function notebookEntryHtml(s: Scene): string {
   const entry = s.blocks.find((b) => b.kind === 'notebook');
@@ -212,6 +232,7 @@ export async function renderStoryHome(d: StoryDeps, notice?: string): Promise<vo
         { title: 'Chapters', layout: 'chapter-list chapter-select', list: 'ol', html: '<li class="case-list-note note-dark">Replay completed chapters without changing your place in the case.</li>' + chapters.map((s) => `<li>${chapterCardHtml(s, status(s), { compact: true })}${status(s) === 'completed' ? `<button type="button" class="btn-ghost small" data-act="story-replay" data-scene="${esc(s.id)}">Replay chapter ${s.number}</button>` : ''}</li>`).join('') },
         { title: 'Case notebook', layout: 'notebook-list notebook', list: 'ol', html: completedChapters.length ? completedChapters.map(notebookEntryHtml).join('') : '<li class="notebook-empty">Nothing written yet. Each completed chapter adds Roberto’s notes here.</li>' },
         { title: 'Evidence', layout: 'evidence-list evidence-panel', list: 'ul', html: evidence.length ? evidence.map((e) => `<li>${esc(chapterLabel(e.scene))}: ${esc(e.text)}</li>`).join('') : '<li class="evidence-empty">No evidence collected yet. It appears here as the case uncovers it.</li>' },
+        { title: 'Transcript', layout: 'transcript-list evidence-panel', list: 'ol', html: transcriptHtml(script.scenes, reachedTranscript(script.scenes, p)) },
       ])}
     </div>`;
   const on = (act: string, fn: () => void) => root.querySelector(`[data-act="${act}"]`)?.addEventListener('click', fn);

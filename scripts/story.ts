@@ -15,6 +15,10 @@
  *     — the real result, its insert, one advance, "Finished with AI assistance", no win counted; Take over
  *     returns control (no further assisted move); a reload mid-assist keeps the label but not the assistant;
  *     leaving mid-decision lands nothing.
+ *  P. Transcript, recap, reach: the case file's Transcript shows only reached beats (verbatim, the recorded
+ *     outcome's insert, "finished with AI assistance") and nothing later; Skip offers a dismissible recap of
+ *     the skipped part's evidence only; at 320×568 and 568×320 (reduced motion, 130 % text) the pause sheet's
+ *     Finish hand with AI and the table tip are on screen and keyboard-reachable.
  *  N. Chapter replay from the case file (Chapter 6): it starts at its first beat, plays its hand and the
  *     insert to the end card, withholds the result cue (a serious hand), returns to the case file, and leaves
  *     the case position, completed chapters, statistics and achievements exactly as they were; a double tap
@@ -28,6 +32,8 @@ import { createServer } from 'vite';
 import { insertLines, segments } from '../src/story/chapters.ts';
 import type { Scene } from '../src/story/parse.ts';
 import { STAGING } from '../src/story/staging.ts';
+import { EVIDENCE } from '../src/story/evidence.ts';
+import { playerCaption } from '../src/story/captions.ts';
 import { showMenuItem } from './lib/menu-navigation';
 
 type Page = import('playwright').Page;
@@ -38,6 +44,7 @@ const out = join(root, 'test-results/story');
 mkdirSync(out, { recursive: true });
 const script = JSON.parse(readFileSync(join(root, 'src/story/script.json'), 'utf8')) as { scenes: Scene[] };
 const scene = (id: string) => script.scenes.find((s) => s.id === id)!;
+const EVIDENCE_TEXT = (id: string, part: 'pre' | 'post') => EVIDENCE.filter((e) => e.scene === id && e.part === part).map((e) => playerCaption(e.at)!).filter(Boolean);
 const failures: string[] = [];
 const notes: string[] = [];
 const check = (ok: boolean, msg: string) => ok || failures.push(msg);
@@ -86,7 +93,7 @@ async function openStory(page: Page, opts: { fresh?: boolean } = {}) {
 }
 /** Seed progress directly (a valid v2 record) for composition captures. */
 async function seed(page: Page, p: Record<string, unknown>) {
-  await page.evaluate((data: unknown) => localStorage.setItem('sticks-and-bones.story', JSON.stringify({ format: 'sticks-and-bones/story', version: 2, data })), { outcome: null, completed: [], textScale: 1, startedAt: 1, hand: null, ...p });
+  await page.evaluate((data: unknown) => localStorage.setItem('sticks-and-bones.story', JSON.stringify({ format: 'sticks-and-bones/story', version: 3, data })), { outcome: null, completed: [], textScale: 1, startedAt: 1, hand: null, outcomes: {}, assisted: [], ...p });
 }
 async function playHandAtTable(page: Page, budget = 120_000) {
   const until = Date.now() + budget;
@@ -704,7 +711,7 @@ try {
       check(/Finished with AI assistance/.test(sheet), `O ${want}: the results sheet is not labelled`);
       check(p?.outcome === want && (p as unknown as { outcomes: Record<string, string> }).outcomes['chapter-2'] === want, `O ${want}: recorded ${p?.outcome}`);
       check((p as unknown as { assisted: string[] }).assisted.includes('chapter-2') && p!.completed.filter((c) => c === 'chapter-2').length === 1, `O ${want}: assistance/completion not recorded once`);
-      check(!gained.some((k) => /win|domino|tranque|hand/i.test(k)), `O ${want}: the assisted hand counted ${gained.join(', ')}`);
+      check(JSON.stringify(gained) === '["story.chapter-2"]', `O ${want}: the assisted hand changed counts ${gained.join(', ')} (want only story.chapter-2)`);
       // Continue the case: the matching insert, exactly one step on.
       await page.click('dialog.results [data-act="story-hand-done"]');
       await waitState(page, 'presenting');
@@ -759,6 +766,74 @@ try {
     check(errors.length === 0, `O: page errors ${errors.join(' | ')}`);
     notes.push('O: Take over stops the assistant at once (no further assisted move); a reload mid-hand keeps "assisted" but returns control; leaving while it decides lands nothing');
     await page.context().close();
+  }
+  // ---- P. Transcript (reached only), recap after Skip, reach at the smallest sizes ------------------------
+  {
+    const { page, errors } = await newPage();
+    await toMenu(page);
+    const ch1 = segments(scene('chapter-1'));
+    const ch2 = segments(scene('chapter-2'));
+    await seed(page, { sceneId: 'chapter-2', part: 'pre', index: 3, completed: ['prologue', 'chapter-1'], outcomes: { 'chapter-1': 'loss' }, assisted: ['chapter-1'] });
+    await page.reload();
+    await page.click('.start-button');
+    await page.click('[data-act="story"]');
+    await page.waitForSelector('.story-shell');
+    await showMenuItem(page, '.transcript-list li');
+    const t = (await page.textContent('.transcript-list')) ?? '';
+    const ins = (o: 'win' | 'loss' | 'tie') => insertLines(ch1.inserts[o]!).filter((b) => b.kind === 'line').map((b) => b.text!);
+    const later = ch2.pre.slice(4).filter((b) => b.kind === 'line').map((b) => b.text!).filter((x) => !ch2.pre.slice(0, 4).some((b) => b.text === x));
+    check(ins('loss').every((x) => t.includes(x)) && !ins('win').some((x) => t.includes(x)), 'P transcript: the recorded loss insert is not the one shown');
+    check(/lost the hand · finished with AI assistance/.test(t), 'P transcript: the assisted result label is missing');
+    check(!later.some((x) => t.includes(x)) && !/Chapter 3/.test(t), 'P transcript: a beat beyond the saved line (or a later chapter) was shown');
+    check(ch2.pre.slice(0, 4).filter((b) => b.kind === 'line').every((b) => t.includes(b.text!)), 'P transcript: a reached Chapter 2 line is missing');
+    // Recap after Skip: Chapter 5's pre-hand evidence only; Dismiss returns focus to Deal.
+    await seed(page, { sceneId: 'chapter-5', part: 'pre', index: 0, completed: ['prologue', 'chapter-1', 'chapter-2', 'chapter-3', 'chapter-4'] });
+    await toMenu(page);
+    await openStory(page);
+    await waitState(page, 'presenting');
+    await page.waitForTimeout(400);
+    await page.click('[data-act="story-skip"]');
+    await page.waitForSelector('.hand-card .skip-recap', { timeout: 10_000 });
+    const recap = (await page.textContent('.skip-recap')) ?? '';
+    const own = EVIDENCE_TEXT('chapter-5', 'pre');
+    const other = [...EVIDENCE_TEXT('chapter-6', 'pre'), ...EVIDENCE_TEXT('chapter-4', 'post')];
+    check(own.every((x) => recap.includes(x)) && !other.some((x) => recap.includes(x)), `P recap: "${recap.slice(0, 160)}"`);
+    await page.click('[data-act="recap-dismiss"]');
+    const after = await page.evaluate(() => ({ recap: document.querySelectorAll('.skip-recap').length, focus: (document.activeElement as HTMLElement | null)?.dataset.act }));
+    check(after.recap === 0 && after.focus === 'story-deal', `P recap dismiss: ${JSON.stringify(after)}`);
+    check(errors.length === 0, `P: page errors ${errors.join(' | ')}`);
+    await page.context().close();
+    // Reach: the smallest portrait and landscape, reduced motion, 130 % text.
+    for (const vp of [{ width: 320, height: 568 }, { width: 568, height: 320 }]) {
+      const { page: q, errors: e2 } = await newPage({ ...vp, reduce: true });
+      await q.goto(BASE);
+      await q.evaluate(() => (document.documentElement.style.fontSize = '130%'));
+      await q.click('.start-button');
+      await q.waitForSelector('[data-act="story"]');
+      await seed(q, { sceneId: 'chapter-3', part: 'hand', index: 0, completed: ['prologue', 'chapter-1', 'chapter-2'] });
+      await openStory(q);
+      await q.waitForSelector('.table-screen');
+      await q.evaluate(() => (document.documentElement.style.fontSize = '130%'));
+      const inView = async (sel: string) => {
+        const b = await q.locator(sel).first().boundingBox();
+        return !!b && b.x >= -1 && b.y >= -1 && b.x + b.width <= vp.width + 1 && b.y + b.height <= vp.height + 1;
+      };
+      for (let k = 0; k < 60 && !(await q.locator('.table-tip').count()); k++) await q.waitForTimeout(100);
+      const tipOk = (await q.locator('.table-tip').count()) === 0 || (await inView('[data-act="tips-off"]'));
+      await q.click('[data-act="pause"]');
+      await q.waitForSelector('dialog.pause[open]');
+      const finishOk = await inView('dialog.pause [data-act="assist-finish"]');
+      // Keyboard: from Resume, Tab reaches Finish hand with AI.
+      let reached = false;
+      for (let k = 0; k < 6 && !reached; k++) {
+        await q.keyboard.press('Tab');
+        reached = (await q.evaluate(() => (document.activeElement as HTMLElement | null)?.dataset.act)) === 'assist-finish';
+      }
+      check(tipOk && finishOk && reached, `P ${vp.width}×${vp.height}: tip on screen ${tipOk}, Finish hand with AI on screen ${finishOk}, Tab-reachable ${reached}`);
+      check(e2.length === 0, `P ${vp.width}×${vp.height}: page errors ${e2.join(' | ')}`);
+      await q.context().close();
+    }
+    notes.push('P: Transcript shows reached beats only (recorded loss insert, "finished with AI assistance", nothing after the saved line or from later chapters); Skip recap lists only the skipped part’s evidence, Dismiss returns focus to Deal; at 320×568 and 568×320 (reduced motion, 130 % text) the tip and Finish hand with AI are on screen and Tab-reachable');
   }
 } catch (e) {
   failures.push(`exception: ${(e as Error).stack ?? e}`);

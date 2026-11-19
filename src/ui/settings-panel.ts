@@ -5,7 +5,8 @@ import type { MenuSection } from './menu-pages';
 
 export interface SettingsApi {
   get(): Settings;
-  set(p: Partial<Settings>): void;
+  /** `quiet`: a change the game makes by itself (e.g. table tips off after the first hand) — counts no exploration. */
+  set(p: Partial<Settings>, o?: { quiet?: boolean }): void;
 }
 
 export function settingsSections(s: Settings): MenuSection[] {
@@ -31,6 +32,7 @@ export function settingsSections(s: Settings): MenuSection[] {
     </div></fieldset>
     <fieldset><legend>Table talk</legend><div class="row">
       <label class="check"><input type="checkbox" name="set-banter" ${s.banter ? 'checked' : ''}> Cousin’s banter</label>
+      <label class="check"><input type="checkbox" name="set-table-tips" ${s.tableTips ? 'checked' : ''}> Table tips <small>(choosing a tile, an end, draw or pass, your partner)</small></label>
       <label class="check"><input type="checkbox" name="set-host-anim" ${s.hostAnimation ? 'checked' : ''}> Cousin’s slam animation</label>
     </div></fieldset>
     ` },
@@ -80,6 +82,9 @@ export function bindSettingsPanel(root: HTMLElement, api: SettingsApi): void {
         break;
       case 'set-language':
         api.set({ explicitLanguage: t.value === 'explicit' });
+        break;
+      case 'set-table-tips':
+        api.set({ tableTips: t.checked });
         break;
       case 'set-banter':
         api.set({ banter: t.checked });
