@@ -17,6 +17,7 @@ import { envKey, envPosition, onViewportShape } from '../assets/env';
 import { warm, warmState } from '../assets/warm';
 import { realScheduler } from '../app/session';
 import { HANDS, insertLines, outcomeFor, segments, type Outcome } from '../story/chapters';
+import { skipRecap } from '../story/transcript';
 import { DEFAULT_TIMINGS, REDUCED_TIMINGS, SceneDirector, type DirectorState, type StageView } from '../story/director';
 import type { Block, Scene } from '../story/parse';
 import { newProgress, readStory, type Part, type SceneId, type StoryProgress } from '../story/progress';
@@ -29,6 +30,12 @@ import { chapterCardHtml, loadScript, renderStoryHome, save, speakerLabelHtml, s
 import { bindLoadFailure } from './lazy';
 import { playerCaption } from '../story/captions';
 import { esc } from './svg';
+
+/** The recap after Skip: approved Evidence excerpts from the skipped part only (src/story/transcript.ts). */
+function recapHtml(items: readonly string[]): string {
+  const body = items.length ? `<ul>${items.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : '<p>No case evidence turned up in the part you skipped.</p>';
+  return `<section class="skip-recap" aria-labelledby="recap-h"><h3 id="recap-h">What you skipped</h3>${body}<div class="row"><button type="button" class="btn-ghost small dark" data-act="recap-dismiss">Dismiss</button></div></section>`;
+}
 import { castFace, castFrame, CAST_BY_SEAT_NAME, regionStyle, sceneAssets, sceneCast, speakerKey } from './story-assets';
 
 interface Beat {
@@ -528,13 +535,22 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
       if (el) el.textContent = beats.length ? `${Math.min((director?.index ?? 0) + 1, beats.length)} / ${beats.length}` : '';
     };
 
+    /** Set by Skip; shown once on the next deal / end card, dismissible, never blocking its button. */
+    let pendingRecap = '';
+    /** This scene's hand result once it resolves in this run (the scene-start record predates it). */
+    let outcomeNow: Outcome | null = null;
+    const takeRecap = () => {
+      const r = pendingRecap;
+      pendingRecap = '';
+      return r;
+    };
     const showHandCard = () => {
       phaseEnd(sceneId, 'pre');
       d.beat();
       const setup = HANDS[sceneId]!;
       const slot = root.querySelector<HTMLElement>('.scene-card-slot')!;
       root.querySelector<HTMLElement>('.dialogue-panel')!.hidden = true; // the panel (and Continue) persist, hidden behind the card
-      slot.innerHTML = `<section class="hand-card" aria-labelledby="hand-h"><p class="chapter-num">${esc(label(scene))} · the hand</p><h2 id="hand-h" class="section-h">${esc(setup.label)}</h2>${st.handNote ? `<p class="hand-note">${esc(st.handNote)}</p>` : ''}<p class="hand-note">One hand. Win, lose or blocked tie — the case moves on either way.</p><button type="button" class="btn primary" data-act="story-deal">Deal the tiles</button></section>`;
+      slot.innerHTML = `<section class="hand-card" aria-labelledby="hand-h"><p class="chapter-num">${esc(label(scene))} · the hand</p><h2 id="hand-h" class="section-h">${esc(setup.label)}</h2>${st.handNote ? `<p class="hand-note">${esc(st.handNote)}</p>` : ''}<p class="hand-note">One hand. Win, lose or blocked tie — the case moves on either way.</p>${takeRecap()}<button type="button" class="btn primary" data-act="story-deal">Deal the tiles</button></section>`;
       (slot.querySelector('[data-act="story-deal"]') as HTMLElement).focus({ preventScroll: true });
       root.querySelector<HTMLElement>('[data-act="story-next"]')!.hidden = true;
     };
@@ -548,7 +564,7 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
       root.querySelector<HTMLElement>('.dialogue-panel')!.hidden = true; // the panel (and Continue) persist, hidden behind the card
       const nb = seg.notebook ? `<div class="notebook is-inline"><p class="notebook-chapter">Notebook · ${esc(label(scene))}</p><p class="notebook-text">${esc(seg.notebook.raw.replace(/^Notebook:\s*/, ''))}</p></div>` : '';
       const fin = sceneId === 'epilogue' ? `<p class="case-complete">Case complete.</p>` : '';
-      slot.innerHTML = `<section class="end-card" aria-labelledby="end-h"><h2 id="end-h" class="section-h">End of ${esc(label(scene))}</h2>${fin}${nb}${next ? chapterCardHtml(sceneOf(next), 'next') : ''}<button type="button" class="btn primary" data-act="story-onward">${next ? `Continue to ${esc(label(sceneOf(next)))}` : 'Back to the case file'}</button></section>`;
+      slot.innerHTML = `<section class="end-card" aria-labelledby="end-h"><h2 id="end-h" class="section-h">End of ${esc(label(scene))}</h2>${fin}${takeRecap()}${nb}${next ? chapterCardHtml(sceneOf(next), 'next') : ''}<button type="button" class="btn primary" data-act="story-onward">${next ? `Continue to ${esc(label(sceneOf(next)))}` : 'Back to the case file'}</button></section>`;
       (slot.querySelector('[data-act="story-onward"]') as HTMLElement).focus({ preventScroll: true });
       root.querySelector<HTMLElement>('[data-act="story-next"]')!.hidden = true;
       pos();
@@ -621,14 +637,26 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
         onSnapshot: (h) => {
           if (!o.replay && outcome === null) persist({ ...p, sceneId, part: 'hand', index: 0, hand: h });
         },
-        onResolved: (winnerTeam, playerTeam) => {
+        onResolved: (winnerTeam, playerTeam, assisted) => {
           if (outcome !== null) return; // once
           outcome = outcomeFor(winnerTeam, playerTeam);
+          outcomeNow = outcome;
           phaseEnd(sceneId, 'hand');
           phaseStart(sceneId, 'post');
-          d.track?.chapterComplete(sceneId, outcome, !!o.replay, caseKey);
-          // One write: outcome + completion + position. A reload can't replay the completion.
-          persist({ ...p, sceneId, part: 'post', index: 0, outcome, hand: null, completed: [...new Set([...p.completed, sceneId])] });
+          d.track?.chapterComplete(sceneId, outcome, !!o.replay, caseKey, assisted);
+          // One write: outcome + completion + position (+ this scene's outcome and assistance for the
+          // transcript). A reload can't replay the completion.
+          persist({
+            ...p,
+            sceneId,
+            part: 'post',
+            index: 0,
+            outcome,
+            hand: null,
+            completed: [...new Set([...p.completed, sceneId])],
+            outcomes: { ...p.outcomes, [sceneId]: outcome },
+            assisted: assisted ? [...new Set([...p.assisted, sceneId])] : p.assisted.filter((x) => x !== sceneId),
+          });
         },
         onContinue: () => {
           d.endHand();
@@ -679,11 +707,17 @@ export async function renderStoryRun(d: StoryDeps, o: RunOptions): Promise<void>
       if (!act) return;
       if (act === 'story-next') dir.advance();
       else if (act === 'story-back') dir.back();
-      else if (act === 'story-skip') {
+      else if (act === 'recap-dismiss') {
+        (e.target as HTMLElement).closest('.skip-recap')?.remove();
+        (root.querySelector('[data-act="story-deal"], [data-act="story-onward"]') as HTMLElement | null)?.focus({ preventScroll: true });
+      } else if (act === 'story-skip') {
         // Skip lands on the next decision point (deal card or end card) — never past a hand.
         dir.settle();
         if (root.querySelector('.hand-card, .end-card')) return;
         d.track?.assist(sceneId, `${caseKey}:${sceneId}:${beats === preBeats ? 'pre' : 'post'}`);
+        // A brief recap from the approved Evidence excerpts INSIDE the skipped range only (no later beats).
+        const part = beats === preBeats ? 'pre' : 'post';
+        pendingRecap = recapHtml(skipRecap(scene, part, dir.index, part === 'post' ? (outcomeNow ?? p.outcome) : null));
         dir.skipToEnd();
       } else if (act === 'story-deal') {
         if (dir.enterHand()) root.querySelector<HTMLElement>('.scene-card-slot')!.innerHTML = '';

@@ -34,7 +34,7 @@ async function drive(c: TableController, m: ReturnType<typeof manual>, stop: () 
     const st = c.state;
     if (st.kind === 'covered') c.ready();
     else if (st.kind === 'revealing') c.reveal();
-    else if (st.kind === 'human-turn') {
+    else if (st.kind === 'human-turn' && c.canAct()) {
       const d = decide('normal', buildObservation(c.view(), c.session.rules), rng);
       rng = d.rng;
       const a = d.action;
@@ -118,6 +118,22 @@ describe('tracker on real tables (through the TableController)', () => {
     watch(t, c, 'none', 'm4');
     await drive(c, m, () => c.session.debugState().history.length >= 1);
     expect(t.progress.counts).toEqual({});
+  });
+
+  it('a story hand finished with AI assistance counts nothing from the assistant’s first move on (once, no duplicates)', async () => {
+    const { t } = tracker();
+    const { c, m } = table('draw2', 'ai', 'ach-assist');
+    watch(t, c, 'story', 'story:1:chapter-1');
+    c.session.assist(0); // from the deal: every move of Roberto's is the assistant's
+    await drive(c, m, () => c.session.phase === 'hand-resolved');
+    expect(c.session.phase).toBe('hand-resolved');
+    expect(c.session.assistUsed).toBe(true);
+    expect(t.progress.counts).toEqual({});
+    // The chapter completes through the Story hook, but an assisted result is never a win.
+    t.storyChapter('chapter-1', 'none', false, 'case:1');
+    t.storyChapter('chapter-1', 'none', false, 'case:1'); // a repeated call cannot count twice
+    expect(t.progress.counts['story.chapter-1']).toBe(1);
+    expect(Object.keys(t.progress.counts).filter((k) => /win/i.test(k))).toEqual([]);
   });
 
   it('story replays never change achievements; a refused save is reported', () => {

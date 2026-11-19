@@ -74,10 +74,21 @@ describe('versioned records: graceful recovery', () => {
     expect(r.status).toBe('migrated');
     expect(r.settings).toMatchObject({ banter: false, storyTextScale: 1, instantText: false });
     saveSettings(st, { ...r.settings, storyTextScale: 1.3, instantText: true });
-    expect(JSON.parse(st.getItem(SETTINGS_KEY)!).version).toBe(3);
+    expect(JSON.parse(st.getItem(SETTINGS_KEY)!).version).toBe(4);
     expect(loadSettingsResult(st)).toMatchObject({ status: 'ok', settings: { storyTextScale: 1.3, instantText: true } });
-    st.setItem(SETTINGS_KEY, JSON.stringify({ format: 'sticks-and-bones/settings', version: 3, data: { storyTextScale: 2, instantText: 'yes' } }));
+    st.setItem(SETTINGS_KEY, JSON.stringify({ format: 'sticks-and-bones/settings', version: 4, data: { storyTextScale: 2, instantText: 'yes' } }));
     expect(loadSettingsResult(st).settings).toMatchObject({ storyTextScale: 1, instantText: false });
+  });
+
+  it('settings v3 → v4: table tips start off for anyone who already has settings; new players get them', () => {
+    const st = memoryStore();
+    expect(loadSettingsResult(st).settings.tableTips).toBe(true); // nothing stored: a new player
+    st.setItem(SETTINGS_KEY, JSON.stringify({ format: 'sticks-and-bones/settings', version: 3, data: { ...DEFAULT_SETTINGS, tableTips: undefined, banter: false } }));
+    const r = loadSettingsResult(st);
+    expect(r.status).toBe('migrated');
+    expect(r.settings).toMatchObject({ tableTips: false, banter: false });
+    saveSettings(st, { ...r.settings, tableTips: true }); // turned back on in Settings: kept
+    expect(loadSettingsResult(st).settings.tableTips).toBe(true);
   });
 });
 

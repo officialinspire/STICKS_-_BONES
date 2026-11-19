@@ -39,6 +39,7 @@ No rule, currency, timer or calendar streak was added.
 | Two players on one device | Only finished shared matches (`ex-local`, `ex-local-all`, `p4-local-partners`). Two people share the device, so per-hand play can't be credited to one of them. |
 | Developer fixtures / both-seats mode | Nothing. |
 | **Assisted:** Skip scene in Story | That case can't earn **Every Word** (`story-no-skip`); everything else still counts. |
+| **Assisted:** Finish hand with AI in Story | From the assistant's first move on, that table counts nothing (no hand, tactical or win facts); the chapter still completes (`story.<scene>`), but its result never counts as a win (`story-wins-3`, `story-wins-7`). Counted once (keyed), never in replays. Turning the table tips off by itself counts no exploration. |
 
 ### Never counted twice
 - **Hand results:** keyed by `<game>:h<hand number>`.

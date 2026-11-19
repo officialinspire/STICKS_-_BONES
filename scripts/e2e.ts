@@ -1677,6 +1677,47 @@ try {
     await page.context().close();
   }
 
+  // ---- First-hand table tips: one line per step, never over the table, dismissible, off after a hand ----
+  {
+    const sizes = [{ width: 320, height: 568 }, { width: 568, height: 320 }, { width: 1366, height: 768 }];
+    const seen: string[] = [];
+    for (const vp of sizes) {
+      const page = await newPage(vp);
+      await startMatch(page, { mode: 'partnership4', opponent: 'ai', seed: 'tips', aiSeed: 'tips', fast: true });
+      for (let k = 0; k < 100 && !(await page.locator('.hand-tile.is-legal').count()); k++) await page.waitForTimeout(100);
+      const tip = page.locator('.table-tip');
+      const text = ((await tip.textContent().catch(() => '')) ?? '').trim();
+      check(/Tap a glowing tile/.test(text) && /is your partner, across from you/.test(text), `tips ${vp.width}×${vp.height}: first-turn tip "${text}"`);
+      // Never covers play: the tip lives in the controls; the hand and the hide button are on screen and usable.
+      const box = await page.locator('[data-act="tips-off"]').boundingBox();
+      check(!!box && box.x >= 0 && box.y >= 0 && box.x + box.width <= vp.width + 1 && box.y + box.height <= vp.height + 1, `tips ${vp.width}×${vp.height}: Hide tips off screen ${JSON.stringify(box)}`);
+      if (vp.width === 1366) {
+        // Selecting a tile moves the tip on (or leaves the status line to explain a single end).
+        await page.locator('.hand-tile.is-legal').first().click();
+        const after = ((await page.locator('.table-tip').textContent().catch(() => '')) ?? '').trim();
+        check(after === "" || /jump to each end/.test(after), `tips: after selecting, "${after}"`);
+        await page.locator('.hand-tile.is-selected').first().click(); // deselect
+        // Keyboard: Hide tips is reachable with Tab and works with Enter.
+        await page.locator('[data-act="tips-off"]').focus();
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(200);
+        const gone = await page.locator('.table-tip').count();
+        const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('sticks-and-bones.settings') || '{}')?.data?.tableTips);
+        check(gone === 0 && stored === false, `tips: Hide tips left ${gone} tip(s), stored ${stored}`);
+      }
+      seen.push(`${vp.width}×${vp.height}`);
+      await page.context().close();
+    }
+    // A completed first hand turns the tips off by itself (Settings can turn them back on).
+    const page = await newPage({ width: 390, height: 844 });
+    await startMatch(page, { mode: 'draw2', opponent: 'ai', seed: 'tips-done', aiSeed: 'd', fast: true });
+    await playRound(page, 'tips first hand');
+    const off = await page.evaluate(() => JSON.parse(localStorage.getItem('sticks-and-bones.settings') || '{}')?.data?.tableTips);
+    check(off === false, `tips: still on after a completed hand (${off})`);
+    await page.context().close();
+    notes.push(`first-hand tips: partner + glowing-tile tip on the first turn at ${seen.join(', ')} (Hide tips on screen); selecting moves it on; Hide tips by keyboard stores tableTips=false; a completed hand turns them off`);
+  }
+
 } catch (e) {
   failures.push(`exception: ${(e as Error).stack ?? e}`);
 } finally {

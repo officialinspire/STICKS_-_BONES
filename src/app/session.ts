@@ -109,6 +109,9 @@ export class GameSession {
   #disposed = false;
   #aiRng: RngState[];
   #speed = 1;
+  /** Human seats the player has handed to the AI ("Finish hand with AI"); presentation-level control only. */
+  #assisted = new Set<SeatIndex>();
+  #assistUsed = false;
   readonly #scheduler: Scheduler;
   readonly #timing: Timing;
   readonly #runner: AiRunner;
@@ -123,6 +126,8 @@ export class GameSession {
           readonly aiSeed?: number | string;
           /** Restored AI streams (from a save). */
           readonly aiRng?: readonly RngState[];
+          /** The restored hand had already been played on by the assistant (its label stays). */
+          readonly assistUsed?: boolean;
         },
     deps: SessionDeps = {},
   ) {
@@ -161,6 +166,7 @@ export class GameSession {
         ? [...restored]
         : Array.from({ length: this.rules.seatCount }, (_, s) => seedRng(`ai:${String(opts.aiSeed ?? 0)}:${s}`));
     this.humanSeats = this.config.seats.filter((x) => x.controller.kind === 'human').map((x) => x.seat);
+    this.#assistUsed = 'state' in opts && opts.assistUsed === true;
     this.#schedule();
   }
 
@@ -214,10 +220,18 @@ export class GameSession {
     const seats = this.rules.teams[team]!;
     return seats.map((s) => this.seatName(s)).join(' & ');
   }
-  /** True when `seat` is a human on turn and the session is not paused. */
+  /** True when `seat` is a human on turn, not handed to the assistant, and the session is not paused. */
   canAct(seat: SeatIndex): boolean {
     const s = this.#state;
-    return s.phase === 'playing' && s.hand.turn === seat && this.isHuman(seat) && !this.#paused && !this.#disposed;
+    return s.phase === 'playing' && s.hand.turn === seat && this.isHuman(seat) && !this.#assisted.has(seat) && !this.#paused && !this.#disposed;
+  }
+  /** Seats the assistant is currently playing for. */
+  isAssisted(seat: SeatIndex): boolean {
+    return this.#assisted.has(seat);
+  }
+  /** True once the assistant has made at least one move in this hand (the result is labelled assisted). */
+  get assistUsed(): boolean {
+    return this.#assistUsed;
   }
   /** Presentation-only multiplier for AI thinking delays (settings). Never affects decisions or rules. */
   setThinkingSpeed(factor: number): void {
@@ -257,6 +271,26 @@ export class GameSession {
     if (this.#state.phase !== 'hand-resolved' || this.#paused) return false;
     return this.#apply({ type: 'start-next-hand', seq: this.#state.seq });
   }
+  /**
+   * "Finish hand with AI": the same observation-only AI plays this human seat through normal commands until
+   * the hand ends or the player takes over. Only while a hand is in play. Never changes rules or other seats.
+   */
+  assist(seat: SeatIndex): boolean {
+    if (this.#disposed || !this.isHuman(seat) || this.#assisted.has(seat) || this.#state.phase !== 'playing') return false;
+    this.#assisted.add(seat);
+    this.#schedule(); // a pending decision for another seat restarts with a fresh token: nothing is lost
+    this.#emit([]);
+    return true;
+  }
+  /** Take back control: any decision in flight for the seat becomes stale and is discarded. */
+  stopAssist(seat: SeatIndex): boolean {
+    if (!this.#assisted.delete(seat)) return false;
+    if (!this.#disposed) {
+      this.#schedule();
+      this.#emit([]);
+    }
+    return true;
+  }
   /** Stop all automation (AI thinking, auto-resolve). Outstanding decisions become stale. */
   pause(): void {
     if (this.#paused || this.#disposed) return;
@@ -274,6 +308,7 @@ export class GameSession {
   load(state: MatchState): boolean {
     if (this.#disposed || checkInvariants(state).length || state.config.mode !== this.config.mode) return false;
     this.#cancelAutomation();
+    this.#assisted.clear();
     this.#state = state;
     this.#emit([]);
     this.#schedule();
@@ -320,7 +355,12 @@ export class GameSession {
 
   #valid(t: AiToken): boolean {
     const s = this.#state;
-    return !this.#disposed && !this.#paused && t.epoch === this.#epoch && s.seq === t.seq && s.phase === 'playing' && s.hand.turn === t.seat && !this.isHuman(t.seat);
+    return !this.#disposed && !this.#paused && t.epoch === this.#epoch && s.seq === t.seq && s.phase === 'playing' && s.hand.turn === t.seat && this.#aiDriven(t.seat);
+  }
+
+  /** A computer seat, or a human seat handed to the assistant. */
+  #aiDriven(seat: SeatIndex): boolean {
+    return !this.isHuman(seat) || this.#assisted.has(seat);
   }
 
   #schedule(): void {
@@ -336,7 +376,7 @@ export class GameSession {
       }, this.#timing.resolve);
       return;
     }
-    if (s.phase !== 'playing' || this.isHuman(s.hand.turn)) return;
+    if (s.phase !== 'playing' || !this.#aiDriven(s.hand.turn)) return;
     const seat = s.hand.turn;
     const token: AiToken = { epoch: this.#epoch, seq: s.seq, seat };
     const obs = buildObservation(seatView(s, seat), this.rules);
@@ -373,6 +413,11 @@ export class GameSession {
     this.#timer = null;
     this.stats.aiDecisions++;
     this.#aiRng[p.token.seat] = p.decision.rng;
-    this.#apply(toCommand(p.decision.action, p.token.seat, p.token.seq));
+    const assisted = this.isHuman(p.token.seat);
+    const before = this.#assistUsed;
+    if (assisted) this.#assistUsed = true; // set first: listeners see the move's own events as assisted
+    const ok = this.#apply(toCommand(p.decision.action, p.token.seat, p.token.seq));
+    if (assisted && !ok) this.#assistUsed = before;
+    if (assisted && ok && this.#state.phase !== 'playing') this.#assisted.clear(); // the hand is over: control returns
   }
 }

@@ -91,7 +91,7 @@ v0.2, committed to `main` by the owner as 242ee60). The general project log stay
 | | Owner listening pass: SFX choices, bed seams (`/dev/audio-audition.html`), levels on headphones and speakers; mark `auditioned` / `final` | ☐ |
 | | Commissioned music (night bed, cave bed, stingers) and recorded domino foley | Partly ✅ (owner audio stage): Chapter 4 / 6 beds, round win / other cues, slam and deal foley wired. ☐ case-complete cue, ☐ foley for pickup / place / slide / draw, ☐ listening pass |
 | **Owner audio stage (2026-11-18)** | 13 uploads merged from `main`, originals untouched in `assets/audio/originals/`; reproducible derivatives with source hashes and measurements (`npm run audio:owner`, `audio:owner:check`); three foley clips trimmed per clip; scene tracks chosen by measurement and stream-copied; result cues cut from the final cadences; a duplicate recognised; budgets raised deliberately | ✅ (measured, **not auditioned**) |
-| | Finish Hand with AI assistance, skip with recap, optional table banter in safe gaps | ☐ |
+| | Finish Hand with AI assistance, skip with recap (Stage 2); optional table banter in safe gaps | ✅ assist + recap (Stage 2) · ☐ banter |
 | | Resilience: update-time save retry, music recovery, AI worker timeouts | ✅ Done in the hardening pass (below) |
 | **Hardening pass (2026-11-18)** | Dialogue reveal timers belong to their own beat (an early-finished line can't end the next line's reveal; Back, Skip, settle, cancel and exit retire it) | ✅ |
 | | AI worker: validated answers, observation-only cheap fallback on error, messageerror, malformed answer, postMessage failure or timeout; bounded restarts; late duplicates dropped; dispose settles | ✅ |

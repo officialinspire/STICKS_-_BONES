@@ -7,7 +7,8 @@ Every record in `localStorage` is an envelope: `{ format, version, data }`.
 | Key | Format | Version | Migrates from |
 | --- | --- | --- | --- |
 | `sticks-and-bones.save` | `sticks-and-bones/match` | 2 | the Stage 5 un-enveloped save (`sticks-and-bones-save@1`) |
-| `sticks-and-bones.settings` | `sticks-and-bones/settings` | 3 | v2 (adds the Story text size and instant text; an existing Story text size is carried over from the Story record) and the Stage 6/7 un-enveloped settings object |
+| `sticks-and-bones.settings` | `sticks-and-bones/settings` | 4 | v3 (adds `tableTips`; anyone with saved settings has already played, so it migrates to **off**; new players start with it on), v2 (adds the Story text size and instant text; an existing Story text size is carried over from the Story record) and the Stage 6/7 un-enveloped settings object |
+| `sticks-and-bones.story` | `sticks-and-bones/story` | 3 | v2 (adds each completed scene's actual `outcomes` — for the reached-only transcript — and the `assisted` scenes, plus `hand.assisted`; v2 kept only the current scene's outcome, so earlier ones stay **unknown**, never guessed) and v1 (prologue only) |
 | `sticks-and-bones.stats` | `sticks-and-bones/stats` | 1 | — |
 | `sticks-and-bones.achievements` | `sticks-and-bones/achievements` | 1 | v0 (`{ unlocked: [ids] }`, never shipped: accepted so the path is tested). Counters, unlocks, dedupe keys, the Story case log. No tile ids or hands (`docs/ACHIEVEMENTS.md`) |
 

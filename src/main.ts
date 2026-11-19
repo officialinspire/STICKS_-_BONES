@@ -132,10 +132,11 @@ const audioApi = {
 
 const settingsApi = {
   get: () => settings,
-  set: (p: Partial<Settings>) => {
+  set: (p: Partial<Settings>, o?: { quiet?: boolean }) => {
     settings = { ...settings, ...p };
     persistSettings();
     audio.setLevels(settings.audio);
+    if (o?.quiet) return; // the game's own change (tips off after a hand): not the player exploring Settings
     achievements.note('explore.settings');
     if ('storyTextScale' in p || 'instantText' in p) achievements.note('explore.storyText');
   },
@@ -364,7 +365,7 @@ function endStoryHand(): void {
   audio.setScene(audio.profile ? 'story' : 'menu');
 }
 /** Story tables never show Quick Play banter: Roberto is the player here, and serious scenes stay serious. */
-const storySettingsApi = { get: () => ({ ...settings, banter: false }), set: (p: Partial<Settings>) => settingsApi.set(p) };
+const storySettingsApi = { get: () => ({ ...settings, banter: false }), set: (p: Partial<Settings>, o?: { quiet?: boolean }) => settingsApi.set(p, o) };
 /** Set by an update reload: the case file reopens the saved scene once, without a tap. */
 let autoContinueOnce = false;
 /** The Story screens are open (case file or a run). */
@@ -375,6 +376,8 @@ function openStory(): void {
   active = null;
   audio.setScene('menu');
   const fast = DEV && Boolean((window as unknown as { __sbStoryFast?: boolean }).__sbStoryFast);
+  // Dev/test only: a fixed deal for story hands (never in production builds; the rules are unchanged).
+  const storySeed = DEV ? (window as unknown as { __sbStorySeed?: string }).__sbStorySeed : undefined;
   const nav = navSeq;
   const isCurrent = () => nav === navSeq && storyOpen;
   root.className = 'is-story';
@@ -405,9 +408,10 @@ function openStory(): void {
     registerRun: (hooks) => (storyHooks = hooks),
     // Story analytics: separate events from Quick Play; disabled adapter until the owner's contract.
     track: {
-      chapterComplete: (scene, outcome, replay, key) => {
+      chapterComplete: (scene, outcome, replay, key, assisted) => {
         analytics.storyChapterComplete(scene, outcome, replay, key);
-        achievements.storyChapter(scene, outcome, replay, key);
+        // An assisted hand completes the chapter for achievements, but its result is not the player's own win.
+        achievements.storyChapter(scene, assisted ? 'none' : outcome, replay, key);
       },
       caseComplete: (key) => analytics.storyCaseComplete(key),
       resume: (scene, part, via, key) => analytics.storyResume(scene, part, via, key),
@@ -437,8 +441,8 @@ function openStory(): void {
       endStoryHand();
       const timing = fast ? FAST_TIMING : DEFAULT_TIMING;
       const session = req.restore
-        ? new GameSession({ state: req.restore.state, opponent: 'ai', difficulty: 'normal', aiRng: req.restore.aiRng }, { runner, timing })
-        : new GameSession({ mode: req.setup.mode, opponent: 'ai', humanSeats: [0], seatNames: req.setup.seatNames, difficulty: 'normal', seed: secureSeed(), aiSeed: secureSeed() }, { runner, timing });
+        ? new GameSession({ state: req.restore.state, opponent: 'ai', difficulty: 'normal', aiRng: req.restore.aiRng, assistUsed: req.restore.assisted }, { runner, timing })
+        : new GameSession({ mode: req.setup.mode, opponent: 'ai', humanSeats: [0], seatNames: req.setup.seatNames, difficulty: 'normal', seed: storySeed ?? secureSeed(), aiSeed: storySeed ? `${storySeed}-ai` : secureSeed() }, { runner, timing });
       const controller = new TableController(session, req.restore ? { restored: true } : {});
       const table = new TableScreen(req.host, controller, {
         onMenu: () => req.onLeave(),
@@ -464,12 +468,12 @@ function openStory(): void {
         if (!events.length) return;
         if (encounter && events.some((e) => e.type === 'tile-played' || e.type === 'tile-drawn' || e.type === 'passed')) analytics.storyEncounter(req.sceneId, req.setup.mode, req.replay, encounter);
         const resolved = events.find((e) => e.type === 'hand-resolved');
-        if (resolved && resolved.type === 'hand-resolved') req.onResolved(resolved.result.winnerTeam, playerTeam);
-        else if (session.phase === 'playing') req.onSnapshot({ state: session.debugState(), aiRng: session.exportAiRng() });
+        if (resolved && resolved.type === 'hand-resolved') req.onResolved(resolved.result.winnerTeam, playerTeam, session.assistUsed);
+        else if (session.phase === 'playing') req.onSnapshot({ state: session.debugState(), aiRng: session.exportAiRng(), assisted: session.assistUsed });
       });
       storyTable = { table, controller };
       // Save the deal itself: a refresh before the first move resumes this exact hand too.
-      if (session.phase === 'playing') req.onSnapshot({ state: session.debugState(), aiRng: session.exportAiRng() });
+      if (session.phase === 'playing') req.onSnapshot({ state: session.debugState(), aiRng: session.exportAiRng(), assisted: session.assistUsed });
       // "Restart match" in a story hand returns to the case file; Continue Case deals the chapter hand again.
       function playStoryAgain() {
         req.onLeave();

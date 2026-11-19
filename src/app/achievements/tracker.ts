@@ -108,6 +108,9 @@ export class AchievementTracker {
         }
         return;
       }
+      // "Finish hand with AI": from the assistant's first move on, nothing at this table is the player's own
+      // play — no table facts and no hand result count (the chapter still completes through the Story hooks).
+      if (s.assistUsed) return;
       for (let i = 0; i < events.length; i++) {
         const e = events[i]!;
         if (e.type === 'hand-started') obs = hand();

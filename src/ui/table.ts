@@ -455,11 +455,17 @@ export class TableScreen {
     const ends = v.openEnds
       ? `<button type="button" class="btn-ghost small" data-act="focus-end" data-end="head" aria-label="Show the ${v.openEnds.head} end (upper-left branch)">↖ ${v.openEnds.head}</button><button type="button" class="btn-ghost small" data-act="focus-end" data-end="tail" aria-label="Show the ${v.openEnds.tail} end (lower-right branch)">${v.openEnds.tail} ↘</button>`
       : '';
+    // "Finish hand with AI" is running: the assistant plays Cousin's moves; one control hands them back.
+    const assisting = this.#assisting() && v.phase === 'playing';
+    const actions = assisting
+      ? `<button type="button" class="btn" data-act="assist-stop">Take over</button>
+        <div class="reasons"><p class="reason assist-note" role="status">The AI is finishing this hand for you, with the same fair rules.</p></div>`
+      : `${hasDraw ? `<button type="button" class="btn" data-act="draw" ${c.draw.enabled ? '' : 'disabled'} aria-describedby="reason-0">Draw</button>` : ''}
+        <button type="button" class="btn" data-act="pass" ${c.pass.enabled ? '' : 'disabled'} aria-describedby="reason-${hasDraw && reasons.length > 1 ? 1 : 0}">Pass</button>
+        <div class="reasons">${reasons.map((r, i) => `<p id="reason-${i}" class="reason">${esc(r)}</p>`).join('')}${this.#status ? `<p class="status" role="status">${esc(this.#status)}</p>` : ''}</div>`;
     this.#q('controls').innerHTML = `
       <div class="actions">
-        ${hasDraw ? `<button type="button" class="btn" data-act="draw" ${c.draw.enabled ? '' : 'disabled'} aria-describedby="reason-0">Draw</button>` : ''}
-        <button type="button" class="btn" data-act="pass" ${c.pass.enabled ? '' : 'disabled'} aria-describedby="reason-${hasDraw && reasons.length > 1 ? 1 : 0}">Pass</button>
-        <div class="reasons">${reasons.map((r, i) => `<p id="reason-${i}" class="reason">${esc(r)}</p>`).join('')}${this.#status ? `<p class="status" role="status">${esc(this.#status)}</p>` : ''}</div>
+        ${actions}
       </div>
       <div class="view-tools">
         <button type="button" class="btn-ghost small" data-act="sort">${esc(SORT_LABELS[this.#sort])}</button>
@@ -497,7 +503,12 @@ export class TableScreen {
         return `<button type="button" class="hand-tile${legal ? ' is-legal' : ''}${sel ? ' is-selected' : ''}" data-act="select" data-tile="${id}" aria-pressed="${sel}" aria-label="${esc(`${tileLabel(id)}, ${pipTotal(tileFromId(id))} pips, ${state}`)}"${legal ? '' : ' aria-disabled="true"'}>${faceHtml(id)}</button>`;
       })
       .join('');
-    el.innerHTML = `<div class="hand-head"><span>${esc(this.#s.opponent === 'ai' ? 'Your tiles' : `${this.#name(v.viewer)}’s tiles`)} (${tiles.length})</span><span class="hint">${myTurn ? (v.legalMoves.length ? 'Pick a glowing tile, then tap where it goes.' : '') : ''}</span></div><div class="hand-scroll" role="toolbar" aria-label="Your tiles">${buttons}</div>`;
+    // First-hand tips (Settings → Table tips) take the hint's place: no extra row, nothing over the table.
+    const tip = this.#tip(v, myTurn && controlStates(v, this.#s.rules, '').draw.enabled);
+    const hint = tip
+      ? `<span class="table-tip"><strong>Tip:</strong> ${esc(tip)}</span><button type="button" class="btn-ghost small tip-off" data-act="tips-off" aria-label="Hide table tips">✕</button>`
+      : myTurn && v.legalMoves.length ? 'Pick a glowing tile, then tap where it goes.' : '';
+    el.innerHTML = `<div class="hand-head"><span>${esc(this.#s.opponent === 'ai' ? 'Your tiles' : `${this.#name(v.viewer)}’s tiles`)} (${tiles.length})</span><span class="hint">${hint}</span></div><div class="hand-scroll" role="toolbar" aria-label="Your tiles">${buttons}</div>`;
     const scroller = el.querySelector('.hand-scroll') as HTMLElement;
     // Long hands: two rows when one row would scroll and the screen has the height for it
     // (portrait phones and tablets), so more tiles — and the playable ones — are in view at once.
@@ -632,7 +643,8 @@ export class TableScreen {
         ? `<button type="button" class="btn" data-act="new-match">Rematch</button><button type="button" class="btn-ghost" data-act="menu-now">Menu</button>`
         : `<button type="button" class="btn" data-act="next-hand">Next hand</button>`;
     const mood: Mood = resultMood(this.#side(), r.winnerTeam === null ? 'tie' : this.#hostTeam() === r.winnerTeam ? 'host-won' : 'host-lost', over);
-    dlg.innerHTML = `<div class="results-head"><div class="results-host" data-mood="${mood}">${hostFigureHtml(mood, 'full')}</div><div><h2 id="results-title">${esc(title)}</h2><p class="why">${esc(why)}</p></div></div>${hands}${teamLine}<p class="points">${pts}</p><p class="scores-line">${scores} · to ${v.targetScore}</p>${matchLine}<div class="sheet-actions">${buttons}</div>`;
+    const assisted = this.#cb.story && this.#s.assistUsed ? '<p class="kicker assist-label">Finished with AI assistance</p>' : '';
+    dlg.innerHTML = `<div class="results-head"><div class="results-host" data-mood="${mood}">${hostFigureHtml(mood, 'full')}</div><div><h2 id="results-title">${esc(title)}</h2>${assisted}<p class="why">${esc(why)}</p></div></div>${hands}${teamLine}<p class="points">${pts}</p><p class="scores-line">${scores} · to ${v.targetScore}</p>${matchLine}<div class="sheet-actions">${buttons}</div>`;
     if (!dlg.open) dlg.showModal();
     this.#cb.audio?.scene('results');
     // The result cue, only for a hand that resolved live at this table (a results sheet restored after a reload
@@ -673,11 +685,18 @@ export class TableScreen {
     const dlg = this.#q<HTMLDialogElement>('pause');
     this.#c.pause('dialog');
     const rules = this.#s.rules;
+    // Story only: let the AI finish this hand (or hand control back). Never offered in Quick Play or two-player.
+    const assist = this.#cb.story && this.#s.phase === 'playing'
+      ? this.#assisting()
+        ? '<button type="button" class="btn-ghost dark" data-act="assist-stop">Take back control</button>'
+        : '<button type="button" class="btn-ghost dark" data-act="assist-finish" aria-describedby="assist-help">Finish hand with AI</button>'
+      : '';
+    const assistHelp = assist ? '<p id="assist-help" class="note">Finish hand with AI: the computer plays Cousin’s remaining moves with the same fair rules (it sees only Cousin’s tiles). The real result moves the case on, marked as assisted; you can take over at any time.</p>' : '';
     dlg.innerHTML = `<h2 id="pause-title">Paused</h2>
-      <div class="pause-actions"><button type="button" class="btn" data-act="pause-resume">Resume</button><button type="button" class="btn-ghost dark" data-act="restart">Restart match</button><button type="button" class="btn-ghost dark" data-act="menu">Leave to menu</button></div>
+      <div class="pause-actions"><button type="button" class="btn" data-act="pause-resume">Resume</button>${assist}<button type="button" class="btn-ghost dark" data-act="restart">Restart match</button><button type="button" class="btn-ghost dark" data-act="menu">Leave to menu</button></div>
       ${menuPages('Pause menu', [
         { title: 'Match', html: `<div class="update-banner" data-region="update" ${this.#cb.update?.ready() ? '' : 'hidden'}><p><strong>Update available.</strong> Your game is saved and the hands are hidden before the new version loads.</p><button type="button" class="btn-ghost dark" data-act="update-now">Update now</button></div>
-          <p>Change your settings or review the rules while your match is paused.</p>` },
+          <p>Change your settings or review the rules while your match is paused.</p>${assistHelp}` },
         { title: 'Rules', html: rulesPageItems(rules), layout: 'rules-card' },
         ...settingsSections(this.#cb.settings.get()),
       ])}`;
@@ -720,6 +739,33 @@ export class TableScreen {
   }
 
   // ---------------------------------------------------------------------------
+
+  /**
+   * First-hand guidance (Settings → Table tips): one short line for the step the player is on. It never covers
+   * the table — it sits in the reasons line under Draw / Pass — and never delays anything.
+   */
+  #tip(v: SeatView, canDraw: boolean): string | null {
+    if (!this.#cb.settings.get().tableTips || !this.#c.canAct() || v.phase !== 'playing') return null;
+    if (this.#selected) {
+      // The status line already says where to tap; the tip adds only how to find each end of the line.
+      const ends = new Set(v.legalMoves.filter((m) => m.tile === this.#selected).map((m) => m.end));
+      return ends.size > 1 ? 'Tap the end where it goes; ↖ and ↘ jump to each end.' : null;
+    }
+    if (v.legalMoves.length) {
+      const partner = v.seatCount === 4 ? this.#s.rules.teams.find((t) => t.includes(v.viewer))?.find((x) => x !== v.viewer) : undefined;
+      return partner !== undefined ? `Tap a glowing tile. ${this.#name(partner as SeatIndex)} is your partner, across from you.` : 'Tap a glowing tile — only tiles that match an end glow.';
+    }
+    return canDraw ? 'Nothing fits: tap Draw.' : 'Nothing fits: tap Pass.';
+  }
+
+  /** The Story player's own seat (the one the assistant may play). */
+  #playerSeat(): SeatIndex {
+    return (this.#s.humanSeats[0] ?? 0) as SeatIndex;
+  }
+  /** The assistant is playing the player's seat right now (Story only). */
+  #assisting(): boolean {
+    return !!this.#cb.story && this.#s.isAssisted(this.#playerSeat());
+  }
 
   /** Whose side the host figure is on (src/ui/host-mood.ts). */
   #side(): HostSide {
@@ -810,6 +856,8 @@ export class TableScreen {
           break;
         case 'hand-resolved':
           this.#liveResult = e.result.handNumber; // observed live: the results sheet may play its cue once
+          // The first hand is done: the table tips have served their purpose (Settings can turn them back on).
+          if (this.#cb.settings.get().tableTips) this.#cb.settings.set({ tableTips: false }, { quiet: true });
           if (e.result.winnerTeam === null) say('tie');
           break;
         case 'match-won': {
@@ -973,6 +1021,25 @@ export class TableScreen {
       case 'pause-resume':
         this.#closePause();
         break;
+      case 'tips-off':
+        this.#cb.settings.set({ tableTips: false }, { quiet: true });
+        this.applySettings();
+        this.render();
+        this.#focusHand();
+        break;
+      case 'assist-finish':
+        // Close the sheet first (resume), then hand the seat over: the assistant's first decision starts fresh.
+        this.#closePause();
+        this.#s.assist(this.#playerSeat());
+        (this.#root.querySelector('[data-act="assist-stop"]') as HTMLElement | null)?.focus({ preventScroll: true });
+        break;
+      case 'assist-stop': {
+        const fromPause = this.#q<HTMLDialogElement>('pause').open;
+        this.#s.stopAssist(this.#playerSeat()); // a decision in flight becomes stale and is discarded
+        if (fromPause) this.#closePause();
+        this.#focusHand();
+        break;
+      }
       case 'story-hand-done':
         this.#q<HTMLDialogElement>('results').close();
         this.#cb.story?.onContinue();

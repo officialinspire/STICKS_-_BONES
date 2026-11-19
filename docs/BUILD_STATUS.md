@@ -2228,3 +2228,70 @@ Live https://officialinspire.github.io/STICKS_-_BONES/: `<html data-build>` = `8
 "Ready." → menu; service worker scope `/STICKS_-_BONES/`; the whole-game download verified live ("✓ Full game
 ready offline (19.8 MB on this device)."); 0 page errors. Checked with Chromium through this environment's
 proxy; no other browser or real device was used.
+
+## Stage 2 — Story assistance, transcript, recap, first-hand guidance (2026-11-19)
+
+Release plan Stage 2 (`docs/RELEASE_PLAN.md`); branch `claude/stage-2-story-assist` from `main` `d7c0d6f`.
+
+### Completed
+- **Finish hand with AI** (Story pause sheet only): `GameSession.assist(seat)` hands the player's seat to the
+  existing observation-only AI. It runs through the session's own token-checked loop (`{epoch, seq, seat}`)
+  and `applyCommand`; `canAct` refuses manual moves meanwhile, so nothing interleaves. "Take over" (table or
+  pause sheet), pause, leaving and reload make any decision in flight stale; a reload keeps the
+  "assisted" label (`hand.assisted`), never the assistant. The real result advances the case once; the results
+  sheet says "Finished with AI assistance". Achievements: from the assistant's first move the table counts
+  nothing; the chapter completes but never as a win. Analytics: not instrumented (the contract allows only
+  `skip_scene` as an assist kind; no new event name invented).
+- **Story record v3** (`src/story/progress.ts`): `outcomes` per scene and `assisted` scenes; v2 migrates
+  (the current scene's outcome kept; earlier ones unknown, never guessed).
+- **Transcript** (case file page, existing pagination): reached beats only, verbatim lines, player captions,
+  each hand's actual result and its insert, assisted hands marked (`src/story/transcript.ts`).
+- **Recap after Skip:** dismissible, on the deal/end card: only the approved Evidence excerpts inside the
+  skipped range (the end card already shows the notebook entry). Focus returns to the card's action.
+- **First-hand table tips** (Settings v4 `tableTips`, on for new players, migrated settings off): one
+  step-aware line in the hand header (tile; both ends; draw/pass; partner in Partnership) with a 44 px ✕;
+  turned off quietly after a completed hand (no exploration achievement, nothing in replays).
+- **Short-landscape open ends:** targets grow to ≥ 44 px (`qa`'s long-standing comfort warning is gone).
+- No waits added; the seven chapters stay single hands; Quick Play and two-player unchanged apart from the
+  tips (and the corrected Partnership mood from Stage 1).
+
+### Defects found by the new tests and fixed before release
+- The automatic tips-off went through `settings.set`, awarding "explore Settings" — even in a replay (`story:e2e`
+  § N and § O). It now uses a quiet path.
+- The tip first sat in the controls column and overlapped neighbouring panels at 360×800 and 667×375 (`qa`).
+  Moved into the hand header.
+- With the new Table tips switch, the "Table talk" settings group was taller than one menu page at 568×320 (3 px
+  over in Settings, 53 px in the pause sheet; `smoke`). The switch now has its own group, so pagination places it
+  on its own page (`1996e8f`).
+- Large text (130 %) on a 320×568 phone pushed the hand below the fold (pre-existing). The table now scrolls instead
+  of hiding it (`story:e2e` § P checks reach by scrolling).
+
+### Owner uploads on `main` (unblocked)
+`main` gained four uploads at the repository root (`745b198`), which `assets:verify` rejects, so CI and the Pages
+deploy failed on `main`. They were moved byte-identically (`git mv`) under `assets/art/` and catalogued as untouched
+variants with bytes, SHA-256, dimensions and alpha (`b61bddb`): the cave-entrance rest area, two supporting
+portraits and a blank evidence card. Their runtime use is Stage 3.
+
+### Commands run and results (Chromium)
+
+First pass on `e29eb5f` (the branch with `main` merged); `check`, `smoke`, `qa`, `e2e`, `a11y` and `audio` were
+rerun on `1996e8f` (the catalogue and the settings fix).
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | pass (546 unit tests in 46 files; assets:verify with the four uploads catalogued; every budget) |
+| `npm run qa` | pass: 0 failures, 0 comfort warnings (both passes) |
+| `npm run e2e` | pass (both passes) |
+| `npm run a11y` | pass: 0 failures (both passes) |
+| `npm run story:e2e` | pass (§ O assisted win/loss/tie, take over, reload, leave; § P transcript, recap, reach) |
+| `npm run story:sweep` | pass |
+| `npm run story:route` | pass (the whole case through the UI; 21 routes) |
+| `npm run faults` | pass |
+| `npm run matches` | pass (Block and Partnership two-human matches, all arrangements) |
+| `npm run smoke` | **fail** on the first pass (Table talk group overflow at 568×320, above) → pass after the fix |
+| `npm run pwa` | pass (offline pack 20,798,062 B) |
+| `npm run offline:tour` | pass |
+| `npm run audio` | pass (on `1996e8f`; Stage 2 changes no audio) |
+
+Not available here: Firefox/WebKit, real devices, audio listening.
+
