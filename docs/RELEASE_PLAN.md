@@ -71,8 +71,13 @@ single hands unchanged.
 
 Status: see `docs/BUILD_STATUS.md` → "Stage 2 — Story assistance".
 
-- [x] Review branch `claude/stage-2-story-assist` from `main` (`d7c0d6f`).
-- [ ] End-of-stage checklist (above).
+- [x] Review branch `claude/stage-2-story-assist` from `main` (`d7c0d6f`); `main`'s later upload commit
+      (`745b198`) merged in, its four root uploads catalogued so `assets:verify` passes again.
+- [x] Status and results updated (`docs/BUILD_STATUS.md` → "Stage 2 — Story assistance").
+- [x] All 13 AGENTS-required checks run locally: all pass, after one fix found by `smoke` (settings page overflow
+      at 568×320) and rerun.
+- [ ] Review branch pushed; CI green.
+- [ ] Merged into the latest `main`; Pages deployment; deployed `data-build` = `main`; live startup.
 
 ### Stage 3 — not yet defined
 

@@ -2260,10 +2260,38 @@ Release plan Stage 2 (`docs/RELEASE_PLAN.md`); branch `claude/stage-2-story-assi
   § N and § O). It now uses a quiet path.
 - The tip first sat in the controls column and overlapped neighbouring panels at 360×800 and 667×375 (`qa`).
   Moved into the hand header.
+- With the new Table tips switch, the "Table talk" settings group was taller than one menu page at 568×320 (3 px
+  over in Settings, 53 px in the pause sheet; `smoke`). The switch now has its own group, so pagination places it
+  on its own page (`1996e8f`).
+- Large text (130 %) on a 320×568 phone pushed the hand below the fold (pre-existing). The table now scrolls instead
+  of hiding it (`story:e2e` § P checks reach by scrolling).
+
+### Owner uploads on `main` (unblocked)
+`main` gained four uploads at the repository root (`745b198`), which `assets:verify` rejects, so CI and the Pages
+deploy failed on `main`. They were moved byte-identically (`git mv`) under `assets/art/` and catalogued as untouched
+variants with bytes, SHA-256, dimensions and alpha (`b61bddb`): the cave-entrance rest area, two supporting
+portraits and a blank evidence card. Their runtime use is Stage 3.
 
 ### Commands run and results (Chromium)
 
-STAGE2_TABLE
+First pass on `e29eb5f` (the branch with `main` merged); `check`, `smoke`, `qa`, `e2e`, `a11y` and `audio` were
+rerun on `1996e8f` (the catalogue and the settings fix).
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | pass (546 unit tests in 46 files; assets:verify with the four uploads catalogued; every budget) |
+| `npm run qa` | pass: 0 failures, 0 comfort warnings (both passes) |
+| `npm run e2e` | pass (both passes) |
+| `npm run a11y` | pass: 0 failures (both passes) |
+| `npm run story:e2e` | pass (§ O assisted win/loss/tie, take over, reload, leave; § P transcript, recap, reach) |
+| `npm run story:sweep` | pass |
+| `npm run story:route` | pass (the whole case through the UI; 21 routes) |
+| `npm run faults` | pass |
+| `npm run matches` | pass (Block and Partnership two-human matches, all arrangements) |
+| `npm run smoke` | **fail** on the first pass (Table talk group overflow at 568×320, above) → pass after the fix |
+| `npm run pwa` | pass (offline pack 20,798,062 B) |
+| `npm run offline:tour` | pass |
+| `npm run audio` | pass (on `1996e8f`; Stage 2 changes no audio) |
 
 Not available here: Firefox/WebKit, real devices, audio listening.
 
