@@ -32,8 +32,10 @@ export function settingsSections(s: Settings): MenuSection[] {
     </div></fieldset>
     <fieldset><legend>Table talk</legend><div class="row">
       <label class="check"><input type="checkbox" name="set-banter" ${s.banter ? 'checked' : ''}> Cousin’s banter</label>
-      <label class="check"><input type="checkbox" name="set-table-tips" ${s.tableTips ? 'checked' : ''}> Table tips <small>(choosing a tile, an end, draw or pass, your partner)</small></label>
       <label class="check"><input type="checkbox" name="set-host-anim" ${s.hostAnimation ? 'checked' : ''}> Cousin’s slam animation</label>
+    </div></fieldset>
+    <fieldset><legend>Table tips</legend><div class="row">
+      <label class="check"><input type="checkbox" name="set-table-tips" ${s.tableTips ? 'checked' : ''}> First-hand tips <small>(tile, end, draw or pass, partner)</small></label>
     </div></fieldset>
     ` },
     { title: 'Story text', layout: 'settings-panel', html: `<fieldset><legend>Story text</legend><div class="row">
