@@ -824,6 +824,18 @@ body {
   color: var(--sun);
   text-align: right;
 }
+/* First-hand tip in the hint's place (first hand only); the ✕ keeps a 44 px target and covers nothing. */
+.hand-head .hint:has(.table-tip) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.hand-head .tip-off {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 10px;
+}
 .hand-hidden {
   margin: 0;
   padding: 26px 8px;

@@ -455,8 +455,6 @@ export class TableScreen {
     const ends = v.openEnds
       ? `<button type="button" class="btn-ghost small" data-act="focus-end" data-end="head" aria-label="Show the ${v.openEnds.head} end (upper-left branch)">↖ ${v.openEnds.head}</button><button type="button" class="btn-ghost small" data-act="focus-end" data-end="tail" aria-label="Show the ${v.openEnds.tail} end (lower-right branch)">${v.openEnds.tail} ↘</button>`
       : '';
-    const tip = this.#tip(v, c.draw.enabled);
-    const tipHtml = tip ? `<p class="reason table-tip"><strong>Tip:</strong> ${esc(tip)} <button type="button" class="btn-ghost small dark" data-act="tips-off">Hide tips</button></p>` : '';
     // "Finish hand with AI" is running: the assistant plays Cousin's moves; one control hands them back.
     const assisting = this.#assisting() && v.phase === 'playing';
     const actions = assisting
@@ -464,7 +462,7 @@ export class TableScreen {
         <div class="reasons"><p class="reason assist-note" role="status">The AI is finishing this hand for you, with the same fair rules.</p></div>`
       : `${hasDraw ? `<button type="button" class="btn" data-act="draw" ${c.draw.enabled ? '' : 'disabled'} aria-describedby="reason-0">Draw</button>` : ''}
         <button type="button" class="btn" data-act="pass" ${c.pass.enabled ? '' : 'disabled'} aria-describedby="reason-${hasDraw && reasons.length > 1 ? 1 : 0}">Pass</button>
-        <div class="reasons">${reasons.map((r, i) => `<p id="reason-${i}" class="reason">${esc(r)}</p>`).join('')}${this.#status ? `<p class="status" role="status">${esc(this.#status)}</p>` : ''}${tipHtml}</div>`;
+        <div class="reasons">${reasons.map((r, i) => `<p id="reason-${i}" class="reason">${esc(r)}</p>`).join('')}${this.#status ? `<p class="status" role="status">${esc(this.#status)}</p>` : ''}</div>`;
     this.#q('controls').innerHTML = `
       <div class="actions">
         ${actions}
@@ -505,7 +503,12 @@ export class TableScreen {
         return `<button type="button" class="hand-tile${legal ? ' is-legal' : ''}${sel ? ' is-selected' : ''}" data-act="select" data-tile="${id}" aria-pressed="${sel}" aria-label="${esc(`${tileLabel(id)}, ${pipTotal(tileFromId(id))} pips, ${state}`)}"${legal ? '' : ' aria-disabled="true"'}>${faceHtml(id)}</button>`;
       })
       .join('');
-    el.innerHTML = `<div class="hand-head"><span>${esc(this.#s.opponent === 'ai' ? 'Your tiles' : `${this.#name(v.viewer)}’s tiles`)} (${tiles.length})</span><span class="hint">${myTurn ? (v.legalMoves.length ? 'Pick a glowing tile, then tap where it goes.' : '') : ''}</span></div><div class="hand-scroll" role="toolbar" aria-label="Your tiles">${buttons}</div>`;
+    // First-hand tips (Settings → Table tips) take the hint's place: no extra row, nothing over the table.
+    const tip = this.#tip(v, myTurn && controlStates(v, this.#s.rules, '').draw.enabled);
+    const hint = tip
+      ? `<span class="table-tip"><strong>Tip:</strong> ${esc(tip)}</span><button type="button" class="btn-ghost small tip-off" data-act="tips-off" aria-label="Hide table tips">✕</button>`
+      : myTurn && v.legalMoves.length ? 'Pick a glowing tile, then tap where it goes.' : '';
+    el.innerHTML = `<div class="hand-head"><span>${esc(this.#s.opponent === 'ai' ? 'Your tiles' : `${this.#name(v.viewer)}’s tiles`)} (${tiles.length})</span><span class="hint">${hint}</span></div><div class="hand-scroll" role="toolbar" aria-label="Your tiles">${buttons}</div>`;
     const scroller = el.querySelector('.hand-scroll') as HTMLElement;
     // Long hands: two rows when one row would scroll and the screen has the height for it
     // (portrait phones and tablets), so more tiles — and the playable ones — are in view at once.
@@ -744,16 +747,15 @@ export class TableScreen {
   #tip(v: SeatView, canDraw: boolean): string | null {
     if (!this.#cb.settings.get().tableTips || !this.#c.canAct() || v.phase !== 'playing') return null;
     if (this.#selected) {
-      const ends = new Set(v.legalMoves.filter((m) => m.tile === this.#selected).map((m) => m.end));
       // The status line already says where to tap; the tip adds only how to find each end of the line.
-      return ends.size > 1 ? 'Both glowing ends fit; the ↖ and ↘ buttons below jump to each end of the line.' : null;
+      const ends = new Set(v.legalMoves.filter((m) => m.tile === this.#selected).map((m) => m.end));
+      return ends.size > 1 ? 'Tap the end where it goes; ↖ and ↘ jump to each end.' : null;
     }
     if (v.legalMoves.length) {
       const partner = v.seatCount === 4 ? this.#s.rules.teams.find((t) => t.includes(v.viewer))?.find((x) => x !== v.viewer) : undefined;
-      const team = partner !== undefined ? ` ${this.#name(partner as SeatIndex)} is your partner (marked Partner, sitting across from you): you score together.` : '';
-      return `Tap a glowing tile to choose it — only tiles that match an open end glow.${team}`;
+      return partner !== undefined ? `Tap a glowing tile. ${this.#name(partner as SeatIndex)} (Partner, across from you) scores with you.` : 'Tap a glowing tile — only tiles that match an end glow.';
     }
-    return canDraw ? 'Nothing fits: tap Draw to take a tile from the boneyard.' : 'Nothing fits: tap Pass to knock, and play moves on.';
+    return canDraw ? 'Nothing fits: tap Draw.' : 'Nothing fits: tap Pass.';
   }
 
   /** The Story player's own seat (the one the assistant may play). */
@@ -1022,7 +1024,7 @@ export class TableScreen {
       case 'tips-off':
         this.#cb.settings.set({ tableTips: false }, { quiet: true });
         this.applySettings();
-        this.#renderControls(this.#c.view());
+        this.render();
         this.#focusHand();
         break;
       case 'assist-finish':

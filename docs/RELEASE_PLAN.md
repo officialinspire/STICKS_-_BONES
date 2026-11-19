@@ -58,9 +58,21 @@ Status: see `docs/BUILD_STATUS.md` → "Stage 1 — integration".
 
 Status: **complete** (this status note is itself shipped by a follow-up docs-only merge, verified the same way).
 
-### Stage 2 — not yet defined
+### Stage 2 — Story assistance, transcript, recap, first-hand guidance (2026-11-19)
 
-The owner has not supplied this stage's scope. It inherits the contract and the checklist above.
+Scope (owner): optional **Finish hand with AI** in the Story pause sheet (the existing observation-only AI plays
+Cousin legally through normal commands; the actual result advances once; labelled; no duplicate scoring or
+achievements; pause, cancellation, reload and stale callbacks safe); a **reached-only transcript** with the
+actual outcome in verbatim script text; a **recap after Skip** from approved notebook/evidence excerpts within
+the skipped segment only; dismissible **first-hand guidance** (tile, end, draw/pass, partner) that never blocks
+play; existing pagination, tokens and settings; reachable 320×568 / 568×320 → desktop, large text, keyboard,
+reduced motion; larger short-landscape end targets without overlap; no padded playtime, no forced waits, seven
+single hands unchanged.
+
+Status: see `docs/BUILD_STATUS.md` → "Stage 2 — Story assistance".
+
+- [x] Review branch `claude/stage-2-story-assist` from `main` (`d7c0d6f`).
+- [ ] End-of-stage checklist (above).
 
 ### Stage 3 — not yet defined
 

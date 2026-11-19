@@ -1687,7 +1687,7 @@ try {
       for (let k = 0; k < 100 && !(await page.locator('.hand-tile.is-legal').count()); k++) await page.waitForTimeout(100);
       const tip = page.locator('.table-tip');
       const text = ((await tip.textContent().catch(() => '')) ?? '').trim();
-      check(/Tap a glowing tile/.test(text) && /your partner/.test(text), `tips ${vp.width}×${vp.height}: first-turn tip "${text}"`);
+      check(/Tap a glowing tile/.test(text) && /Partner, across from you/.test(text), `tips ${vp.width}×${vp.height}: first-turn tip "${text}"`);
       // Never covers play: the tip lives in the controls; the hand and the hide button are on screen and usable.
       const box = await page.locator('[data-act="tips-off"]').boundingBox();
       check(!!box && box.x >= 0 && box.y >= 0 && box.x + box.width <= vp.width + 1 && box.y + box.height <= vp.height + 1, `tips ${vp.width}×${vp.height}: Hide tips off screen ${JSON.stringify(box)}`);
@@ -1695,7 +1695,7 @@ try {
         // Selecting a tile moves the tip on (or leaves the status line to explain a single end).
         await page.locator('.hand-tile.is-legal').first().click();
         const after = ((await page.locator('.table-tip').textContent().catch(() => '')) ?? '').trim();
-        check(after === '' || /ends? of the line/.test(after), `tips: after selecting, "${after}"`);
+        check(after === "" || /jump to each end/.test(after), `tips: after selecting, "${after}"`);
         await page.locator('.hand-tile.is-selected').first().click(); // deselect
         // Keyboard: Hide tips is reachable with Tab and works with Enter.
         await page.locator('[data-act="tips-off"]').focus();
