@@ -72,7 +72,7 @@ What `npm run pwa` covered:
    `docs/PLAYTEST.md` is the manual pass).
 6. **Known platform limits:** iOS has no install prompt and keeps separate
    storage for home-screen apps; Firefox desktop doesn't install; private modes
-   may disable offline (`docs/PWA.md`).
+   may disable offline; full offline storage needs about 20 MB per device (`docs/PWA.md`).
 7. **Hand tiles** are 40×80 / 38×76 on the smallest screens: above the 32-px
    floor, under the 44-px comfortable size.
 
@@ -103,7 +103,8 @@ build uses relative paths, so no base-path setting is needed.
    - the workflow shows a green **deploy** job with the page URL;
    - open the URL: the start screen loads and `<html data-build>` equals the
      first 12 characters of the deployed commit;
-   - after the menu appears, "✓ Quick Play is ready offline" shows within a minute.
+   - after the menu appears, the whole-game download runs and "✓ Full game ready offline (… MB on this
+     device)." shows within a few minutes (about 20 MB; the line shows progress meanwhile).
 5. Run the manual checklist in `docs/PLAYTEST.md` on a phone and a desktop.
 
 **Rolling back:** re-run the deploy workflow on an earlier `main` commit. Players

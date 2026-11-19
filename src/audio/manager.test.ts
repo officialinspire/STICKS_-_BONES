@@ -1,3 +1,4 @@
+import { PROFILES, type StoryProfileId } from './profiles';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_AUDIO, type AudioSettings } from '../app/settings';
 import type { Scheduler } from '../app/session';
@@ -107,7 +108,7 @@ describe('AudioManager', () => {
     const { m, fb } = make();
     m.setScene('menu');
     expect(fb.log.filter((l) => l.startsWith('play'))).toEqual([]);
-    expect(m.playSfx('tap')).toBe(false);
+    expect(m.playSfx('select')).toBe(false);
     await m.unlock();
     expect(fb.log).toContain('play:menu');
     fb.resolveAll();
@@ -210,7 +211,7 @@ describe('AudioManager', () => {
     m.setScene('intro');
     sc.flushAll();
     expect(fb.audible.size).toBe(0);
-    expect(m.playSfx('tap')).toBe(false);
+    expect(m.playSfx('select')).toBe(false);
   });
 
   it('a track that ends restarts after its gap (composed ending, no assumed loop point)', async () => {
@@ -260,7 +261,7 @@ describe('AudioManager', () => {
     await m.unlock();
     expect(fb.gains.master).toBe(0);
     m.setScene('menu');
-    expect(m.playSfx('tap')).toBe(false);
+    expect(m.playSfx('select')).toBe(false);
     m.setHidden(true);
     m.setHidden(false);
     await tick();
@@ -632,7 +633,7 @@ describe('AudioManager: story profiles, cues and the knock motif', () => {
 });
 
 describe('AudioManager: owner scene beds and result cues', () => {
-  async function at(profile: 'chapter-4' | 'chapter-6' | null, levels: Partial<AudioSettings> = {}) {
+  async function at(profile: StoryProfileId | null, levels: Partial<AudioSettings> = {}) {
     const r = make({ ambienceOn: true, ...levels });
     await r.m.unlock();
     r.m.setStoryProfile(profile);
@@ -706,6 +707,20 @@ describe('AudioManager: owner scene beds and result cues', () => {
     quiet.m.setScene('results');
     expect(quiet.m.resultCue('other')).toBe(false);
     expect([locked, muted, quiet].every((r) => r.fb.sfx.length === 0)).toBe(true);
+  });
+
+  it('serious story hands (Chapters 5, 6, 7) end without a result cue; the lighter chapters keep it', async () => {
+    for (const id of ['chapter-1', 'chapter-2', 'chapter-3', 'chapter-4', 'chapter-5', 'chapter-6', 'chapter-7'] as const) {
+      const { m, fb } = await at(id);
+      m.setScene('gameplay');
+      m.setScene('results');
+      const serious = id === 'chapter-5' || id === 'chapter-6' || id === 'chapter-7';
+      expect(m.resultCue('win'), id).toBe(!serious);
+      expect(m.resultCue('other'), id).toBe(!serious);
+      expect(fb.sfx.filter((v) => /^result-/.test(String(v.id.sample))).length, id).toBe(serious ? 0 : 2);
+      expect(m.stats.resultCuesWithheld, id).toBe(serious ? 2 : 0);
+    }
+    expect(Object.entries(PROFILES).filter(([, pr]) => !pr.resultCue).map(([k]) => k)).toEqual(['chapter-5', 'chapter-6', 'chapter-7']);
   });
 
   it('reset, backgrounding and leaving the table stop the cue and release its duck', async () => {

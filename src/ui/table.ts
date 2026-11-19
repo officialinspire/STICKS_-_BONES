@@ -24,6 +24,7 @@ import { opposite, rotationFor } from '../render/pips';
 import { Effects, preloadEffects } from './effects';
 import { wrapTab } from './focus-trap';
 import { HostView, hostFigureHtml, type Mood } from './host';
+import { endMood, playMood, resultMood, type HostSide } from './host-mood';
 import { rulesPageItems } from './rules-summary';
 import { menuPages } from './menu-pages';
 import { bindSettingsPanel, settingsSections, type SettingsApi } from './settings-panel';
@@ -630,8 +631,8 @@ export class TableScreen {
       : over
         ? `<button type="button" class="btn" data-act="new-match">Rematch</button><button type="button" class="btn-ghost" data-act="menu-now">Menu</button>`
         : `<button type="button" class="btn" data-act="next-hand">Next hand</button>`;
-    const mood: Mood = r.winnerTeam === null ? 'thinking' : this.#s.opponent === 'ai' ? (r.winnerTeam === 0 ? (over ? 'delighted' : 'surprised') : over ? 'pumped' : 'laughing') : over ? 'delighted' : 'explaining';
-    dlg.innerHTML = `<div class="results-head"><div class="results-host">${hostFigureHtml(mood, 'full')}</div><div><h2 id="results-title">${esc(title)}</h2><p class="why">${esc(why)}</p></div></div>${hands}${teamLine}<p class="points">${pts}</p><p class="scores-line">${scores} · to ${v.targetScore}</p>${matchLine}<div class="sheet-actions">${buttons}</div>`;
+    const mood: Mood = resultMood(this.#side(), r.winnerTeam === null ? 'tie' : this.#hostTeam() === r.winnerTeam ? 'host-won' : 'host-lost', over);
+    dlg.innerHTML = `<div class="results-head"><div class="results-host" data-mood="${mood}">${hostFigureHtml(mood, 'full')}</div><div><h2 id="results-title">${esc(title)}</h2><p class="why">${esc(why)}</p></div></div>${hands}${teamLine}<p class="points">${pts}</p><p class="scores-line">${scores} · to ${v.targetScore}</p>${matchLine}<div class="sheet-actions">${buttons}</div>`;
     if (!dlg.open) dlg.showModal();
     this.#cb.audio?.scene('results');
     // The result cue, only for a hand that resolved live at this table (a results sheet restored after a reload
@@ -720,6 +721,25 @@ export class TableScreen {
 
   // ---------------------------------------------------------------------------
 
+  /** Whose side the host figure is on (src/ui/host-mood.ts). */
+  #side(): HostSide {
+    return this.#cb.story ? 'player' : this.#s.opponent === 'ai' ? 'opponent' : 'commentator';
+  }
+  #teamOf(seat: SeatIndex): number {
+    return this.#s.rules.teams.findIndex((tm) => tm.includes(seat));
+  }
+  /**
+   * The host's team: in Story, Roberto's (the human's); against the computer, Cousin's — the team without the
+   * human (team 1 in every preset: the human is seat 0). Two humans: none (-1).
+   */
+  #hostTeam(): number {
+    const humanTeams = this.#s.rules.teams.map((tm, t) => (tm.some((x) => this.#s.isHuman(x)) ? t : -1)).filter((t) => t >= 0);
+    const side = this.#side();
+    if (side === 'player') return humanTeams[0] ?? 0;
+    if (side === 'opponent') return this.#s.rules.teams.findIndex((_, t) => !humanTeams.includes(t));
+    return -1;
+  }
+
   /** Who is "Cousin" for banter: the AI seat named Cousin. */
   #isCousin(seat: SeatIndex): boolean {
     return !this.#s.isHuman(seat) && this.#name(seat) === 'Cousin';
@@ -752,7 +772,7 @@ export class TableScreen {
         case 'tile-played': {
           this.#lastPlayed = e.tile;
           this.#message = `${this.#name(e.seat)} played ${tileShort(e.tile)}.`;
-          this.#mood = this.#s.isHuman(e.seat) ? 'neutral' : 'smirk';
+          this.#mood = playMood(this.#side(), this.#s.isHuman(e.seat) ? 'human' : this.#side() === 'player' ? (this.#teamOf(e.seat) === this.#hostTeam() ? 'partner' : 'other') : 'host');
           const t = tileFromId(e.tile);
           impact = { big: false };
           placed = true;
@@ -778,7 +798,7 @@ export class TableScreen {
           break;
         case 'hand-ended':
           this.#message = e.end.kind === 'out' ? `¡Dominó! ${this.#name(e.end.seat)} ${this.#s.opponent === 'ai' && e.end.seat === 0 ? 'are' : 'is'} out.` : '¡Tranque! Nobody can play.';
-          this.#mood = e.end.kind === 'out' && !this.#s.isHuman(e.end.seat) ? 'laughing' : 'surprised';
+          this.#mood = endMood(this.#side(), e.end.kind === 'out' ? this.#teamOf(e.end.seat) === this.#hostTeam() : null);
           if (e.end.kind === 'out') {
             slam = true;
             impact = { big: true };

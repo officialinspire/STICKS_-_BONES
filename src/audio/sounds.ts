@@ -30,14 +30,12 @@ export const VARIANTS = {
   confirm: ['ui-confirm-1', 'ui-confirm-2'],
   invalid: ['ui-invalid-1'],
   pickup: ['tile-pickup-1', 'tile-pickup-2', 'tile-pickup-3'],
-  slide: ['tile-slide-1', 'tile-slide-2', 'tile-slide-3'],
   place: ['tile-place-1', 'tile-place-2', 'tile-place-3'],
   // The owner's recordings of a real domino slapped onto a table (two takes) and of several dropped onto it.
   slam: ['tile-slam-owner-1', 'tile-slam-owner-2'],
   shuffle: ['tile-drop-owner-1'],
   draw: ['tile-draw-1', 'tile-draw-2'],
   knock: ['pass-knock-1', 'pass-knock-2'],
-  tap: ['ui-select-1'],
 } as const;
 
 export { MOTIF } from './motif';

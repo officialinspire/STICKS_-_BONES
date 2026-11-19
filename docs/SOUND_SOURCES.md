@@ -19,7 +19,7 @@ cue cuts are machine-measured, not yet auditioned by ear.
 | Source | Creator | Licence | Used for |
 | --- | --- | --- | --- |
 | [Kenney — Interface Sounds 1.0](https://opengameart.org/content/interface-sounds) | Kenney (Kenney Vleugels) | CC0 1.0 | `ui-select-1`, `ui-select-2`, `ui-back-1`, `ui-back-2`, `ui-confirm-1`, `ui-confirm-2`, `ui-invalid-1` |
-| [Kenney — Casino Audio 1.1](https://opengameart.org/content/54-casino-sound-effects-cards-dice-chips) | Kenney (Kenney Vleugels) | CC0 1.0 | `tile-pickup-1`, `tile-pickup-2`, `tile-pickup-3`, `tile-place-1`, `tile-place-2`, `tile-place-3`, `tile-slide-1`, `tile-slide-2`, `tile-slide-3`, `tile-draw-1`, `tile-draw-2` |
+| [Kenney — Casino Audio 1.1](https://opengameart.org/content/54-casino-sound-effects-cards-dice-chips) | Kenney (Kenney Vleugels) | CC0 1.0 | `tile-pickup-1`, `tile-pickup-2`, `tile-pickup-3`, `tile-place-1`, `tile-place-2`, `tile-place-3`, `tile-draw-1`, `tile-draw-2` |
 | [BigSoundBank #0374 “Knock on a light door”](https://bigsoundbank.com/knock-on-a-light-door-s0374.html) | Joseph Sardin (BigSoundBank) | CC0 1.0 (“Free and royalty-free”) | `pass-knock-1`, `pass-knock-2` |
 | [BigSoundBank #0095 “Door Knock”](https://bigsoundbank.com/door-knock-s0095.html) | Joseph Sardin (BigSoundBank) | CC0 1.0 (“Free and royalty-free”) | `motif-knock-1`, `motif-knock-2`, `motif-knock-3`, `motif-knock-beyond` |
 | [BigSoundBank #1386 “Drops of Water #3”](https://bigsoundbank.com/drops-of-water-3-s1386.html) | Joseph Sardin (BigSoundBank) | CC0 1.0 (“Free and royalty-free”) | `water-drop-1`, `water-drop-2` |
@@ -47,9 +47,6 @@ cue cuts are machine-measured, not yet auditioned by ear.
 | `tile-place-1` | tile placement (stand-in: chip lay) | chip-lay-1.ogg | trim 0s +0.40s; no EQ; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 8,220 |
 | `tile-place-2` | tile placement (stand-in: chip lay) | chip-lay-2.ogg | trim 0s +0.40s; no EQ; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 10,978 |
 | `tile-place-3` | tile placement (stand-in: chip lay) | chip-lay-3.ogg | trim 0s +0.40s; no EQ; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 12,826 |
-| `tile-slide-1` | tile slide (stand-in: card slide) | card-slide-1.ogg | trim 0s +0.45s; no EQ; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 21,678 |
-| `tile-slide-2` | tile slide (stand-in: card slide) | card-slide-2.ogg | trim 0s +0.45s; no EQ; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 21,678 |
-| `tile-slide-3` | tile slide (stand-in: card slide) | card-slide-3.ogg | trim 0s +0.45s; no EQ; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 21,678 |
 | `tile-draw-1` | draw from the boneyard (stand-in: chips) | chips-handle-4.ogg | trim 0s +0.40s; no EQ; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 17,188 |
 | `tile-draw-2` | draw from the boneyard (stand-in: chips) | chips-handle-5.ogg | trim 0s +0.40s; no EQ; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 19,278 |
 | `pass-knock-1` | pass knock on the table | 0374.ogg | trim 0.035s +0.30s; lowpass=f=4000; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 14,110 |
@@ -57,7 +54,7 @@ cue cuts are machine-measured, not yet auditioned by ear.
 | `motif-knock-1` | motif knock (1–3) | 0095.ogg | trim 0.155s +0.50s; no EQ; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 24,366 |
 | `motif-knock-2` | motif knock (1–3) | 0095.ogg | trim 2.21s +0.50s; no EQ; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 24,078 |
 | `motif-knock-3` | motif knock (1–3) | 0095.ogg | trim 9.54s +0.50s; no EQ; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 24,462 |
-| `motif-knock-beyond` | the fourth knock, answering from beyond | 0095.ogg | trim 0.155s +1.40s; apad=pad_dur=1,lowpass=f=1100,aecho=0.6:0.5:90|170:0.35|0.22; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 123,742 |
+| `motif-knock-beyond` | the fourth knock, answering from beyond | 0095.ogg | trim 0.155s +1.40s; lowpass=f=1100,aecho=0.6:0.5:90|170:0.35|0.22; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 75,742 |
 | `water-drop-1` | cave drop accent | 1386.flac | trim 0.14s +0.45s; no EQ; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 21,692 |
 | `water-drop-2` | cave drop accent | 1386.flac | trim 4.49s +0.45s; no EQ; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 21,692 |
 | `glass-1` | terrace glassware detail | 1204.flac | trim 0.19s +0.60s; no EQ; 3 ms fade-in, tail fade-out; loudness-normalised (peak ≤ −3 dBFS); mono 24 kHz PCM16 | 28,892 |
