@@ -459,6 +459,58 @@ export const IMAGE_ASSETS = [
       { id: "e8", label: "Tío Rafa — expression 8 (row 2, column 4; meaning not yet labelled by the owner)", rect: { x: 1366, y: 477, w: 372, h: 393 }, cell: { x: 1329, y: 450, w: 445, h: 437 }, touchesNeighbor: false }
     ],
     proposedUse: "Tío Rafa (cream guayabera) — eight-expression portrait atlas from the owner's asset-production upload (Nov 16, 2026) for NO REST FOR COUSIN. Story cast art; Runtime: cleaned derivative (src/assets/cast.json); all eight frames, with meanings verified by inspection and mapped in src/story/expressions.ts."
+  },
+  {
+    id: "env.rest-area",
+    category: "environment",
+    status: "variant",
+    path: "assets/art/environments/Quiet karst rest area by the cave.png",
+    originalName: "Quiet karst rest area by the cave.png",
+    bytes: 3371746,
+    sha256: "a499e9461acf48e1336725b369599a248d05a03d4f399a640958dd31aa1f7450",
+    width: 1672,
+    height: 941,
+    hasAlpha: false,
+    proposedUse: "Modern inspection rest area at the cave entrance (owner upload, Nov 18, 2026) for Chapter 6's post-cave dialogue and hand — the script keeps that hand off the ancient platform. Preserved as supplied; not bundled until its derivatives are built and wired (Stage 3)."
+  },
+  {
+    id: "cast.worker.portrait",
+    category: "character",
+    status: "variant",
+    path: "assets/art/characters/Attentive Resort Worker Portrait.png",
+    originalName: "Attentive Resort Worker Portrait.png",
+    bytes: 1888150,
+    sha256: "a44329cc7414ee7e5515dc5e5e348fe21578aeeca0422cce58d422111d2820e9",
+    width: 1024,
+    height: 1536,
+    hasAlpha: true,
+    proposedUse: "Single transparent portrait of a resort worker (owner upload, Nov 18, 2026); a candidate for the script's WORKER role. Supporting portraits are optional; preserved as supplied, not bundled."
+  },
+  {
+    id: "cast.representative.portrait",
+    category: "character",
+    status: "variant",
+    path: "assets/art/characters/Poised Representative in Navy and Cream.png",
+    originalName: "Poised Representative in Navy and Cream.png",
+    bytes: 1948745,
+    sha256: "03cc2c6ba5597e917cb4098508262c361d422b3b48b350717faf4b7605d3fa62",
+    width: 1024,
+    height: 1536,
+    hasAlpha: true,
+    proposedUse: "Single transparent portrait of a board representative (owner upload, Nov 18, 2026); a candidate for the script's REPRESENTATIVE role, which the script allows as text and an off-camera voice. Optional; preserved as supplied, not bundled."
+  },
+  {
+    id: "prop.evidence-card",
+    category: "prop",
+    status: "variant",
+    path: "assets/art/props/Blank evidence card on warm wood.png",
+    originalName: "Blank evidence card on warm wood.png",
+    bytes: 1983160,
+    sha256: "8c9e5cd86e925232d959df9f0b777cb545737b3031b3c9201742377e984977ab",
+    width: 1086,
+    height: 1448,
+    hasAlpha: false,
+    proposedUse: "Blank evidence card on warm wood (owner upload, Nov 18, 2026): background for the Evidence inspection cards, whose text is rendered by code from the approved excerpts. Preserved as supplied; not bundled until its derivative is built (Stage 3)."
   }
 ] as const satisfies readonly ImageAsset[];
 

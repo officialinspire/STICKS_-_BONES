@@ -14,7 +14,7 @@ export interface Rect {
   readonly h: number;
 }
 
-export type AssetCategory = 'character' | 'tile' | 'effect' | 'table' | 'environment';
+export type AssetCategory = 'character' | 'tile' | 'effect' | 'table' | 'environment' | 'prop';
 
 /**
  * runtime   — referenced by the app (bundled by Vite).
