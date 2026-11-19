@@ -46,7 +46,7 @@ Scope: on a clean review branch from current `main`, integrate `claude/inspiring
 Status: see `docs/BUILD_STATUS.md` → "Stage 1 — integration".
 
 - [x] Review branch `claude/stage-1-release-integration` from `main` (f89914d); branch merged with
-      semantic conflict resolution (4 files).
+      semantic conflict resolution (4 files); one harness regression fixed (`pwa` pagination locator).
 - [ ] End-of-stage checklist (above).
 
 ### Stage 2 — not yet defined

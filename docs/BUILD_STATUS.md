@@ -2183,3 +2183,41 @@ game banner in its social preview. This request authorizes Pages enablement and 
   568 × 320, and checks for preserved setup choices after rotating. Individual cards that exceed the
   viewport at extreme text sizes retain an accessible reading area.
 - The code and startup byte limits were adjusted for the shared pager and responsive menu styles.
+
+## Stage 1 — integration (2026-11-19)
+
+Release plan: `docs/RELEASE_PLAN.md` (new; contract and end-of-stage checklist; stages 2–4 await the owner's
+scope). Review branch `claude/stage-1-release-integration`, cut from `main` at `f89914d`.
+
+**Integrated** `claude/inspiring-bardeen-4yfmu5` (full offline storage, intro-video caching, Story result-cue
+policy, Roberto's corrected reactions, the audit tooling) onto `main`'s viewport-bound menus, setup values and
+saved-data recovery notices. Four conflicts, resolved semantically:
+- `src/ui/menu.ts`: `main`'s paginated Settings keep their "Offline play" and "Storage" pages, which now hold
+  the whole-game download (progress, Download/Retry, install) and the storage line, Repair and Erase.
+- `src/ui/table.ts`: `main`'s pagination imports plus the host-mood module.
+- `scripts/smoke.ts`: `main`'s menu-viewport sweep with the "Full game ready offline" expectation.
+- `scripts/pwa.ts`: the branch's 13 offline scenarios with `main`'s `showMenuItem` step before every
+  paginated menu control (applied in `offline-tour` and `story:e2e` § N too).
+
+**Integration regression fixed:** `pwa`'s `openSettings` waited for one `.offline-panel`; pagination renders two.
+
+**Commands run on the merge (Chromium, local):**
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | pass: typecheck, lint, 534 unit tests, assets verified, build + budgets |
+| `npm run smoke` | pass (menu-viewport sweep + "Full game ready offline") |
+| `npm run pwa` | first run failed (harness: two `.offline-panel` pages); after the fix: **pass**, 13 scenarios |
+| `npm run offline:tour` | pass: whole case offline on the production build, 0 network requests, 0 page errors |
+| `npm run e2e` | pass |
+| `npm run qa` | pass: 0 failures, 1 known comfort warning (667×375 end slots 62×40) |
+| `npm run a11y` | pass: 0 failures |
+| `npm run story:e2e` | pass (incl. § N replay through the paginated chapter list) |
+| `npm run story:sweep` | pass |
+| `npm run story:route` | pass |
+| `npm run faults` | pass |
+| `npm run audio` | pass |
+| `npm run matches` | pass: all arrangements completed full matches |
+| CI (`ci.yml`) on the branch | green for `6de297c` and `d95cad9` |
+
+Unavailable here: Firefox/WebKit and real devices; audio listening (no output device).
