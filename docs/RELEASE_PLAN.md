@@ -103,7 +103,15 @@ Status: see `docs/BUILD_STATUS.md` → "Stage 3 — owner art, evidence cards, c
 - [x] Review branch `claude/stage-3-assets-credits` on top of Stage 2 (`d9ed9ef`), `main` (`86df38a`) merged in.
 - [x] Status and results updated (`docs/BUILD_STATUS.md` → "Stage 3 — owner art, evidence cards, credits").
 - [x] All 13 AGENTS-required checks plus `audio:report` and the builders run locally: all pass.
-- [ ] Review branch pushed; CI green; merged into the latest `main`; Pages deployment; live `data-build`; startup.
+- [x] Review branch pushed; CI green on `a73a3e0` (runs 44480091583, 44480122158).
+- [x] Merged into the latest `main` via PR #7 → `418be75` (merge commit, no force-push); CI green on `main`.
+- [x] Pages deployment "Deploy to GitHub Pages" run 44480530409: success.
+- [x] Live https://officialinspire.github.io/STICKS_-_BONES/ reports `data-build` `418be7559d86` (= `main`); the live
+      `build.json` lists `rest-area`, `rest-area-portrait` and `evidence-card` in the offline pack.
+- [x] Live startup: "Ready." → start → menu; service worker scoped to the subpath; 0 page errors (Chromium via
+      this environment's proxy).
+
+Status: **complete** (this note is shipped by a docs-only follow-up merge, verified the same way).
 
 ### Stage 4 — not yet defined
 
