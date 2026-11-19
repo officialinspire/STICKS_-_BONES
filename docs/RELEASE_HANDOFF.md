@@ -1,125 +1,61 @@
-# Release handoff: STICKS & BONES 1.0.0 release candidate
+# Release handoff: STICKS & BONES 1.0.0-rc.3 (release candidate)
 
-- **Branch:** `claude/inspiring-bardeen-4yfmu5` (not merged).
-- **Site status: NOT DEPLOYED.** No deployment has been run or observed. Only
-  call the site live after the deploy workflow below succeeds and the URL loads.
+- **Live:** https://officialinspire.github.io/STICKS_-_BONES/ — deployed from `main` by **Deploy to GitHub Pages**
+  (`.github/workflows/deploy-pages.yml`). The page reports its build as `<html data-build>` (the first 12
+  characters of the deployed commit). The exact `main` SHA and the verified deployment of each release are recorded
+  in `docs/RELEASE_PLAN.md` and `docs/BUILD_STATUS.md`.
+- **Status: release candidate, not stable.** Every automated gate is run in Chromium, Firefox and WebKit, but a
+  stable 1.0.0 also needs evidence that only people can produce (§3): real devices, a listening pass and three
+  first-time playthroughs. Emulated browsers are not devices.
 
 ## 1. What ships
 
-### Modes and rules
+- **Quick Play:** Draw, Block and Partnership under the frozen preset `cousins-house-rules@1`, against a fair
+  computer (Easy/Normal/Hard, observation-only, its own seeded randomness) or two people on one device (privacy
+  cover between turns; Partnership seating across / right / left). Rules: `docs/RULES.md`.
+- **Story — NO REST FOR COUSIN** (approved script v0.2, verbatim): prologue, seven chapters with one hand each
+  (three Draw, two Block, two Partnership), every win/loss/blocked-tie insert, epilogue with the title reprise and
+  credits. Case file: chapters, replay, notebook, evidence cards, reached-only transcript, Finish hand with AI.
+- **Installable PWA, fully offline** after one online visit: the whole game (about 20.5 MB) is saved, verified file
+  by file (SHA-256), and served offline with byte ranges; app-only repair; honest quota and eviction reporting.
+- **Accessibility:** keyboard play, screen-reader-safe hands, reduced motion, large text, safe areas, 44-px targets.
+- **Achievements** (local only) and **analytics** (adapter present, **disabled**: §3).
 
-- One rules preset, published and frozen: **`cousins-house-rules@1`** ("Cousin's House Rules v1").
+Assets and audio provenance: `docs/ASSETS.md`, `docs/AUDIO.md`, `docs/SOUND_SOURCES.md`. Missing media is listed in
+`docs/STORY_BUILD_STATUS.md` → "Missing inputs".
 
-| Mode | Seats | Stock | Target (default / allowed) | Opponents |
-| --- | --- | --- | --- | --- |
-| Draw (`draw2`) | 2 | 14-tile boneyard, draw until playable | 100 / 100, 200 | Computer (Easy/Normal/Hard) or a second human |
-| Block (`block2`) | 2 | 14 set aside, pass when stuck | 100 / 100, 200 | Computer or a second human |
-| Partnership (`partnership4`) | 4, partners across, counterclockwise | none | 200 / 100, 200 | Three computers, or a second human across (partner) / right / left (opponent) |
+## 2. Verification
 
-- The rules and their sources are in `docs/RULES.md`. The in-game **How to play**
-  is built from it, and a test checks the two against each other. Excluded
-  bonuses (capicú, chuchazo, forced-pass bonus, forced redeal) are listed in-game.
+The repeatable release workflow is **`npm run release`** (locally) or the **Release suites** GitHub workflow
+(Actions → Release suites → Run workflow). It runs `check` and `audio:report` once, then every browser suite in
+each engine and writes `test-results/release/report.md` with the exact browser builds and every check an engine
+could not perform (`docs/QA.md` → "Release workflow"). The latest observed run, with its numbers, is in
+`docs/BUILD_STATUS.md` → "Stage 4 — release workflow".
 
-### Assets
+Gates that need people are in **`docs/RELEASE_CHECKLIST.md`**: the real-device checklist, the listening checklist
+and the three-player timing sheet (reading and hand time measured separately).
 
-| Kind | Status |
-| --- | --- |
-| Character (Cousin portrait atlas, slam strip), backdrop (neighborhood patio), tabletop (weathered), tile faces (atlas built from the owner's tile sprite), effects sheet | **Owner-supplied approved art.** Served as same-size WebP derivatives; the originals in `assets/art/` are byte-identical and verified. |
-| PWA icons | Generated from the approved portrait; maskable safe area measured |
-| Music | **Two approved tracks:** "Patio Dominoes (Take 2)" (menu) and "Domino Table (Subtle Vibe)" (play). They restart after their composed ending; **loop points need the owner's audition** (`dev/audio-audition.html`). |
-| Sound effects and patio ambience | **Placeholder:** synthesized in code and labelled "(placeholder)" in Settings. Not final audio. |
-| Voice | None. Cousin's lines are subtitles. |
-| Studio intro video (`assets/video/inspiresoftwareintro.mp4`) | **Not supplied.** A short typeset text credit ("INSPIRE / presents"), skippable, then the menu. |
-| Other characters and opponents | Not supplied. Seat badges are used instead. |
+## 3. Before a stable 1.0.0 (owner decisions or inputs)
 
-Everything else that renders only when art is missing (vector tile faces,
-gradients, a monogram) is an error fallback, never shown as final art.
+1. **Real devices** — iPhone/Safari, Android/Chrome, a tablet and a desktop through `docs/RELEASE_CHECKLIST.md` §1.
+   Not done: no device has been used.
+2. **Listening pass** — `docs/RELEASE_CHECKLIST.md` §2. Not done: nothing is marked auditioned or final.
+3. **Pacing** — three first-time players through the timing sheet. Not done. The reading-time model predicts about
+   36–48 minutes against the 90–110-minute target; the story is not to be stretched to meet it.
+4. **Analytics** — disabled. The INSPIRE contract (`officialinspire/SPIRITBALL`) could not be read by these
+   sessions (attach refused by the session permission policy); no key, consent API or event mapping was supplied.
+   See `docs/ANALYTICS.md` for the five inputs.
+5. **Missing media** — case-complete music and foley (wired, silent until supplied), the optional chapter-card cue,
+   recorded domino foley for pick-up/place/slide/draw, the contractor speaker recording (caption-only by design).
+6. **Known platform limits** — iOS has no install prompt and keeps separate storage for home-screen apps; Firefox
+   desktop does not install PWAs; private modes may disable offline storage; Firefox asks before keeping storage
+   persistently (the download no longer waits for that answer).
 
-## 2. Verification (all run on this machine, Chromium 1.63 via Playwright)
+## 4. Deploying and rolling back
 
-| Command | Result |
-| --- | --- |
-| `npm run check` (typecheck, lint, tests, asset verify, build + byte budget) | **pass**: 250 tests in 27 files; budget: code 204 KB, images 1,417 KB, startup 724 KB, total 9,067 KB |
-| `npm run e2e` | **pass**: all stage acceptance checks, including the 400-tap rapid-action burst |
-| `npm run matches` | **pass**: **complete matches in all 8 arrangements**, each with a clean console and analytics events correctly labelled (8 hands draw vs computer incl. a mid-match reload + resume; 20 block; 10 partnership vs computers; 4 / 18 hands two-human draw / block; 12 / 16 / 13 hands partnership across / right / left) |
-| `npm run pwa` | **pass**: offline cache **1,672,882 B** (7 shell files 216.4 KB + 6 images 1,417.2 KB) |
-| `npm run qa` | **pass**: 0 failures (6 viewports × 9 screens) |
-| `npm run a11y` | **pass**: 0 failures, axe clean |
-| `npm run smoke` | **pass**: subpath, offline-ready, a full hand, offline restart, clean console |
-| GitHub Actions CI | **success**, run 2 on `da30779` (see §5) |
-
-What `npm run pwa` covered:
-- subpath first visit;
-- offline hand vs the computer;
-- interrupted downloads with fallbacks, then repair;
-- quota at 700 KB and 40 KB;
-- update A → B mid-match;
-- repair and erase leaving another app's data intact.
-
-## 3. Remaining issues (owner decisions or inputs)
-
-1. **Analytics is disabled.** No INSPIRE contract was supplied: key/project,
-   consent, event mapping, launch-ID/promo parameters. A code search shows an
-   implementation in `officialinspire/SPIRITBALL` (`js/analytics.js`), which
-   this session could not open. See `docs/ANALYTICS.md`. Live verification is
-   pending.
-2. **Placeholder audio:** sound effects and ambience are synthesized stand-ins.
-   There's no voice.
-3. **Music loop points** haven't been auditioned.
-4. **The intro video** hasn't been supplied.
-5. **Browser coverage:** only Chromium was tested. Firefox, WebKit/Safari and
-   real phones and tablets are still to do (`docs/QA.md` lists them,
-   `docs/PLAYTEST.md` is the manual pass).
-6. **Known platform limits:** iOS has no install prompt and keeps separate
-   storage for home-screen apps; Firefox desktop doesn't install; private modes
-   may disable offline; full offline storage needs about 20 MB per device (`docs/PWA.md`).
-7. **Hand tiles** are 40×80 / 38×76 on the smallest screens: above the 32-px
-   floor, under the 44-px comfortable size.
-
-## 4. Deploying to GitHub Pages (owner steps)
-
-The site will be at **https://officialinspire.github.io/STICKS_-_BONES/**. The
-build uses relative paths, so no base-path setting is needed.
-
-1. **Enable Pages with Actions:** GitHub → Settings → Pages → Build and
-   deployment → Source: **GitHub Actions**. This needs admin rights on the repo.
-2. **Merge the branch into `main`**: open a pull request from
-   `claude/inspiring-bardeen-4yfmu5`, or merge locally:
-
-   ```bash
-   git checkout main
-   ```
-   ```bash
-   git merge --no-ff claude/inspiring-bardeen-4yfmu5
-   ```
-   ```bash
-   git push origin main
-   ```
-3. **Deploy:** the push to `main` runs **Deploy to GitHub Pages**
-   (`.github/workflows/deploy-pages.yml`). It runs the full check, the browser
-   smoke test, then uploads `dist/` and deploys. It can also be started by hand:
-   Actions → Deploy to GitHub Pages → Run workflow.
-4. **Confirm the deploy:**
-   - the workflow shows a green **deploy** job with the page URL;
-   - open the URL: the start screen loads and `<html data-build>` equals the
-     first 12 characters of the deployed commit;
-   - after the menu appears, the whole-game download runs and "✓ Full game ready offline (… MB on this
-     device)." shows within a few minutes (about 20 MB; the line shows progress meanwhile).
-5. Run the manual checklist in `docs/PLAYTEST.md` on a phone and a desktop.
-
-**Rolling back:** re-run the deploy workflow on an earlier `main` commit. Players
-then see **Update available**, and their saves and settings are kept.
-
-## 5. CI on this branch
-
-`.github/workflows/ci.yml` runs on every push and pull request:
-- `npm ci`;
-- typecheck, lint, unit and engine tests;
-- asset verify and build;
-- Playwright Chromium install, then `npm run smoke`.
-
-**Observed result:** run 2 on `da30779` —
-https://github.com/officialinspire/STICKS_-_BONES/actions/runs/43944065875 —
-**success**. Every step passed, including the browser smoke on the Pages subpath.
-
-The **deploy workflow has never run**, so nothing is live.
+1. Merge to `main` (pull request). The push runs CI (`ci.yml`: check + smoke) and **Deploy to GitHub Pages**, which
+   runs the full check and smoke on the Pages subpath, then deploys `dist/`.
+2. Confirm: the deploy job is green; the live page's `<html data-build>` equals the first 12 characters of the
+   `main` commit; start → menu works; "✓ Full game ready offline (… MB on this device)." appears after the menu.
+3. **Rolling back:** re-run the deploy workflow on an earlier `main` commit. Players see **Update available**; their
+   saves and settings are kept.

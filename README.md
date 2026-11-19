@@ -5,12 +5,14 @@ two-player **Block** and four-player **Partnership**, solo against a fair comput
 device, plus the story **NO REST FOR COUSIN** (prologue, seven chapters with one hand each, epilogue). It runs
 entirely in the browser, installs as an app and plays offline. There is no backend, account or online play.
 
-> **Status: 1.0.0-rc.2 (release candidate, not deployed).** Quick Play, two players and the whole Story are
-> playable end to end; automated checks pass in Chromium. Still open before a 1.0.0 release: real-device and
-> Firefox/Safari testing, human playtests (the build's own pacing estimate is well under the 90–110-minute
-> Story target), the owner's listening pass on the stand-in sound, and the missing media listed in
-> [docs/RELEASE_HANDOFF.md](docs/RELEASE_HANDOFF.md). Progress log: [docs/BUILD_STATUS.md](docs/BUILD_STATUS.md) ·
-> Story: [docs/STORY_BUILD_STATUS.md](docs/STORY_BUILD_STATUS.md) · Changes: [CHANGELOG.md](CHANGELOG.md).
+> **Status: 1.0.0-rc.3 (release candidate), live at https://officialinspire.github.io/STICKS_-_BONES/.**
+> Quick Play, two players and the whole Story are playable end to end. The release workflow (`npm run release`)
+> runs every suite in Chromium, Firefox and WebKit under emulation. Still open before a stable 1.0.0 (they need
+> people, not more automation): real-device testing, a listening pass, three first-time playthroughs for pacing
+> (the build's own estimate is well under the 90–110-minute target), the analytics contract, and the missing media
+> listed in [docs/RELEASE_HANDOFF.md](docs/RELEASE_HANDOFF.md) and [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md).
+> Progress log: [docs/BUILD_STATUS.md](docs/BUILD_STATUS.md) · Story: [docs/STORY_BUILD_STATUS.md](docs/STORY_BUILD_STATUS.md)
+> · Changes: [CHANGELOG.md](CHANGELOG.md).
 
 ## Setup
 
@@ -37,6 +39,8 @@ npm run dev
 | `npm run assets:verify` | Re-measure all source art against the typed manifest (bytes, SHA-256, dimensions, frame rects) |
 | `npm run assets:measure` | Print freshly measured asset data as JSON |
 | `npm run atlas:build` | Regenerate the double-six tile atlas + JSON from the verified material sheet |
+| `npm run release` | The release workflow: `check` and `audio:report`, then every browser suite in Chromium, Firefox and WebKit (`--engines`, `--suites`, `--resume`); report in `test-results/release/` |
+| `npm run release:sweep` | Every mode × 5 viewports × 100/130 % text, with rotation and background/resume, on the production build (`SB_BROWSER` picks the engine) |
 | `npm run ai:tournament` | Mirrored seeded AI duels per mode plus decision timing |
 | `npm run e2e` | Browser acceptance checks (needs the machine's Playwright + Chromium; not part of `check`) |
 | `npm run qa` | Rendered-screen QA: 8 viewports × 13 screens (including story cast lines and the longest line at 130 % text), layout/target/pip/endpoint metrics, atlas bleed ([docs/QA.md](docs/QA.md)) |

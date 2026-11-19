@@ -4,7 +4,30 @@ Details per stage are in [docs/BUILD_STATUS.md](docs/BUILD_STATUS.md) and
 [docs/STORY_BUILD_STATUS.md](docs/STORY_BUILD_STATUS.md). Release notes for players:
 [RELEASE_NOTES.md](RELEASE_NOTES.md).
 
-## 1.0.0-rc.2 — 2026-11-17 (release candidate; not deployed)
+## 1.0.0-rc.3 — 2026-11-19 (release candidate; live)
+
+### Added
+- Full offline storage (whole-game pack with per-file SHA-256, byte ranges, resumable download, app-only repair).
+- Story: Finish hand with AI, reached-only transcript, recap after Skip, first-hand table tips (Stage 2).
+- Chapter 6 rest-area art, evidence inspection cards, epilogue title reprise and credits, case-complete cue support
+  (silent until supplied) (Stage 3).
+- Release workflow (Stage 4): `npm run release`, `release:sweep`, the **Release suites** GitHub workflow, Chromium /
+  Firefox / WebKit for every browser suite, explicit unsupported-check reporting, `docs/RELEASE_CHECKLIST.md`.
+
+### Fixed (found by running Firefox and WebKit)
+- Firefox: Download / Retry waited on `navigator.storage.persist()`, whose prompt keeps the promise pending.
+- Firefox: the service worker intercepted media range requests it could not answer from its cache; Firefox logged
+  the element's normal cancellation as a failed load. Those requests are now left to the browser while online.
+- Firefox: opening a table left focus nowhere, so Tab resumed past the legal tiles and left the page; the table's
+  heading now takes focus.
+- WebKit: a figure's SVG image kept 133 px of sideways scroll after rotating to portrait; the Story stage clips.
+- WebKit: "Take over" was rebuilt on every assisted move; table controls now re-render only parts that changed.
+
+### Known limitations
+- Emulated engines only: no real devices, no listening pass, no human pacing data (target 90–110 minutes; the
+  model estimates 36–48). Analytics disabled (contract unreadable). Missing media: see the handoff.
+
+## 1.0.0-rc.2 — 2026-11-17 (release candidate; not deployed at the time)
 
 ### Added
 - **Story: NO REST FOR COUSIN.** Prologue, seven chapters with one hand each (three Draw, two Block, two
