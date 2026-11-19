@@ -16,7 +16,8 @@ import type { Block, Scene } from '../story/parse';
 import { clearStory, newProgress, readStory, writeStory, type SceneId, type StoryHand, type StoryProgress } from '../story/progress';
 import type { HandSetup } from '../story/chapters';
 import { STAGING } from '../story/staging';
-import { reachedEvidence } from '../story/evidence';
+import { reachedEvidence, type ReachedEvidence } from '../story/evidence';
+import { assetUrl } from '../assets';
 import type { StoryCue } from '../audio/manager';
 import { renderStoryRun } from './story-player';
 import type { Outcome } from '../story/chapters';
@@ -63,6 +64,19 @@ export function chapterCardHtml(s: Scene, status: ChapterStatus, opts: { compact
 }
 
 const chapterLabel = (id: SceneId): string => (id.startsWith('chapter-') ? `Chapter ${id.slice(8)}` : id === 'prologue' ? 'Prologue' : 'Epilogue');
+
+/**
+ * Reached evidence as inspection cards (Case file → Evidence), one card per item, paginated by menu-pages.
+ * The excerpt is the approved caption exactly as the player saw it, rendered as text by code over the blank
+ * card art (`prop.evidence-card`); the exhibit number and chapter are interface labels. No item beyond the
+ * case's saved position (reachedEvidence), and nothing here writes state.
+ */
+export function evidenceCardsHtml(items: readonly ReachedEvidence[]): string {
+  if (!items.length) return '<li class="evidence-empty">No evidence collected yet. It appears here as the case uncovers it.</li>';
+  return items
+    .map((e, i) => `<li class="evidence-card" data-evidence="${esc(e.id)}"><article class="evidence-card-paper" aria-label="Exhibit ${i + 1} of ${items.length}, ${esc(chapterLabel(e.scene))}"><p class="evidence-card-kicker">Exhibit ${i + 1} <span aria-hidden="true">·</span> ${esc(chapterLabel(e.scene))}</p><p class="evidence-card-text">${esc(e.text)}</p></article></li>`)
+    .join('');
+}
 
 const RESULT_WORDS: Record<Outcome, string> = { win: 'Cousin’s side won the hand', loss: 'Cousin’s side lost the hand', tie: 'Blocked tie' };
 /** The reached-only transcript as list items: verbatim lines, player captions, each hand's actual result. */
@@ -143,6 +157,8 @@ export interface StoryDeps {
   audioScene(id: SceneId | null): void;
   /** A new beat (or card) replaced the last one: cancel its unfinished cue sounds. */
   beat(): void;
+  /** The epilogue's title reprise: the case-complete cue (AudioManager.caseComplete; silent if not supplied). */
+  caseComplete?(): void;
   /** While a run is open: write its position now (true only if the write succeeded), and stop it (update). */
   registerRun?(hooks: { flush(): boolean; stop(): void } | null): void;
   /** One line on whether a scene is saved for offline play (null where offline isn't available). */
@@ -231,7 +247,7 @@ export async function renderStoryHome(d: StoryDeps, notice?: string): Promise<vo
         ` },
         { title: 'Chapters', layout: 'chapter-list chapter-select', list: 'ol', html: '<li class="case-list-note note-dark">Replay completed chapters without changing your place in the case.</li>' + chapters.map((s) => `<li>${chapterCardHtml(s, status(s), { compact: true })}${status(s) === 'completed' ? `<button type="button" class="btn-ghost small" data-act="story-replay" data-scene="${esc(s.id)}">Replay chapter ${s.number}</button>` : ''}</li>`).join('') },
         { title: 'Case notebook', layout: 'notebook-list notebook', list: 'ol', html: completedChapters.length ? completedChapters.map(notebookEntryHtml).join('') : '<li class="notebook-empty">Nothing written yet. Each completed chapter adds Roberto’s notes here.</li>' },
-        { title: 'Evidence', layout: 'evidence-list evidence-panel', list: 'ul', html: evidence.length ? evidence.map((e) => `<li>${esc(chapterLabel(e.scene))}: ${esc(e.text)}</li>`).join('') : '<li class="evidence-empty">No evidence collected yet. It appears here as the case uncovers it.</li>' },
+        { title: 'Evidence', layout: 'evidence-cards', list: 'ol', html: evidenceCardsHtml(evidence) },
         { title: 'Transcript', layout: 'transcript-list evidence-panel', list: 'ol', html: transcriptHtml(script.scenes, reachedTranscript(script.scenes, p)) },
       ])}
     </div>`;
@@ -243,6 +259,13 @@ export async function renderStoryHome(d: StoryDeps, notice?: string): Promise<vo
     if (ev.key === 'Escape' && !ev.defaultPrevented && !(ev.target as HTMLElement).closest('dialog')) d.onBack();
   });
   on('story-continue', () => void renderStoryRun(d, { replay: null }));
+  // The card art arrives through the one loader; until then (or if it never does) the cards are plain ivory paper.
+  if (evidence.length)
+    void warm(['prop.evidence-card']).then(([ok]) => {
+      const list = root.querySelector<HTMLElement>('.evidence-cards');
+      const url = assetUrl('prop.evidence-card');
+      if (ok && url && list?.isConnected) list.style.setProperty('--evidence-card', `url("${url}")`);
+    });
   on('update-now', () => d.update?.apply());
   // After an update reload in the middle of the case: straight back to the saved scene, line or hand (once).
   if (p && d.takeAutoContinue?.()) void renderStoryRun(d, { replay: null, via: 'update' });

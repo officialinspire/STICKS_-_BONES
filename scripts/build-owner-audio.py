@@ -27,6 +27,14 @@ Outputs
     accented in the window; the final chord keeps its
     natural decay for at most 1 s, ending in a cosine fade. 10 ms pre-roll, 5 ms fade-in. One static gain toward
     −18 LUFS integrated, lowered if needed so the ENCODED file is ≤ −1 dBTP. 48 kHz stereo MP3, 192 kbps CBR.
+  Case-complete cue and foley (assets/audio/cues/case-complete*.mp3; ENDINGS below, empty until the owner supplies
+  them — docs/MUSIC_BRIEFS.md). Conservative, measured trims only:
+      start = first sample ≥ −50 dB re peak, minus a 20 ms pre-roll (never into the attack); 5 ms fade-in if trimmed
+      end   = end of the last 50 ms window whose RMS is ≥ −60 dB re peak (the natural tail), plus 200 ms; a 60 ms
+              cosine fade inside that added margin, so the tail itself is never shortened
+    No loudness boost: gain only ever LOWERS the cue so the encoded file is ≤ −1 dBTP (no clipping). Loop points
+    are recorded only when given explicitly here, always `auditioned: false` (src/audio/case-complete.ts plays a
+    cue once unless a person sets that after listening). 48 kHz stereo MP3, 192 kbps CBR.
 Nothing here is auditioned: measurements only. A person still has to listen before anything is called final.
 """
 import hashlib, json, os, re, shutil, subprocess, sys, tempfile
@@ -62,6 +70,12 @@ SFX = {
 MUSIC = {
     'promenade': ('Promenade After Dark.mp3', 'promenade-after-dark.mp3'),
     'threshold': ('The Lit Threshold (Alt).mp3', 'the-lit-threshold.mp3'),
+}
+# Optional ending cues: id → (upload in assets/audio/originals, purpose, explicit loop points in seconds or None).
+# Add an upload to ORIGINALS too ('cue-source'). Empty: the case-complete cue and foley have not been supplied.
+ENDINGS: dict = {
+    # 'case-complete': ('<upload>.mp3', 'Case complete: warm, settled resolution at the title reprise', None),
+    # 'case-complete-foley': ('<upload>.mp3', 'Case complete foley (e.g. the domino box closing)', None),
 }
 CUES = {
     'result-win': ('Round Win (Puerto Rico Vibe).mp3', 'Round won: a short, friendly flourish ending on a ringing chord'),
@@ -274,6 +288,56 @@ for cid, (name, purpose) in CUES.items():
                              'edits': f'source {start:.3f}–{end:.3f}s: the most accented onset {k} beats (beat {beat:.3f}s) before the final hit at {final:.3f}s, decay {end - final:.2f}s (natural end {natural:.2f}s, capped at 1 s) with a {fo / sr:.2f}s cosine fade-out; 10 ms pre-roll, 5 ms fade-in; {gain_db:+.2f} dB static gain (−18 LUFS target, ≤ −1 dBTP measured on the encoded file); 48 kHz stereo MP3 192 kbps',
                              **m, 'auditioned': False, 'final': False})
     print('cue', cid, f'{start:.2f}–{end:.2f}s ({end - start:.2f}s, lead-in {k} beats × {beat:.3f}s, final hit {final:.2f}s, decay {end - final:.2f}s)', m['integratedLufs'], 'LUFS', m['bytes'], 'B')
+
+# ---- ending cues: conservative trims (lead silence, natural tail kept), never louder, ≤ −1 dBTP ----------------
+def ending_bounds(x, sr):
+    """(start, end) seconds: lead near-silence trimmed before the first onset; the natural tail kept, plus 200 ms."""
+    mono = np.abs(x).max(axis=1)
+    peak = float(mono.max())
+    if peak <= 0: sys.exit('ending cue is silent')
+    first = int(np.argmax(mono >= peak * 10 ** (-50 / 20)))
+    start = max(0.0, first / sr - 0.020)
+    w = int(0.05 * sr)
+    n = len(mono) // w
+    rms = np.sqrt((x[: n * w].mean(axis=1) ** 2).reshape(n, w).mean(axis=1))
+    loud = np.where(rms >= peak * 10 ** (-60 / 20))[0]
+    tail = (int(loud[-1]) + 1) * 0.05 if len(loud) else len(mono) / sr
+    end = min(len(mono) / sr, tail + 0.200)
+    return start, end, tail
+
+
+for cid, (name, purpose, loop) in ENDINGS.items():
+    src = os.path.join(ROOT, ORIG, name)
+    sr = 48000
+    st = decode(src, sr=sr, ch=2)[0]
+    start, end, tail = ending_bounds(st, sr)
+    y = st[int(start * sr): int(end * sr)].copy()
+    if start > 0:
+        fi = int(0.005 * sr)
+        y[:fi] *= cosine(fi, True)[:, None]
+    fo = min(int(0.060 * sr), max(1, int((end - tail) * sr)))  # only inside the added margin: the tail is kept
+    y[-fo:] *= cosine(fo, False)[:, None]
+    tmp = os.path.join(tempfile.gettempdir(), f'{cid}.wav')
+    write_wav(y, sr, tmp)
+    gain_db = min(0.0, -1 - loudness(tmp)['truePeakDbtp'])
+    out = os.path.join(OUT_ROOT, 'assets/audio/cues', f'{cid}.mp3')
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    for _ in range(4):
+        run('ffmpeg', '-v', 'error', '-y', '-i', tmp, '-af', f'volume={gain_db:.3f}dB', *BITEXACT, '-id3v2_version', '0', '-c:a', 'libmp3lame', '-b:a', '192k', '-ar', '48000', out)
+        tp = loudness(out)['truePeakDbtp']
+        if tp <= -1.0: break
+        gain_db -= tp + 1.0 + 0.1
+    else:
+        sys.exit(f'{cid}: true peak still above −1 dBTP after encoding')
+    os.remove(tmp)
+    m = measured(out)
+    if loop is not None and not (0 <= loop[0] < loop[1] <= m['durationSec']): sys.exit(f'{cid}: loop points {loop} outside the cue')
+    manifest['cues'].append({'id': cid, 'file': f'assets/audio/cues/{cid}.mp3', 'purpose': purpose, 'source': f'{ORIG}/{name}', 'sourceSha256': sha(src),
+                             'cut': {'startSec': round(start, 3), 'tailSec': round(tail, 3), 'endSec': round(end, 3), 'lengthSec': round(end - start, 3), 'fadeOutSec': round(fo / sr, 3)},
+                             'edits': f'source {start:.3f}–{end:.3f}s: lead near-silence trimmed (−50 dB re peak, 20 ms pre-roll), natural tail to {tail:.3f}s (−60 dB re peak) kept plus 200 ms with a {fo / sr:.3f}s cosine fade in that margin; {gain_db:+.2f} dB (never a boost; ≤ −1 dBTP measured on the encoded file); 48 kHz stereo MP3 192 kbps',
+                             **({'loop': {'start': loop[0], 'end': loop[1], 'auditioned': False}} if loop is not None else {}),
+                             **m, 'auditioned': False, 'final': False})
+    print('ending cue', cid, f'{start:.2f}–{end:.2f}s (tail {tail:.2f}s)', m['integratedLufs'], 'LUFS', m['bytes'], 'B')
 
 if CHECK:
     diffs = []

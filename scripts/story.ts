@@ -19,6 +19,11 @@
  *     outcome's insert, "finished with AI assistance") and nothing later; Skip offers a dismissible recap of
  *     the skipped part's evidence only; at 320×568 and 568×320 (reduced motion, 130 % text) the pause sheet's
  *     Finish hand with AI and the table tip are on screen and keyboard-reachable.
+ *  Q. Evidence cards, title reprise, credits: the case file's Evidence shows ONLY reached items as cards, each
+ *     with the exact approved caption, every glyph on the card art's paper (320×568 at 130 % text, 568×320,
+ *     1366×768); the epilogue's "Title and credits" shows the wordmark reprise and paginated credits (every line
+ *     reachable), focus on Back, a tap finishes the reveal, reduced motion skips it, Escape returns to the case
+ *     file, nothing in the save changes, and the case-complete cue falls back honestly (no file supplied).
  *  N. Chapter replay from the case file (Chapter 6): it starts at its first beat, plays its hand and the
  *     insert to the end card, withholds the result cue (a serious hand), returns to the case file, and leaves
  *     the case position, completed chapters, statistics and achievements exactly as they were; a double tap
@@ -35,6 +40,7 @@ import { STAGING } from '../src/story/staging.ts';
 import { EVIDENCE } from '../src/story/evidence.ts';
 import { playerCaption } from '../src/story/captions.ts';
 import { showMenuItem } from './lib/menu-navigation';
+import { CREDITS } from '../src/story/credits.ts';
 
 type Page = import('playwright').Page;
 const require = createRequire(import.meta.url);
@@ -838,6 +844,92 @@ try {
       await q.context().close();
     }
     notes.push('P: Transcript shows reached beats only (recorded loss insert, "finished with AI assistance", nothing after the saved line or from later chapters); Skip recap lists only the skipped part’s evidence, Dismiss returns focus to Deal; at 320×568 and 568×320 (reduced motion, 130 % text) the tip and Finish hand with AI are on screen and Tab-reachable');
+  }
+  // ---- Q. Evidence inspection cards, the title reprise and the credits --------------------------------------
+  {
+    const reached = ['gate-access', 'photo-statement', 'sketch-photo', 'water-record'];
+    const later = EVIDENCE.filter((e) => !reached.includes(e.id)).map((e) => playerCaption(e.at)!);
+    for (const vp of [{ width: 320, height: 568, big: true }, { width: 568, height: 320, big: false }, { width: 1366, height: 768, big: false }]) {
+      const { page, errors } = await newPage({ width: vp.width, height: vp.height, reduce: vp.big });
+      await toMenu(page);
+      await seed(page, { sceneId: 'chapter-6', part: 'pre', index: 0, completed: ['prologue', 'chapter-1', 'chapter-2', 'chapter-3', 'chapter-4', 'chapter-5'], outcomes: { 'chapter-2': 'win', 'chapter-4': 'tie' } });
+      await page.reload();
+      if (vp.big) await page.evaluate(() => (document.documentElement.style.fontSize = '130%'));
+      await page.click('.start-button');
+      await page.click('[data-act="story"]');
+      await page.waitForSelector('.case-menu menu-pages');
+      const ids = await page.$$eval('.evidence-card', (els: Element[]) => els.map((e) => (e as HTMLElement).dataset.evidence));
+      check(JSON.stringify(ids) === JSON.stringify(reached), `Q ${vp.width}×${vp.height}: evidence cards ${JSON.stringify(ids)}, want ${JSON.stringify(reached)}`);
+      const all = (await page.textContent('.evidence-cards')) ?? '';
+      check(!later.some((x) => all.includes(x)), `Q ${vp.width}×${vp.height}: an unreached item is on a card`);
+      for (let k = 1; k <= reached.length; k++) {
+        const sel = `.evidence-card:nth-child(${k})`;
+        await showMenuItem(page, sel);
+        await page.waitForFunction(() => !!document.querySelector<HTMLElement>('.evidence-cards')?.style.getPropertyValue('--evidence-card'), null, { timeout: 15_000 });
+        const r = await page.$eval(`${sel} .evidence-card-paper`, (el: Element) => {
+          const b = el.getBoundingClientRect();
+          // The art (1086×1448) is cover-scaled and centred; its paper is x 85–999, y 121–1322 (measured).
+          const s = Math.max(b.width / 1086, b.height / 1448);
+          const ox = b.left + (b.width - 1086 * s) / 2;
+          const oy = b.top + (b.height - 1448 * s) / 2;
+          const paper = { l: ox + 85 * s, r: ox + 999 * s, t: oy + 121 * s, b: oy + 1322 * s };
+          const out: string[] = [];
+          for (const t of el.querySelectorAll('p')) {
+            const range = document.createRange();
+            range.selectNodeContents(t);
+            for (const g of range.getClientRects()) if (g.left < paper.l - 0.5 || g.right > paper.r + 0.5 || g.top < paper.t - 0.5 || g.bottom > paper.b + 0.5) out.push(`${(t.textContent ?? '').slice(0, 24)}@${Math.round(g.left)},${Math.round(g.top)}`);
+          }
+          const vis = b.top >= -1 && b.bottom <= innerHeight + 1 && b.left >= -1 && b.right <= innerWidth + 1;
+          return { out, vis, text: el.querySelector('.evidence-card-text')!.textContent };
+        });
+        const want = playerCaption(EVIDENCE.find((e) => e.id === reached[k - 1])!.at);
+        check(r.text === want, `Q ${vp.width}×${vp.height} card ${k}: text "${r.text}" is not the approved caption`);
+        check(r.vis && r.out.length === 0, `Q ${vp.width}×${vp.height} card ${k}: on screen ${r.vis}; glyphs off the paper ${r.out.join(' | ')}`);
+      }
+      await page.screenshot({ path: join(out, `evidence-${vp.width}x${vp.height}.png`) });
+      check(errors.length === 0, `Q ${vp.width}×${vp.height}: page errors ${errors.join(' | ')}`);
+      await page.context().close();
+    }
+    // Reprise and credits, after the epilogue's end card (motion on, then reduced motion).
+    for (const reduce of [false, true]) {
+      const vp = reduce ? { width: 320, height: 568 } : { width: 1366, height: 768 };
+      const { page, errors } = await newPage({ ...vp, reduce });
+      await toMenu(page);
+      const all = ['prologue', 'chapter-1', 'chapter-2', 'chapter-3', 'chapter-4', 'chapter-5', 'chapter-6', 'chapter-7', 'epilogue'];
+      await seed(page, { sceneId: 'epilogue', part: 'end', index: 0, completed: all });
+      await page.reload();
+      await page.click('.start-button');
+      await openStory(page);
+      await page.waitForSelector('.end-card [data-act="story-onward"]', { timeout: 20_000 });
+      check(/Title and credits/.test((await page.textContent('.end-card [data-act="story-onward"]')) ?? ''), 'Q: the epilogue end card does not offer the title and credits');
+      const saved = await page.evaluate(() => localStorage.getItem('sticks-and-bones.story'));
+      const ach = await page.evaluate(() => localStorage.getItem('sticks-and-bones.achievements'));
+      const missing0 = (await page.evaluate(`window.__sbAudio?.audio.stats.caseCompleteMissing ?? -1`)) as number;
+      await page.click('.end-card [data-act="story-onward"]');
+      await page.waitForSelector('.credits-screen');
+      const st = await page.evaluate(() => ({ reveal: document.querySelector<HTMLElement>('.credits-screen')!.dataset.reveal, focus: (document.activeElement as HTMLElement | null)?.dataset.act, title: !!document.querySelector('.credits-screen .wordmark'), done: document.querySelector('.credits-end')?.textContent ?? '' }));
+      check(st.reveal === (reduce ? 'done' : 'play') && st.focus === 'credits-done' && st.title && /Case complete\./.test(st.done), `Q credits ${vp.width}×${vp.height}: ${JSON.stringify(st)}`);
+      const missing = ((await page.evaluate(`window.__sbAudio?.audio.stats.caseCompleteMissing ?? -1`)) as number) - missing0;
+      check(missing === 1, `Q credits: the case-complete cue should report its missing file once (${missing})`);
+      await page.screenshot({ path: join(out, `credits-${vp.width}x${vp.height}.png`) });
+      if (!reduce) {
+        await page.mouse.click(5, vp.height - 5);
+        check((await page.getAttribute('.credits-screen', 'data-reveal')) === 'done', 'Q credits: a tap did not finish the reveal');
+      }
+      for (const pg of CREDITS) for (const l of pg.lines) {
+        const sel = `.credit:has(.credit-name:text-is(${JSON.stringify(l.name)})):has(.credit-role:text-is(${JSON.stringify(l.role)}))`;
+        await showMenuItem(page, sel);
+        const b = await page.locator(sel).first().boundingBox();
+        check(!!b && b.y >= -1 && b.y + b.height <= vp.height + 1, `Q credits ${vp.width}×${vp.height}: "${l.role}" not on screen`);
+      }
+      await page.keyboard.press('Escape');
+      await page.waitForSelector('.story-shell [data-act="story-continue"], .story-shell [data-act="story-new"]', { timeout: 10_000 });
+      check(!(await page.locator('.credits-screen').count()), 'Q credits: Escape did not return to the case file');
+      check((await page.evaluate(() => localStorage.getItem('sticks-and-bones.story'))) === saved && (await page.evaluate(() => localStorage.getItem('sticks-and-bones.achievements'))) === ach, 'Q credits: the reprise or credits changed the save or achievements');
+      check(errors.length === 0, `Q credits: page errors ${errors.join(' | ')}`);
+      await page.context().close();
+    }
+    notes.push(`Q: Evidence cards show the ${reached.length} reached items only, each the exact approved caption with every glyph on the card's paper at 320×568 (130 % text), 568×320 and 1366×768; the epilogue's "Title and credits" shows the wordmark reprise and ${CREDITS.reduce((n, p) => n + p.lines.length, 0)} credit lines across ${CREDITS.length} pages, all reachable, focus on Back, a tap finishes the reveal, reduced motion skips it, Escape returns to the case file with the save and achievements unchanged; the case-complete cue reports its file missing and nothing else plays`);
   }
 } catch (e) {
   failures.push(`exception: ${(e as Error).stack ?? e}`);

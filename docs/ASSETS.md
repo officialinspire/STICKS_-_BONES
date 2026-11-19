@@ -48,10 +48,10 @@ count, SHA-256, dimension, alpha flag or frame rectangle drifts, if an image und
 | `env.moonlit-promenade` | variant | `environments/Moonlit Puerto Rican Beachfront Promenade.png` | 2,493,674 | 1672×941 | RGB | `fd3231aad8c7…` |
 | `env.jungle-camp` | variant | `environments/Puerto Rican Jungle Camp Clearing.png` | 3,342,573 | 1672×941 | RGB | `2ff66fe10f71…` |
 | `env.cave-waterfall` | variant | `environments/Secret Cave Waterfall Platform.png` | 3,063,918 | 1672×941 | RGB | `e1548692a36b…` |
-| `env.rest-area` | variant (Stage 3 target) | `environments/Quiet karst rest area by the cave.png` | 3,371,746 | 1672×941 | RGB | `a499e9461acf…` |
+| `env.rest-area` | runtime (Stage 3: WebP + 3:4 crop) | `environments/Quiet karst rest area by the cave.png` | 3,371,746 | 1672×941 | RGB | `a499e9461acf…` |
 | `cast.worker.portrait` | variant (optional) | `characters/Attentive Resort Worker Portrait.png` | 1,888,150 | 1024×1536 | RGBA | `a44329cc7414…` |
 | `cast.representative.portrait` | variant (optional) | `characters/Poised Representative in Navy and Cream.png` | 1,948,745 | 1024×1536 | RGBA | `03cc2c6ba559…` |
-| `prop.evidence-card` | variant (Stage 3 target) | `props/Blank evidence card on warm wood.png` | 1,983,160 | 1086×1448 | RGB | `8c9e5cd86e92…` |
+| `prop.evidence-card` | runtime (Stage 3: WebP) | `props/Blank evidence card on warm wood.png` | 1,983,160 | 1086×1448 | RGB | `8c9e5cd86e92…` |
 
 Notes from the audit:
 
@@ -59,6 +59,13 @@ Notes from the audit:
   from the repository root byte-identically (`git mv`) and catalogued as variants so `assets:verify` passes;
   their derivatives and runtime wiring belong to Stage 3. Both portraits are transparent cut-outs (alpha
   0–254, no pixel fully opaque).
+- **Stage 3:** `env.rest-area` is Chapter 6's entrance rest area (the cut after the cave and the hand; never the
+  ancient platform): `assets:derive` builds `rest-area.webp` (q83, mean error 5.91) and `rest-area-portrait.webp`
+  (focal x 0.40: the shelter and bench). `prop.evidence-card` → `evidence-card.webp` (q80, 47 KB) is the
+  background of the case file's Evidence cards; its paper (measured x 85–999, y 121–1322 of 1086×1448) holds the
+  code-rendered text, checked glyph by glyph in `story:e2e` § Q. The two supporting portraits stay optional
+  variants (not bundled): the script allows the worker and the representative as text and off-camera voices, and
+  SPEAKER is an amplified device, not a character.
 
 - `Roberto’s Eight-Expression Character Atlas.png` and `…Atlas-1.png` are
   **byte-identical** (same SHA-256). Both are kept and only one is catalogued as the source.

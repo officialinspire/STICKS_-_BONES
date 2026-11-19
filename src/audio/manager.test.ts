@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_AUDIO, type AudioSettings } from '../app/settings';
 import type { Scheduler } from '../app/session';
 import { AudioManager, MAX_RECOVERIES, MAX_SFX, SFX_LIMIT, STATE_CUES, type AudioBackend, type MediaFailure, type SfxHandle, type SfxId, type TrackId, type Voice } from './manager';
-import { MOTIF, VARIANTS, type BedId } from './sounds';
+import { ALL_SAMPLES, MOTIF, VARIANTS, type BedId } from './sounds';
+import { CASE_COMPLETE_FOLEY, CASE_COMPLETE_SAMPLE, runtimeLoop } from './case-complete';
 
 /** Fake backend: records calls; play() resolution is controlled by the test. */
 function fakeBackend(opts: { missing?: TrackId[]; reject?: boolean; unlock?: boolean } = {}) {
@@ -96,10 +97,10 @@ function manualScheduler() {
 }
 const tick = () => new Promise<void>((r) => setTimeout(r, 0));
 
-function make(levels: Partial<AudioSettings> = {}, backendOpts: Parameters<typeof fakeBackend>[0] = {}) {
+function make(levels: Partial<AudioSettings> = {}, backendOpts: Parameters<typeof fakeBackend>[0] = {}, samples?: readonly string[]) {
   const fb = fakeBackend(backendOpts);
   const sc = manualScheduler();
-  const m = new AudioManager({ backend: fb.b, scheduler: sc.s, levels: { ...DEFAULT_AUDIO, ...levels }, gapSec: { menu: 0.8, gameplay: 0.6, promenade: 1.2, threshold: 1.5 } });
+  const m = new AudioManager({ backend: fb.b, scheduler: sc.s, levels: { ...DEFAULT_AUDIO, ...levels }, gapSec: { menu: 0.8, gameplay: 0.6, promenade: 1.2, threshold: 1.5 }, ...(samples ? { samples } : {}) });
   return { m, fb, sc };
 }
 
@@ -734,5 +735,75 @@ describe('AudioManager: owner scene beds and result cues', () => {
       else m.setScene('menu');
       expect(cue.stopped, end).toBe(true);
     }
+  });
+
+  describe('case-complete cue (epilogue title reprise)', () => {
+    const supplied = [...ALL_SAMPLES, CASE_COMPLETE_SAMPLE, CASE_COMPLETE_FOLEY];
+    const atEpilogue = async (samples?: readonly string[], levels: Partial<AudioSettings> = {}) => {
+      const t = make({ music: 0.8, sfx: 0.8, ...levels }, {}, samples);
+      await t.m.unlock();
+      t.m.setStoryProfile('epilogue');
+      t.m.setScene('story');
+      t.fb.resolveAll();
+      await tick();
+      return t;
+    };
+
+    it('not supplied: nothing changes — the patio track keeps playing, no stand-in is synthesized', async () => {
+      expect(ALL_SAMPLES).not.toContain(CASE_COMPLETE_SAMPLE); // the bundled bank has no case-complete files yet
+      const { m, fb } = await atEpilogue();
+      const before = fb.log.length;
+      expect(m.caseComplete()).toBe(false);
+      expect(m.stats.caseCompleteMissing).toBe(1);
+      expect(fb.sfx).toHaveLength(0);
+      expect(fb.log.slice(before).filter((l) => l.startsWith('fade:menu:0'))).toEqual([]);
+      expect(fb.audible.has('menu')).toBe(true);
+    });
+
+    it('supplied: the music fades out first, then the cue plays once on the music bus (never synthesized) with its foley', async () => {
+      const { m, fb } = await atEpilogue(supplied);
+      expect(m.caseComplete()).toBe(true);
+      expect(fb.log).toContain('fade:menu:0');
+      const [cue, foley] = fb.sfx.map((x) => x.id);
+      expect(cue).toMatchObject({ sample: CASE_COMPLETE_SAMPLE, bus: 'music', placeholder: false, delay: 0.45 });
+      expect(cue!.loop).toBeUndefined(); // no auditioned loop points: it plays once through its tail
+      expect(foley).toMatchObject({ sample: CASE_COMPLETE_FOLEY, placeholder: false, delay: 0.45 });
+      expect(foley!.bus ?? 'sfx').toBe('sfx');
+    });
+
+    it('never overlaps: a second call replaces the first, and leaving (scene, profile, hidden, reset) stops it', async () => {
+      for (const leave of ['again', 'scene', 'profile', 'hidden', 'reset'] as const) {
+        const { m, fb } = await atEpilogue(supplied);
+        m.caseComplete();
+        const first = fb.sfx.slice();
+        if (leave === 'again') m.caseComplete();
+        else if (leave === 'scene') m.setScene('menu');
+        else if (leave === 'profile') m.setStoryProfile(null);
+        else if (leave === 'hidden') m.setHidden(true);
+        else m.reset();
+        expect(first.every((x) => x.stopped), leave).toBe(true);
+        if (leave === 'again') expect(fb.sfx.filter((x) => !x.stopped)).toHaveLength(2);
+      }
+    });
+
+    it('respects mute, levels, the gesture unlock and the Story scene only', async () => {
+      expect((await atEpilogue(supplied, { muted: true })).m.caseComplete()).toBe(false);
+      const quiet = await atEpilogue(supplied, { music: 0 });
+      expect(quiet.m.caseComplete()).toBe(true); // the foley alone
+      expect(quiet.fb.sfx.map((x) => x.id.sample)).toEqual([CASE_COMPLETE_FOLEY]);
+      const locked = make({}, {}, supplied);
+      locked.m.setScene('story');
+      expect(locked.m.caseComplete()).toBe(false);
+      const menu = await atEpilogue(supplied);
+      menu.m.setScene('menu');
+      expect(menu.m.caseComplete()).toBe(false);
+    });
+
+    it('loop points are used only when explicit, well-formed and auditioned by a person', () => {
+      expect(runtimeLoop(CASE_COMPLETE_SAMPLE)).toBeNull();
+      expect(runtimeLoop('x', { x: { start: 1, end: 7, auditioned: false } })).toBeNull();
+      expect(runtimeLoop('x', { x: { start: 3, end: 3.1, auditioned: true } })).toBeNull();
+      expect(runtimeLoop('x', { x: { start: 1.2, end: 7.5, auditioned: true } })).toEqual({ start: 1.2, end: 7.5 });
+    });
   });
 });

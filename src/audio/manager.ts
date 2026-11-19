@@ -25,8 +25,9 @@
 import type { AudioSettings } from '../app/settings';
 import type { Scheduler } from '../app/session';
 import { PROFILES, QUICK_PLAY_BED, type StoryProfileId } from './profiles';
-import { MOTIF, samplesFor, VARIANTS, type BedId } from './sounds';
+import { ALL_SAMPLES, MOTIF, samplesFor, VARIANTS, type BedId } from './sounds';
 import { TRACK_IDS, type MusicTrackId } from '../assets/audio-manifest';
+import { CASE_COMPLETE_FOLEY, CASE_COMPLETE_SAMPLE, runtimeLoop } from './case-complete';
 
 export type Scene = 'init' | 'intro' | 'menu' | 'story' | 'gameplay' | 'paused' | 'results';
 export type Bus = 'music' | 'sfx' | 'voice' | 'ambience';
@@ -84,6 +85,8 @@ export interface Voice {
   readonly bus?: 'sfx' | 'music';
   /** false: if the sample isn't decoded, play nothing (never a synthesized stand-in for music). */
   readonly placeholder?: boolean;
+  /** Explicit, auditioned loop points (seconds); without them the sample plays once. Stopped like any voice. */
+  readonly loop?: { readonly start: number; readonly end: number };
 }
 
 export interface AudioBackend {
@@ -166,6 +169,8 @@ export interface ManagerDeps {
   levels: AudioSettings;
   /** Restart gap after a track's composed ending (seconds), by track. */
   gapSec: Readonly<Record<TrackId, number>>;
+  /** Decodable sample ids (default: the bundled sound bank). Tests pass their own to model supplied files. */
+  samples?: readonly string[];
 }
 
 interface Mix {
@@ -212,17 +217,21 @@ export class AudioManager {
   #ducked = false;
   /** The duck's own release timer (scene changes clear #later timers; this one belongs to the cue). */
   #duckTimer: unknown = null;
+  /** The case-complete cue and its foley while they sound (one set at most). */
+  #caseVoices: SfxHandle[] = [];
+  #samples: readonly string[];
   #lastBed: { bed: BedId | null; level: number } = { bed: null, level: 0 };
   #samplesRequested = new Set<'ui' | 'table' | 'story'>();
   #lastVariant = new Map<SfxId, number>();
   #rng = 0x2545f491;
-  readonly stats = { musicStarts: 0, staleDropped: 0, playRejected: 0, sfxPlayed: 0, sfxDropped: 0, cuesPlayed: 0, cuesCancelled: 0, cuesCaptionOnly: 0, cuesRefused: 0, resultCues: 0, resultCuesWithheld: 0 };
+  readonly stats = { musicStarts: 0, staleDropped: 0, playRejected: 0, sfxPlayed: 0, sfxDropped: 0, cuesPlayed: 0, cuesCancelled: 0, cuesCaptionOnly: 0, cuesRefused: 0, resultCues: 0, resultCuesWithheld: 0, caseComplete: 0, caseCompleteMissing: 0 };
 
   constructor(d: ManagerDeps) {
     this.#b = d.backend;
     this.#sched = d.scheduler;
     this.#levels = d.levels;
     this.#gap = d.gapSec;
+    this.#samples = d.samples ?? ALL_SAMPLES;
     for (const id of TRACK_IDS) {
       this.#b.onEnded(id, () => this.#onEnded(id));
       this.#b.onError(id, (kind) => this.#onError(id, kind ?? 'broken'));
@@ -327,6 +336,7 @@ export class AudioManager {
     this.#scene = scene;
     const token = ++this.#token;
     this.cancelCues();
+    this.stopCaseComplete();
     // A result cue belongs to the table: leaving it (menu, story, intro) stops the cue; results ⇄ gameplay keep it.
     if (scene !== 'gameplay' && scene !== 'results' && scene !== 'paused') this.stopStinger();
     if (!SCENES[scene].sfx) this.stopAllSfx();
@@ -344,6 +354,7 @@ export class AudioManager {
     this.#musicOff = false;
     this.#swell = false;
     this.cancelCues();
+    this.stopCaseComplete();
     const token = ++this.#token;
     if (this.#unlocked && !this.#hidden) this.#apply(token);
   }
@@ -368,6 +379,7 @@ export class AudioManager {
       this.stopAllSfx();
       this.cancelCues();
       this.stopStinger();
+      this.stopCaseComplete();
       if (this.#playing) this.#b.pause(this.#playing);
       this.#playing = null;
       this.#b.ambience(null, 0, 0);
@@ -508,6 +520,53 @@ export class AudioManager {
     this.stopAllSfx();
     this.cancelCues();
     this.stopStinger();
+    this.stopCaseComplete();
+  }
+
+  /**
+   * The case is complete (the epilogue's title reprise): the case-complete cue on the music bus and its foley on the
+   * SFX bus, once. The scene's music fades out first (the `music-off` path: never two music sources), and the cue
+   * starts after that fade on the audio clock. Never synthesized, never queued: if neither file was supplied, nothing
+   * changes (the patio track and bed carry on) and false is returned. A second call replaces the first; a scene,
+   * profile or visibility change, or reset, stops it (no stale cue on the case file).
+   */
+  caseComplete(): boolean {
+    const music = this.#samples.includes(CASE_COMPLETE_SAMPLE);
+    const foley = this.#samples.includes(CASE_COMPLETE_FOLEY);
+    if (!music && !foley) {
+      this.stats.caseCompleteMissing++;
+      return false;
+    }
+    const L = this.#levels;
+    if (!this.#unlocked || this.#hidden || L.muted || L.master <= 0 || this.#scene !== 'story') return false;
+    this.stopCaseComplete();
+    let delay = 0;
+    if (music && L.music > 0) {
+      if (!this.#musicOff) {
+        this.#musicOff = true;
+        this.#apply(++this.#token);
+      }
+      delay = this.#playing || this.#fadingOut ? FADE_OUT_SEC : 0;
+      const loop = runtimeLoop(CASE_COMPLETE_SAMPLE);
+      this.#addCaseVoice({ sample: CASE_COMPLETE_SAMPLE, synth: 'tap', gain: 1, rate: 1, delay, bus: 'music', placeholder: false, ...(loop ? { loop } : {}) });
+    }
+    if (foley && L.sfx > 0) this.#addCaseVoice({ sample: CASE_COMPLETE_FOLEY, synth: 'tap', gain: 0.8, rate: 1, delay, placeholder: false });
+    if (this.#caseVoices.length) this.stats.caseComplete++;
+    return this.#caseVoices.length > 0;
+  }
+
+  /** Stop the case-complete cue and foley (scheduled or sounding). */
+  stopCaseComplete(): void {
+    const all = this.#caseVoices;
+    this.#caseVoices = [];
+    for (const h of all) h.stop();
+  }
+
+  #addCaseVoice(v: Voice): void {
+    const h = this.#b.playSfx(v);
+    if (!h) return;
+    this.#caseVoices.push(h);
+    h.onEnded(() => (this.#caseVoices = this.#caseVoices.filter((x) => x !== h)));
   }
 
   // ---- internals ----------------------------------------------------------------
