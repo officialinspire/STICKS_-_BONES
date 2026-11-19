@@ -4,6 +4,7 @@
  *   npm run release                       every suite, every installed engine (chromium, firefox, webkit)
  *   npm run release -- --engines firefox  one engine        --suites smoke,e2e   some suites
  *   npm run release -- --resume           keep suites that already passed in test-results/release/report.json
+ *   npm run release -- --resume --rerun pwa,smoke   …but run these again even if they passed (e.g. after a fix)
  *
  * Steps: `check` once (typecheck, lint, unit tests, assets:verify, production build + budgets) and `audio:report`
  * (engine-independent measurement), then each browser suite once PER ENGINE with SB_BROWSER set
@@ -36,8 +37,9 @@ export const BROWSER_SUITES = ['smoke', 'release:sweep', 'e2e', 'qa', 'a11y', 's
 const engines = (opt('engines')?.split(',') ?? [...ENGINES]) as Engine[];
 const suites = opt('suites')?.split(',') ?? [...BROWSER_SUITES];
 const resume = args.includes('--resume');
+const rerun = new Set(opt('rerun')?.split(',') ?? []);
 
-interface Result { readonly suite: string; readonly engine: Engine | 'none'; readonly exit: number | null; readonly seconds: number; readonly status: 'pass' | 'fail' | 'not run'; readonly note?: string; readonly unsupported: { check: string; why: string }[] }
+interface Result { readonly suite: string; readonly engine: Engine | 'none'; readonly exit: number | null; readonly seconds: number; readonly status: 'pass' | 'fail' | 'not run'; readonly note?: string; readonly unsupported: { check: string; why: string }[]; /** The commit the suite ran on (a resumed report can span commits). */ readonly sha?: string }
 interface Report { readonly started: string; finished?: string; readonly sha: string; readonly dirty: boolean; readonly playwright: string; readonly node: string; readonly os: string; readonly browsers: Record<string, string>; readonly results: Result[] }
 
 mkdirSync(out, { recursive: true });
@@ -53,7 +55,10 @@ const report: Report = {
   browsers: { ...(prev?.browsers ?? {}) },
   results: [],
 };
-const kept = (suite: string, engine: Engine | 'none') => prev?.results.find((r) => r.suite === suite && r.engine === engine && r.status === 'pass');
+const kept = (suite: string, engine: Engine | 'none'): Result | undefined => {
+  const r = rerun.has(suite) ? undefined : prev?.results.find((x) => x.suite === suite && x.engine === engine && x.status === 'pass');
+  return r && { ...r, sha: r.sha ?? prev!.sha }; // a kept result keeps the commit it actually ran on
+};
 
 function run(cmd: string, env: Record<string, string>, log: string): Promise<{ exit: number | null; seconds: number }> {
   const t = Date.now();
@@ -77,14 +82,14 @@ const unsupportedOf = (engine: Engine, suite: string) => {
 };
 function save() {
   writeFileSync(join(out, 'report.json'), JSON.stringify(report, null, 1));
-  const rows = report.results.map((r) => `| ${r.engine} | \`${r.suite}\` | ${r.status === 'pass' ? 'pass' : r.status === 'fail' ? `**FAIL** (exit ${r.exit})` : `**not run**${r.note ? `: ${r.note}` : ''}`} | ${r.seconds} s | ${r.unsupported.length ? r.unsupported.map((u) => `${u.check} (${u.why})`).join('; ') : '—'} |`);
+  const rows = report.results.map((r) => `| ${r.engine} | \`${r.suite}\` | ${r.status === 'pass' ? 'pass' : r.status === 'fail' ? `**FAIL** (exit ${r.exit})` : `**not run**${r.note ? `: ${r.note}` : ''}`} | ${r.seconds} s | \`${(r.sha ?? report.sha).slice(0, 7)}\` | ${r.unsupported.length ? r.unsupported.map((u) => `${u.check} (${u.why})`).join('; ') : '—'} |`);
   writeFileSync(join(out, 'report.md'), [
     `# Release run ${report.started}`, '',
     `- Commit: \`${report.sha}\`${report.dirty ? ' (with uncommitted changes)' : ''}`,
     `- Playwright ${report.playwright}, Node ${report.node}, ${report.os}`,
     `- Browsers: ${Object.entries(report.browsers).map(([k, v]) => `${k} ${v}`).join(', ') || '—'}`,
     '- Headless engines under emulation (viewports, touch, reduced motion, text size). **Not real devices.**', '',
-    '| Engine | Suite | Result | Time | Checks this engine could not perform (recorded, not passed) |', '| --- | --- | --- | ---: | --- |', ...rows, '',
+    '| Engine | Suite | Result | Time | Commit | Checks this engine could not perform (recorded, not passed) |', '| --- | --- | --- | ---: | --- | --- |', ...rows, '',
   ].join('\n'));
 }
 
@@ -94,7 +99,7 @@ async function main() {
     const k = kept(s, 'none');
     if (k) { report.results.push(k); continue; }
     const r = await run(s, {}, join(out, `${s.replace(':', '-')}.log`));
-    report.results.push({ suite: s, engine: 'none', exit: r.exit, seconds: r.seconds, status: r.exit === 0 ? 'pass' : 'fail', unsupported: [] });
+    report.results.push({ suite: s, engine: 'none', exit: r.exit, seconds: r.seconds, status: r.exit === 0 ? 'pass' : 'fail', unsupported: [], sha: report.sha });
     save();
     if (s === 'check' && r.exit !== 0) return; // no build to test
   }
@@ -117,7 +122,7 @@ async function main() {
       if (k) { report.results.push(k); continue; }
       console.log(`[${engine}] ${s} …`);
       const r = await run(s, { SB_BROWSER: engine }, join(dir, `${s.replace(':', '-')}.log`));
-      const res: Result = { suite: s, engine, exit: r.exit, seconds: r.seconds, status: r.exit === 0 ? 'pass' : 'fail', unsupported: unsupportedOf(engine, s) };
+      const res: Result = { suite: s, engine, exit: r.exit, seconds: r.seconds, status: r.exit === 0 ? 'pass' : 'fail', unsupported: unsupportedOf(engine, s), sha: report.sha };
       report.results.push(res);
       console.log(`[${engine}] ${s}: ${res.status} (${r.seconds} s)${res.unsupported.length ? `, ${res.unsupported.length} unsupported check(s)` : ''}`);
       save();

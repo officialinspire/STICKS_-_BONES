@@ -33,8 +33,8 @@
  *     the previous build's copy of the same asset (images, sounds and video only — never code).
  *   - Byte ranges: a single range gets 206 with Content-Range, an unsatisfiable one 416 with
  *     `bytes *\/<length>`, anything else the full 200 (ranges may be ignored, RFC 9110 §14.2).
- *   - A byte-range request (a media element) for a file no cache of ours holds is NOT intercepted while
- *     online: the browser fetches it exactly as it would without a worker. Passing it through the worker
+ *   - A byte-range request (a media element) for a file no cache of ours holds, under this build's name or a
+ *     previous build's, is NOT intercepted while online: the browser fetches it exactly as it would without a worker. Passing it through the worker
  *     added nothing, and Firefox reports an intercepted media response that the element cancels mid-way
  *     (ordinary buffering) as a failed load. Offline, or before the worker knows what it holds, it is
  *     intercepted as before (a stored copy, or the previous build's).
@@ -121,6 +121,7 @@ async function putVerified(cache, f, buf) {
   if ((await sha256(buf)) !== f.sha) throw fail('corrupt', 'checksum mismatch');
   await cache.put(f.url, stored(f, buf));
   held?.add(keyOf(f.url));
+  heldStems?.add(stemOf(f.url));
 }
 
 /**
@@ -129,9 +130,17 @@ async function putVerified(cache, f, buf) {
  * is intercepted, as before). A copy deleted later only means a range request is intercepted needlessly.
  */
 let held = null;
+/** The same files by their unhashed stem: a previous build's copy (the offline fallback) counts as held. */
+let heldStems = null;
 (async () => {
   const keys = new Set();
-  for (const name of await ownNames()) for (const r of await (await caches.open(name)).keys()) keys.add(keyOf(r.url));
+  const stems = new Set();
+  for (const name of await ownNames())
+    for (const r of await (await caches.open(name)).keys()) {
+      keys.add(keyOf(r.url));
+      stems.add(stemOf(r.url));
+    }
+  heldStems = stems;
   held = keys;
 })().catch(() => undefined);
 
@@ -524,7 +533,8 @@ self.addEventListener('fetch', (event) => {
   const f = FILES.get(key);
   if (!f) return; // unlisted: network only
   // A media range request we can't answer from a stored copy: online, leave it to the browser (see the header).
-  if (req.headers.has('range') && self.navigator.onLine && held && !held.has(key)) return;
+  // A copy under this build's name OR a previous build's (same stem) is ours to answer: never bypass the fallback.
+  if (req.headers.has('range') && self.navigator.onLine && held && !held.has(key) && !heldStems?.has(stemOf(f.url))) return;
   event.respondWith(
     (async () => {
       const hit = await lookup(f);
