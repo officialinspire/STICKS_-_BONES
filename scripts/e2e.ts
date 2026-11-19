@@ -23,6 +23,16 @@ import { bustBox, stageFor } from '../src/render/stage.ts';
 import { showMenuItem } from './lib/menu-navigation';
 import { engine, ENGINE, isWebkitNavigationCancel, launchOptions, unsupported } from './lib/engine';
 
+/**
+ * Reload once the page's own requests have settled. None of these tests means to interrupt a load (they reload
+ * mid-hand or mid-dialogue, which is app state, not network); a reload that cancels the dev server's module requests
+ * mid-flight makes WebKit fail the next document's imports ("Importing a module script failed"), dev server only.
+ */
+async function settledReload(page: Page): Promise<void> {
+  await page.waitForLoadState('networkidle').catch(() => undefined);
+  await page.reload();
+}
+
 type Page = import('playwright').Page;
 type Ctx = { message: string; type(): string; text(): string };
 
@@ -55,7 +65,7 @@ async function newPage(viewport: { width: number; height: number }, dsf = 1, opt
 
 /** Load the app and pass the start screen (and the studio intro, if any) to reach the menu. */
 async function enterMenu(page: Page, reload = false) {
-  if (reload) await page.reload();
+  if (reload) await settledReload(page);
   else await page.goto(BASE);
   await page.click('.start-button');
   // The studio credit: Skip arms once the start gesture is released (the gesture itself can't skip).
@@ -942,7 +952,7 @@ try {
       const back = await probe(page);
       check(hidden.count === 0 && back.playing === 'menu' && back.count === 1, `background/foreground: hidden ${hidden.count}, back ${back.playing}/${back.count}`);
       // Reload: back to the start screen, silent until a new gesture.
-      await page.reload();
+      await settledReload(page);
       await page.waitForSelector('.start-button');
       const reloaded = await probe(page);
       check(reloaded.count === 0 && reloaded.scene === 'init', 'reload: audio playing before the start gesture');
@@ -1033,7 +1043,7 @@ try {
       notes.push(`init: progress shown while loading; Cousin's portrait failed twice then loaded on retry 3; tiles failed → "${status}" with Try again; Try again → Ready. Cold ready ${coldMs} ms (incl. backoff)`);
       // Warm: everything from the HTTP cache. Ready as soon as decoding finishes — no artificial wait.
       const t1 = Date.now();
-      await page.reload();
+      await settledReload(page);
       await page.waitForFunction(() => !(document.querySelector('.start-button') as HTMLButtonElement).disabled, null, { timeout: 15000 }).then((h: { dispose(): unknown }) => h.dispose());
       const warmMs = Date.now() - t1;
       check(warmMs < 4000 && (await page.textContent('.start-status')) === 'Ready.', `init: warm start took ${warmMs} ms`);
@@ -1169,8 +1179,7 @@ try {
         });
         // Reload only once the first load has settled: a reload that cancels the dev server's module requests
         // mid-flight makes WebKit fail the next document's imports (dev-server only; production is a few chunks).
-        await page.waitForLoadState('networkidle').catch(() => undefined);
-        await page.reload();
+        await settledReload(page);
         await page.waitForSelector('.start-button[disabled]');
         await page.keyboard.down('Enter');
         const until = Date.now() + 3500;
@@ -1221,7 +1230,7 @@ try {
       {
         const { ctx, page } = await intro('real', { width: 844, height: 390 }, false, true);
         await page.evaluate(() => localStorage.setItem('sticks-and-bones.settings', JSON.stringify({ format: 'sticks-and-bones/settings', version: 3, data: { audio: { master: 0.8, music: 0.6, sfx: 0.8, voice: 0.9, ambience: 0.5, muted: true, ambienceOn: true } } })));
-        await page.reload();
+        await settledReload(page);
         await page.waitForSelector('.start-button:not([disabled])');
         await page.click('.start-button');
         await page.waitForSelector('video');
@@ -1555,7 +1564,7 @@ try {
     check(!!r1 && r1.counts.tiles >= 1 && r1.counts.hands === 1 && !!r1.unlocked['learn-first-tile'] && !!r1.unlocked['learn-hand'], `achievements after one hand: ${JSON.stringify(r1?.counts)}`);
     check(!JSON.stringify(r1).match(/t[0-6][0-6]/), 'achievements record must hold no tile ids');
     // Reload with the hand over: the restored table must not count the hand again.
-    await page.reload();
+    await settledReload(page);
     await enterMenu(page);
     await page.click('[data-act="resume"]');
     await page.waitForSelector('.table-screen');
