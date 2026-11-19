@@ -320,6 +320,66 @@ true peak), edits and boundaries, with each derivative's source hash. `npm run a
 measured 20,147 KB. Startup is unchanged in kind: no music or cue loads at startup. Offline, they are in the
 whole-game download (full offline storage stage), which starts only after the menu is up.
 
+## The complete map (full-game audit, 2026-11-19)
+
+Every shipped sound and effect has exactly one deliberate job. `src/audio/sounds.test.ts` fails if a sample
+ships that nothing maps, or a sound id has no caller; `npm run offline:tour` checks the map in the
+production build, offline, by watching what the browser is asked to play.
+
+**Music (one track at a time; fades out before the next fades in):**
+
+| Track | Plays | Measured (`npm run audio:report`) |
+| --- | --- | --- |
+| Patio Dominoes (Take 2) | menu; Chapter 1 and Epilogue dialogue | −17.3 LUFS, −0.3 dBTP, 155.8 s |
+| Domino Table (Subtle Vibe) | Quick Play / two-player tables; story hands of Chapters 1, 2, 3, 7 | −19.4 LUFS, −0.9 dBTP |
+| Promenade After Dark | Chapter 4 dialogue and its hand (one track, lowered, never restarted) | −18.0 LUFS, −0.4 dBTP |
+| The Lit Threshold (Alt) | Chapter 6 until "Cut to the entrance rest area" (`music-off`, held through the hand) | −15.3 LUFS, −0.8 dBTP |
+| — none — | Prologue, Chapters 2, 3, 5, 7 dialogue; Chapter 5 and 6 hands | |
+
+**Ambience beds (own bus; 2.4 s cross-fade; at most two at once):** patio (menu tables, Chapters 1, 2,
+Epilogue), terrace murmur (Chapters 3, 7), surf (Chapter 4), jungle (Chapter 5), cave water (Prologue, Chapter
+6). Loop seams measured as played (encoder padding trimmed): sample jump across the wrap 0.3–1.1× a typical
+step; level change across the wrap at the 1st–77th percentile of each bed's own 100 ms variation.
+
+**Table and UI sounds:** select / back / confirm (any button, by role; table moves and Story controls are
+silent), invalid, pickup (choosing a tile), place (landing), slam (the owner's two takes: Cousin's doubles and
+the hand-ending tile), shuffle (the owner's multi-tile drop, on the deal), draw, knock (a pass on the table —
+`pass-knock-*`, a light door knock, low-passed: a different recording from the supernatural motif).
+
+**Story cues (exact stage directions, `src/story/staging.ts`; scheduled on the audio clock; the next beat
+cancels anything not yet started; a resumed beat never replays):**
+
+| Cue | Samples | Beats |
+| --- | --- | --- |
+| `knock-three` | motif-knock-1, -2, -3, 0.62 s apart | Prologue, first beat |
+| `knock-beyond` | motif-knock-beyond (filtered, echoed: distance) | Prologue, "A fourth knock comes from beyond" |
+| `knock-motif` | the three + the fourth 1.15 s after the third | Chapter 6, "Three knocks. A fourth answers…" |
+| `knock-motif-soft` | the same, softer | Chapter 4, "Three light taps beneath the bench"; Epilogue, "No one stands outside…" |
+| `knock-one` | motif-knock-1, soft | Chapter 6, "The lifted water lowers"; Epilogue, "A knock at the gate" |
+| `water` | water-drop-1 / -2 | Chapters 4, 5, 6 water beats |
+| `dinner` | glass-1 | Epilogue, the interrupted dinner |
+| `surf`, `music-off`, `ambience-off` | state cues | Chapter 4 swell; Chapter 6 rest area; Epilogue "The water goes still." |
+
+The three motif knocks are slices of one recording, peak-matched (spread 0.0 dB); the fourth is the same hit
+filtered and echoed. Offline in the production build: 0.62 / 0.62 s, answer +1.15 s (audio clock).
+
+**Result cues (music bus, ducking the track):** `result-win` / `result-other` after a hand at Quick Play and
+two-player tables and after the lighter story hands (Chapters 1–4). **Withheld after Chapters 5, 6 and 7**
+(`SceneProfile.resultCue`): the jungle and rest-area hands are deliberately music-free, and Chapter 7's hand is
+the public confrontation with Vale — no flourish into serious dialogue (`docs/STORY_SCRIPT.md` §5). Leaving the
+table (Continue the case) stops a cue still sounding. Achievement toasts never show over a Story scene.
+
+**Visual effects (`src/ui/effects.ts`, skipped under reduced motion):** `impact-burst` on each placed tile;
+`star-gold` on the hand-ending domino; `ripple` on a passing seat. `dust-puff` and `confetti` are in the
+approved sheet but deliberately unused (no confetti anywhere, including the serious chapters).
+
+**Measured, not heard.** This environment has no audio output. `npm run audio:report` decodes all 38 runtime
+files and measures loudness, true peak, dead air, cut-off tails and loop seams (the owner's trimmed slam/drop
+clips: 0–1 ms lead, a faded tail, no cut-off). It found and this stage fixed: the beyond-knock's 1.2 s of
+digital silence (its padding did nothing — audio bit-identical, 48 KB smaller) and the three unused slide
+stand-ins. **Nobody has listened** to the track transitions, seams, levels or the trimmed clips in this build:
+an owner listening pass remains open.
+
 ## What is real and what is placeholder
 
 | Audio | Source | Status |
@@ -328,7 +388,7 @@ whole-game download (full offline storage stage), which starts only after the me
 | Gameplay music | `assets/audio/music/Domino Table (Subtle Vibe).mp3` (owner upload) | **final, approved** |
 | UI sounds | Kenney Interface Sounds (CC0), `assets/audio/sfx/ui-*.wav` | selected samples, **not final** (awaiting the owner's listen) |
 | Slam and shuffle/deal | **Owner recordings** of a real domino slapped onto a table (two takes) and of several dropped onto it; trimmed derivatives (`scripts/build-owner-audio.py`) | selected, measured, **not auditioned** |
-| Other tile sounds (pickup, place, slide, draw) | Kenney Casino Audio chips/cards (CC0) | **stand-ins** until real dominoes are recorded for those actions |
+| Other tile sounds (pickup, place, draw) | Kenney Casino Audio chips/cards (CC0) | **stand-ins** until real dominoes are recorded for those actions (the three card-slide stand-ins were retired on 2026-11-19: nothing played them) |
 | Pass knock, story knocks, drops, glass | BigSoundBank (CC0) | selected samples, **not final** |
 | Ambience beds (patio, promenade, jungle, cave, terrace) | BigSoundBank field recordings (CC0), looped | selected, seams **machine-measured, not auditioned** |
 | Synthesized SFX (`src/audio/synth.ts`) | code | **fallback only** (decoding / missing file) |
@@ -336,7 +396,7 @@ whole-game download (full offline storage stage), which starts only after the me
 | Round result cues (`result-win`, `result-other`) | **Owner uploads** "Round Win (Puerto Rico Vibe)" and "Round Other (Musical Shrug)", final cadence extracted (1.95 s / 1.78 s) | measured, **not auditioned** |
 | Case-complete music, chapter-card cue | — | **missing** (not supplied; nothing fabricated): the end card stays on the bed |
 | Contractor speaker voice and cough; trail voice | — | **missing**: caption only, never impersonated |
-| Studio intro | `assets/video/inspiresoftwareintro.mp4` | **not supplied yet** (fallback: a 1.6 s typeset text credit, then the menu) |
+| Studio intro | `assets/video/inspiresoftwareintro.mp4` (owner's INSPIRE credit, copied from the verified source commit) | **final**; the 1.6 s typeset credit is only its fallback |
 
 Sources, creators, licences and every edit: `docs/SOUND_SOURCES.md` (generated from
 `src/assets/sound-manifest.json`; `npm run assets:verify` checks each file's bytes and sha256,

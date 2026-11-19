@@ -51,9 +51,8 @@ SFX = [
     ('tile-place-1', 'kenney-casino/x/Audio/chip-lay-1.ogg', KENNEY_CASINO, 0, 0.4, 'tile placement (stand-in: chip lay)', ''),
     ('tile-place-2', 'kenney-casino/x/Audio/chip-lay-2.ogg', KENNEY_CASINO, 0, 0.4, 'tile placement (stand-in: chip lay)', ''),
     ('tile-place-3', 'kenney-casino/x/Audio/chip-lay-3.ogg', KENNEY_CASINO, 0, 0.4, 'tile placement (stand-in: chip lay)', ''),
-    ('tile-slide-1', 'kenney-casino/x/Audio/card-slide-1.ogg', KENNEY_CASINO, 0, 0.45, 'tile slide (stand-in: card slide)', ''),
-    ('tile-slide-2', 'kenney-casino/x/Audio/card-slide-2.ogg', KENNEY_CASINO, 0, 0.45, 'tile slide (stand-in: card slide)', ''),
-    ('tile-slide-3', 'kenney-casino/x/Audio/card-slide-3.ogg', KENNEY_CASINO, 0, 0.45, 'tile slide (stand-in: card slide)', ''),
+    # tile-slide-1/2/3 (card-slide stand-ins) were retired: nothing played them (a move is pickup → place, or the
+    # owner's slam), yet they shipped and were stored offline.
     # tile-slap-1/2 and tile-shuffle-1 (chips-collide stand-ins) were retired: the owner's own recordings of a
     # domino slapped onto a table and of dominoes dropped onto it replace them (scripts/build-owner-audio.py).
     ('tile-draw-1', 'kenney-casino/x/Audio/chips-handle-4.ogg', KENNEY_CASINO, 0, 0.4, 'draw from the boneyard (stand-in: chips)', ''),
@@ -61,11 +60,12 @@ SFX = [
     ('pass-knock-1', 'bsb/0374.ogg', BSB('0374', 'Knock on a light door', 'knock-on-a-light-door'), 0.035, 0.30, 'pass knock on the table', 'lowpass=f=4000'),
     ('pass-knock-2', 'bsb/0374.ogg', BSB('0374', 'Knock on a light door', 'knock-on-a-light-door'), 4.06, 0.30, 'pass knock on the table', 'lowpass=f=4000'),
     # Authored supernatural motif: three measured knocks + a fourth answering "from beyond". Sliced from one
-    # recording so the three match; the fourth is the same hit, filtered and given a short tail (distance).
+    # recording so the three match; the fourth is the same hit, filtered and given short echoes (distance) inside
+    # its 1.40 s window (no padding: the window's fade-out ends it, so padding only added digital silence).
     ('motif-knock-1', 'bsb/0095.ogg', BSB('0095', 'Door Knock', 'door-knock'), 0.155, 0.50, 'motif knock (1–3)', ''),
     ('motif-knock-2', 'bsb/0095.ogg', BSB('0095', 'Door Knock', 'door-knock'), 2.210, 0.50, 'motif knock (1–3)', ''),
     ('motif-knock-3', 'bsb/0095.ogg', BSB('0095', 'Door Knock', 'door-knock'), 9.540, 0.50, 'motif knock (1–3)', ''),
-    ('motif-knock-beyond', 'bsb/0095.ogg', BSB('0095', 'Door Knock', 'door-knock'), 0.155, 1.40, 'the fourth knock, answering from beyond', 'apad=pad_dur=1,lowpass=f=1100,aecho=0.6:0.5:90|170:0.35|0.22'),
+    ('motif-knock-beyond', 'bsb/0095.ogg', BSB('0095', 'Door Knock', 'door-knock'), 0.155, 1.40, 'the fourth knock, answering from beyond', 'lowpass=f=1100,aecho=0.6:0.5:90|170:0.35|0.22'),
     ('water-drop-1', 'bsb/1386.flac', BSB('1386', 'Drops of Water #3', 'drops-of-water-3'), 0.14, 0.45, 'cave drop accent', ''),
     ('water-drop-2', 'bsb/1386.flac', BSB('1386', 'Drops of Water #3', 'drops-of-water-3'), 4.49, 0.45, 'cave drop accent', ''),
     ('glass-1', 'bsb/1204.flac', BSB('1204', 'Glass, Placed on Table', 'glass-placed-on-table'), 0.19, 0.6, 'terrace glassware detail', ''),

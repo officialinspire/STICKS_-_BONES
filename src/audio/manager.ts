@@ -34,11 +34,13 @@ export type TrackId = MusicTrackId;
 /** Short musical result cues (decoded buffers on the music bus): a hand won, or lost / blocked. */
 export type ResultCue = 'win' | 'other';
 export const RESULT_CUE_SAMPLE: Readonly<Record<ResultCue, string>> = { win: 'result-win', other: 'result-other' };
+/** Story accent samples (beside the knock motif): cave water drops and the terrace's glassware. */
+export const ACCENT_SAMPLES = { water: ['water-drop-1', 'water-drop-2'], dinner: ['glass-1'] } as const;
 /** How long a result cue holds the music down (its longest cue is 1.95 s; the duck releases after it). */
 export const RESULT_DUCK_SEC = 2.2;
 /** The track's level under a result cue (× the scene's duck). */
 export const RESULT_DUCK = 0.25;
-export type SfxId = 'select' | 'back' | 'confirm' | 'invalid' | 'pickup' | 'slide' | 'place' | 'slam' | 'shuffle' | 'draw' | 'knock' | 'tap';
+export type SfxId = 'select' | 'back' | 'confirm' | 'invalid' | 'pickup' | 'place' | 'slam' | 'shuffle' | 'draw' | 'knock';
 /** Synthesized placeholder voices: used only while a sample is still decoding or if its file is missing. */
 export type SynthId = 'place' | 'knock' | 'draw' | 'slam' | 'tap' | 'thud';
 /**
@@ -136,7 +138,7 @@ export const FADE_OUT_SEC = 0.45;
 export const FADE_IN_SEC = 0.9;
 export const BED_FADE_SEC = 2.4;
 export const MAX_SFX = 6;
-export const SFX_LIMIT: Readonly<Record<SfxId, number>> = { select: 2, back: 1, confirm: 1, invalid: 1, pickup: 2, slide: 2, place: 3, slam: 1, shuffle: 1, draw: 2, knock: 2, tap: 2 };
+export const SFX_LIMIT: Readonly<Record<SfxId, number>> = { select: 2, back: 1, confirm: 1, invalid: 1, pickup: 2, place: 3, slam: 1, shuffle: 1, draw: 2, knock: 2 };
 
 interface SfxStyle {
   readonly gain: number;
@@ -151,13 +153,11 @@ const STYLE: Readonly<Record<SfxId, SfxStyle>> = {
   confirm: { gain: 0.5, db: 0.8, rate: 0.01, synth: 'tap' },
   invalid: { gain: 0.38, db: 0.5, rate: 0, synth: 'tap' },
   pickup: { gain: 0.55, db: 1.5, rate: 0.03, synth: 'tap' },
-  slide: { gain: 0.5, db: 1.5, rate: 0.03, synth: 'draw' },
   place: { gain: 0.8, db: 1.5, rate: 0.03, synth: 'place' },
   slam: { gain: 0.95, db: 1, rate: 0.02, synth: 'slam' },
   shuffle: { gain: 0.6, db: 1, rate: 0.02, synth: 'draw' },
   draw: { gain: 0.62, db: 1.5, rate: 0.03, synth: 'draw' },
   knock: { gain: 0.75, db: 1, rate: 0.02, synth: 'knock' },
-  tap: { gain: 0.35, db: 0.8, rate: 0.01, synth: 'tap' },
 };
 
 export interface ManagerDeps {
@@ -216,7 +216,7 @@ export class AudioManager {
   #samplesRequested = new Set<'ui' | 'table' | 'story'>();
   #lastVariant = new Map<SfxId, number>();
   #rng = 0x2545f491;
-  readonly stats = { musicStarts: 0, staleDropped: 0, playRejected: 0, sfxPlayed: 0, sfxDropped: 0, cuesPlayed: 0, cuesCancelled: 0, cuesCaptionOnly: 0, cuesRefused: 0, resultCues: 0 };
+  readonly stats = { musicStarts: 0, staleDropped: 0, playRejected: 0, sfxPlayed: 0, sfxDropped: 0, cuesPlayed: 0, cuesCancelled: 0, cuesCaptionOnly: 0, cuesRefused: 0, resultCues: 0, resultCuesWithheld: 0 };
 
   constructor(d: ManagerDeps) {
     this.#b = d.backend;
@@ -457,6 +457,11 @@ export class AudioManager {
     const L = this.#levels;
     if (!this.#unlocked || this.#hidden || L.muted || L.music <= 0 || L.master <= 0) return false;
     if (this.#scene !== 'gameplay' && this.#scene !== 'results') return false;
+    // A serious story hand (its profile says so) ends without a musical flourish.
+    if (this.#profile && !PROFILES[this.#profile].resultCue) {
+      this.stats.resultCuesWithheld++;
+      return false;
+    }
     this.stopStinger();
     const h = this.#b.playSfx({ sample: RESULT_CUE_SAMPLE[kind], synth: 'tap', gain: 1, rate: 1, delay: 0, bus: 'music', placeholder: false });
     if (!h) return false;
@@ -581,11 +586,11 @@ export class AudioManager {
       case 'knock-one':
         return [knock(MOTIF.knocks[0], 0, 0.5)];
       case 'water': {
-        const v = this.#rand() < 0.5 ? 'water-drop-1' : 'water-drop-2';
+        const v = ACCENT_SAMPLES.water[this.#rand() < 0.5 ? 0 : 1];
         return [{ sample: v, synth: 'tap', gain: 0.6, rate: 1 + (this.#rand() * 2 - 1) * 0.03, delay: 0 }];
       }
       case 'dinner':
-        return [{ sample: 'glass-1', synth: 'tap', gain: 0.5, rate: 1, delay: 0 }];
+        return [{ sample: ACCENT_SAMPLES.dinner[0], synth: 'tap', gain: 0.5, rate: 1, delay: 0 }];
       default:
         return [];
     }
