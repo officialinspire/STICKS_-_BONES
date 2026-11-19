@@ -216,7 +216,7 @@ the source sheet is only read.
 | --- | --- | --- |
 | Title/placeholder backdrop | `env.neighborhood-patio` | **in use** |
 | Board surface | `table.weathered` / `surface` | **in use** |
-| Host portrait | `cousin.atlas.portrait`: `explaining` on the menu; the table switches frames by mood (neutral, smirk, thinking, explaining, laughing, surprised, delighted, pumped) | **in use** |
+| Host portrait | `cousin.atlas.portrait`: `explaining` on the menu; the table switches frames by mood (neutral, smirk, thinking, explaining, laughing, surprised, delighted, pumped), from the host's side (`src/ui/host-mood.ts`): across the table in Quick Play, commentator for two humans, and **the player's own character in Story** — there Roberto is delighted for his side and thoughtful or surprised otherwise, never laughing at the other side's domino | **in use** |
 | Tile faces (board, hand, results) | `tile.atlas` faces by id; SVG fallback with the same pip geometry | **in use** |
 | Tile backs (opponent hand, boneyard) | `tile.atlas` / `back-teal-weave` (alt `back-walnut-inlay` in atlas) | **in use** |
 | Atlas source | `tile.materials` (face-ivory-divided, both backs) → `tile.atlas` | build-time only (not bundled) |

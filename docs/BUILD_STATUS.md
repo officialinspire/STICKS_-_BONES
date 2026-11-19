@@ -1955,16 +1955,183 @@ black → menu reveal).
 | `npm run story:route` | pass |
 
 ### Known limitations
-- **Offline:** the credit is not cached yet (next stage); offline it plays only if the HTTP cache still holds it.
+- **Offline:** the credit is not cached yet (next stage); offline it plays only if the HTTP cache still holds it. *(Resolved by the full offline storage stage.)*
 - **Codec support:** H.264/AAC playback was exercised in this Chromium build only. Safari, iOS, Android and
   Firefox were not tested, though they generally support H.264 MP4.
 - **Volume on iOS:** iOS ignores `volume`, so the soundtrack fade there ends with the release, at the end of the
   picture fade, instead of ramping.
 
+## Full offline storage stage (2026-11-18)
+
+**Owner decision:** full offline storage is authorized. It replaces the old policy (music and ambience only in
+an optional download; the intro video never cached). `AGENTS.md`, `docs/PWA.md`, `docs/AUDIO.md`,
+`docs/PERFORMANCE.md` and `docs/RELEASE_HANDOFF.md` were updated to match.
+
+### Completed
+
+- **The pack (`vite.config.ts`, `sticks-pwa`):** every shipped runtime file is listed with bytes and SHA-256,
+  computed in `writeBundle` from the files as written (Vite's own post plugins still rewrite chunks after
+  `generateBundle`, which made the earlier sizes slightly wrong for two chunks). Four groups: shell (HTML, every
+  JS chunk incl. lazy Story/achievements, CSS, fonts, manifest, all icons, font licences), core (Quick Play art
+  in both orientations, UI/table sounds, result cues), story (backdrops in both orientations, cast sheets,
+  story sounds), media (music, ambience, intro video). The build fails on an unlisted file, a non-icon PNG or
+  a byte-identical duplicate. **81 files, 20,892,477 B.**
+- **Service worker (`src/pwa/sw.js`, rewritten):** whole-game job (2 at a time, stall timeout, 2 tries per
+  file, quota stops it); adopts identical copies already held (incl. the retired `audio:v1`); stores only
+  complete, checksum-verified `200`s with MIME from the extension; re-hashes every file, then writes the
+  `verified` marker; prunes old entries and retired caches **only after** verification; offline fallback to
+  an older build's copy of the same image/sound/video; cache-first with single-range 206, 416 `bytes */len`,
+  200 for multi/malformed ranges, `HEAD`; app-only repair (stale caches, re-hash, replace, download).
+- **Page (`src/app/pwa.ts`, `main.ts`, `menu.ts`):** the download starts 1.5 s after the menu (or the
+  post-update return), online only; Data Saver waits for the player; storage estimate checked first;
+  `persist()` only on the player's tap; Retry; automatic retries with backoff (max 3 per visit); stall
+  detection (worker stopped); a page adopts the outcome of a run started before a reload (this was a real bug
+  found by the tests: the line stayed at "Checking… 81 of 81"). One honest status line (ready / saving /
+  checking / stopped / waiting / Data Saver / quota / missing / corrupt / evicted / old media kept /
+  unavailable), progress bar, storage line (our bytes, free estimate, persisted or not), Download/Retry
+  button, Install button (`beforeinstallprompt`) or install note. `sticks-and-bones.offline` is v2
+  (`{ verifiedBuild }`, v1 migrates) — used only to report eviction honestly.
+- **Checks/budgets (`scripts/check-dist.mjs`):** re-hashes `dist/` against `build.json`, requires the video,
+  both orientations, cast, ambience, cues, SFX, Story chunk and fonts in the pack, rejects source masters and
+  duplicates; new **offline pack** gate 21,000 KB (20,404 measured); service worker 48 KB (43); total
+  21,100 KB (20,446). `sw.js` no longer counts as page code/startup (it never was): code 316 / 330,
+  startup 942 / 960.
+- **Tests:** `src/app/pwa.test.ts` rewritten (wording, button, outcomes, Quick Play readiness, record
+  migration). `scripts/pwa.ts` rewritten: 13 scenarios on production builds A/B/C under `/STICKS_-_BONES/`
+  (see `docs/PWA.md` "Evidence"), incl. a **cold offline launch by relaunching the browser profile** (the
+  studio video plays from the cache), ranges/MIME, interrupted install and whole-game downloads (cut
+  transfers and a stopped worker; resume fetches nothing already saved), quota ×3, corruption (stored and in
+  transit), eviction (all / one group), upgrade retention A → C, Data Saver, unavailable storage, updates
+  mid-match / mid-case, repair / erase isolation. `PWA_ONLY=…` runs a subset. `scripts/smoke.ts` now waits
+  for "Full game ready offline".
+
+**Merged in from the branch (owner's commit `1109a2d`):** campaign artwork in `marketing/source/` (not
+shipped) and social-sharing metadata in `index.html` with `public/social/sticks-and-bones-og-v1.jpg`. That
+image ships but is not a runtime dependency (only link-preview crawlers fetch it), so it is explicitly exempt
+from the offline pack (`NOT_RUNTIME`) and from the image gates; `check-dist` caps it at 300 KB. After the
+merge: code 318 / 330 KB (the meta tags), startup 944 / 960, offline pack 20,405 / 21,000, total 20,619 /
+21,100 KB.
+
+**Branch / commits:** `claude/inspiring-bardeen-4yfmu5` at `3f74bca` (stage), then the merge of `1109a2d` and
+the follow-up. Not merged to main or deployed.
+
+### Commands run and results (Chromium)
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | pass: typecheck, lint, **529 unit tests**, assets verified, build + budgets (offline pack 20,404 / 21,000 KB) |
+| `npm run pwa` | pass: all 13 scenarios; pack 81 files / 20,893,193 B read back and matched (bytes, SHA-256, MIME) |
+| `npm run smoke` | pass: subpath, **Full game ready offline**, a full hand, offline restart, clean console |
+| after merging `1109a2d` | `npm run check` pass (529 tests), `npm run smoke` pass, `npm run pwa` pass (13 scenarios; pack 20,895,118 B). §3 now compares the set of re-fetched files: the startup loader may request the missing atlas alongside the download (a flaky count, not a resume defect) |
+| `npm run e2e` | pass |
+| `npm run a11y` | pass: 0 failures |
+| `npm run qa` | pass: 0 failures, 1 kept comfort warning (667×375 end slots 62×40) |
+| `npm run faults` | pass |
+| `npm run story:e2e` | pass |
+
+Not re-run this stage (no Story presentation, rules or AI change): `story:sweep`, `story:route`, `matches`,
+`audio`, `perf:story`.
+
+### Known limitations
+
+- **Only Chromium** (headless desktop) was exercised. Safari/iOS (per-origin limits, 7-day eviction for
+  non-installed sites, no install prompt), Firefox (`persist()` prompt, no install) and real devices are
+  untested; see `docs/PWA.md`.
+- The download runs while a page is open; a browser may stop it in the background — it resumes on the next
+  visit (tested by stopping the worker).
+- The cheap status check trusts stored checksum headers; silent disk corruption after verification is found
+  by **Repair** (deep re-hash), not on every launch.
+- The free-space figure is the browser's estimate for the whole origin (shared with other INSPIRE apps).
+
+## Full-game audit through the real UI (2026-11-19)
+
+Audit of the whole game as a player meets it — the approved script, the audio and effects map, robustness,
+and the full offline pack — with focused fixes and regressions. Chromium only (the only browser here); no
+audio output device, so listening was not possible.
+
+### Defects found and fixed
+
+1. **Celebratory result cues after serious hands.** The win/other stinger played after every story hand,
+   including Chapter 5 and 6's deliberately music-free hands (the jungle; the rest area after the
+   encounter) and Chapter 7's public confrontation with Vale. Now a profile property
+   (`SceneProfile.resultCue`, `src/audio/profiles.ts`): withheld after Chapters 5–7 (also in replays);
+   Chapters 1–4 and the tables keep it. Unit test (all seven chapters) + browser checks in
+   `npm run offline:tour` and `story:e2e` § N.
+2. **Roberto laughing at Vale's domino.** In Story the table's host figure is Roberto — the player's own
+   character — but its moods were Quick Play's (where Cousin is the AI opponent): when Vale went out,
+   Roberto was drawn laughing, and the results sheet showed his gloat. Moods now follow the host's side
+   (`src/ui/host-mood.ts`): Story — delighted for his team, thoughtful when it loses, surprised by a block;
+   Quick Play unchanged except that Cousin is surprised (not laughing) when the player's AI partner goes
+   out in solo Partnership. Unit tests + a per-hand `data-mood` check across all seven story hands offline.
+3. **A sound that never played.** `slide` (three card-slide stand-ins, 65 KB) shipped and was stored
+   offline, but nothing triggered it; the `tap` id was dead too. Retired through the builder; a test now
+   fails if a shipped sample has no caller or a sound id has none.
+4. **Dead air in the beyond-knock.** Its chain padded 1 s for an echo tail that the 1.40 s fade-out then
+   silenced: 1.2 s of digital zeros. Padding removed — audio bit-identical over the sound (max difference
+   0.0), 48 KB smaller; every other SFX and bed rebuilt byte-identical.
+
+### Verified (and how)
+
+- **Script and routes:** `story:route` plays the whole case in the UI (every scene, the insert matching
+  each real result, notebook end cards, Case complete) and opens all 21 chapter × win/loss/tie routes;
+  `story:sweep` walks every beat (verbatim text, tagged expression, one speaker, Continue-only, corporate
+  terrace for Chapters 3 and 7). The Chapter 6 hand stays at the drawn modern rest area.
+- **Audio map** (`docs/AUDIO.md` "The complete map"): in the production build, offline, every scene's
+  playing music and looping bed were sampled at its first line and in its hand and matched its profile;
+  knocks on the audio clock 0.62 / 0.62 s with the answer +1.15 s (Prologue on a fresh case, Chapter 6).
+- **Robustness:** rapid Continue / Skip, Back, reload mid-dialogue and mid-hand, risky-moment reloads,
+  rotation, backgrounding, mute, missing media and refused saves are covered by `story:e2e`, `audio`,
+  `faults`, `e2e`; **chapter replay** was untested and is now `story:e2e` § N (a double tap opens one run
+  from beat 1; story position, completed chapters, stats and achievements byte-identical afterwards).
+  Taps during a scene's ~550 ms entrance are ignored by design (never queued) — noted, not changed.
+- **Offline cold launch** (`npm run offline:tour`, new): after the whole-game download the browser
+  relaunches offline with the server down; the intro plays out from the cache (5.9 s), menu music, a
+  Quick Play hand (tile sounds, impact effects, a result cue), the whole case with seven hands, both knock
+  motifs, offline resume of a story hand and a match (identical), achievements (24 of 100) across a
+  reload, every scene at 844×390, 360×800, 768×1024 and 1366×768 over its own backdrop, rotation
+  mid-line, a desktop Chapter 7 hand — **0 app requests reached the network, 0 page errors**.
+- **Measured audition** (`npm run audio:report`, new): 38 runtime files — loudness, true peak (none
+  clipping), dead air, cut-off tails, bed seams as played (wrap steps within each bed's own variation),
+  motif knocks peak-matched (0.0 dB spread). The owner's trimmed slam/drop clips: 0–1 ms lead, faded
+  tails, no cut-off.
+
+**Branch / commits:** `claude/inspiring-bardeen-4yfmu5` — checkpoint `970a39b`, then the follow-up with
+these notes. Not merged or deployed.
+
+### Commands run and results (Chromium)
+
+| Command | Result |
+| --- | --- |
+| `npm run check` | pass: typecheck, lint, **534 passed unit tests** (new: per-chapter result-cue policy, host moods by side, sample-to-caller mapping), assets verified, build + budgets (sfx 466 / 720 KB, offline pack 20,296 / 21,000 KB, total 20,509 / 21,100 KB, code 318 / 330) |
+| `npm run audio:report` (new) | pass: 38 files measured (not heard) |
+| `npm run audio` | pass |
+| `npm run e2e` | pass |
+| `npm run faults` | pass |
+| `npm run story:e2e` | pass, incl. the new § N (chapter replay) |
+| `npm run story:sweep` | pass |
+| `npm run story:route` | pass: whole case + all 21 chapter routes |
+| `npm run offline:tour` (new) | pass: whole case offline on the production build; Roberto's moods win→delighted, loss→thinking on all seven hands; 0 network requests, 0 page errors |
+| `npm run smoke` | pass |
+| `npm run pwa` | pass (13 scenarios; pack 20,782,609 B after retiring the slide sounds) |
+| `npm run matches` | pass (run at the start of this stage; nothing since touches rules or AI) |
+
+Not re-run: `qa` / `a11y` (no layout change; the results sheet gained only a `data-mood` attribute), `perf`.
+
+### Not verified (honestly)
+
+- **Listening:** no audio output here. Track transitions, loop seams, levels, the trimmed clips and the
+  knocks' character were measured, **not heard**. The owner's listening pass remains open.
+- **Browsers and devices:** Firefox, WebKit/Safari, and real phones/tablets were not available; phone,
+  tablet and desktop were emulated viewports in Chromium.
+- **Human pacing:** bot timing only; the 90–110 minute target still needs real playtests.
+
 ## Next stage
 
 The detailed list is in `docs/STORY_BUILD_STATUS.md`:
-- **Offline caching of the studio credit** (next, as planned): it is not cached yet;
+- **the owner's listening pass** (transitions, seams, levels, trimmed clips, knocks), using `npm run audio:report`
+  as the measured reference;
+- real-device checks of full offline storage and the whole game (iOS Safari install/eviction, Android Chrome,
+  Firefox), e.g. by repeating `npm run offline:tour`'s route by hand;
 - Finish Hand with AI assistance, and skip with recap;
 - version alignment (package vs release notes);
 - release reconciliation and the handoff document.

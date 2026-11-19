@@ -102,6 +102,13 @@ v0.2, committed to `main` by the owner as 242ee60). The general project log stay
 | | Evidence list: verbatim on-screen captions of six approved evidence beats, shown only once reached (no spoilers, no new save field) | ✅ |
 | | Version alignment (package vs release notes) | ☐ |
 | | Representative human playtest timing (target 90–110 min, under 120) | ☐ |
+| **Full-game audit (2026-11-19)** | The whole case through the real UI on the production build, **offline after a cold relaunch** (`npm run offline:tour`): intro, every scene, seven hands, inserts, end cards, Case complete, resume, achievements, four screen sizes, rotation; 0 network requests | ✅ (Chromium) |
+| | Audio map deliberate and enforced: every shipped sample has a caller (the unused slide stand-ins retired); every scene's music and bed sampled against its profile in the live build | ✅ |
+| | No celebratory result cue after the serious hands (Chapters 5, 6, 7), including replays; toasts never over Story | ✅ |
+| | Knock motifs on the audio clock offline: 0.62 s apart, the answer 1.15 s after the third; the pass knock is a different recording | ✅ |
+| | Roberto's table moods follow his side in Story (never laughing at Vale's domino) | ✅ |
+| | Chapter replay through the case file (one run on a double tap; nothing persisted changes) | ✅ |
+| | Measured audio audit (`npm run audio:report`): loudness, peaks, dead air, cut-off tails, seams; the beyond-knock's 1.2 s of dead air removed (audio bit-identical) | ✅ measured, **not heard** |
 
 ## Verification (audio stage, Chromium only)
 
@@ -143,8 +150,9 @@ stage entry of `docs/BUILD_STATUS.md` and `docs/AUDIO.md` § Verification.
 ## Next stage
 
 1. **Owner listening pass** on `/dev/audio-audition.html` (headphones and speakers): approve or
-   swap the selected SFX, audition the five bed seams, set levels; record `auditioned` / `final`
-   in the manifest (via `scripts/build-audio.py`).
+   swap the selected SFX, audition the five bed seams, the owner's trimmed slam/drop clips, the track
+   transitions and levels; record `auditioned` / `final` in the manifest (via `scripts/build-audio.py`).
+   `npm run audio:report` gives the measurements to compare against.
 2. **The interrupted resilience items:**
    - update-time save retry / proceed;
    - bounded music recovery;

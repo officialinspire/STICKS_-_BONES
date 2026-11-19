@@ -31,6 +31,8 @@
     "audio:owner": "python3 scripts/build-owner-audio.py",
     "audio:owner:check": "python3 scripts/build-owner-audio.py --check",
     "pwa": "tsx scripts/pwa.ts",
+    "offline:tour": "tsx scripts/offline-tour.ts",
+    "audio:report": "python3 scripts/audio-report.py",
     "matches": "tsx scripts/matches.ts",
     "smoke": "tsx scripts/smoke.ts",
     "qa": "tsx scripts/qa.ts",

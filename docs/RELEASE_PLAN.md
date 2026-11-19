@@ -1,0 +1,62 @@
+# Release plan
+
+Four release stages, each shipped to `main` and GitHub Pages on its own. Every stage follows the contract
+and ends with the same checklist. Status is updated in this file and in `docs/BUILD_STATUS.md` at the end of
+each stage, with the commands actually run and their actual results.
+
+## Release contract (applies to every stage)
+
+1. **Small, scoped edits.** Change only what the stage needs; no drive-by rewrites. Resolve merges
+   semantically — never replace a whole file with one branch's version.
+2. **Reuse existing systems.** Extend the session/controller, the audio manager, the PWA controller, the
+   menu pagination (`menu-pages`), the story director and the test suites instead of adding parallel ones.
+3. **Immutable source assets.** Never edit, rename, re-encode or overwrite files in `assets/art/` or
+   `assets/audio/originals/`; derivatives are rebuilt by their scripts and verified (`npm run assets:verify`).
+4. **No fabricated verification.** Report only checks that ran, with their real results. A check that could
+   not run (no browser, no audio output, no device) is recorded as **not run** with the reason. Never claim a
+   deployment before it is observed live.
+5. **Meaningful regression coverage.** Every defect fixed gets a focused test that fails without the fix
+   (unit or real-browser), added to an existing suite where one fits.
+6. **Preserve the product.** The approved script verbatim, seven chapters with one hand each, every
+   win/loss/tie outcome, fair AI, versioned saves, Quick Play and two-player pass-and-play.
+
+## End of every stage (checklist)
+
+- [ ] Status and results updated here and in `docs/BUILD_STATUS.md`.
+- [ ] AGENTS-required checks run: `check`, `e2e`, `qa`, `a11y`, `story:e2e`, `story:sweep`, `story:route`,
+      `faults`, `audio`, `pwa`, `offline:tour`, `matches`, `smoke` (each recorded as pass / fail / not run).
+- [ ] Review branch pushed (no force-push).
+- [ ] CI (`.github/workflows/ci.yml`) green on the branch.
+- [ ] Merged into the **latest** `main` (re-merge and re-check if `main` moved).
+- [ ] Pages deployment (`deploy-pages.yml`, "Deploy to GitHub Pages") succeeded for the merge commit.
+- [ ] Deployed `<html data-build>` equals the first 12 characters of the deployed `main` SHA.
+- [ ] Live startup verified on the deployed URL (start screen → menu).
+- [ ] If blocked: the pushed work stays on its branch and the exact blocker is reported. Failing code is
+      never published.
+
+## Stages
+
+### Stage 1 — Integrate outstanding work into `main` (2026-11-19)
+
+Scope: on a clean review branch from current `main`, integrate `claude/inspiring-bardeen-4yfmu5`.
+- Keep `main`'s viewport-bound menu pagination, setup values and saved-data recovery notices.
+- Keep the branch's full offline storage (whole-game pack, intro-video caching, verification, ranges),
+  the Story result-cue policy (none after Chapters 5–7) and Roberto's corrected table reactions.
+
+Status: see `docs/BUILD_STATUS.md` → "Stage 1 — integration".
+
+- [x] Review branch `claude/stage-1-release-integration` from `main` (f89914d); branch merged with
+      semantic conflict resolution (4 files).
+- [ ] End-of-stage checklist (above).
+
+### Stage 2 — not yet defined
+
+The owner has not supplied this stage's scope. It inherits the contract and the checklist above.
+
+### Stage 3 — not yet defined
+
+The owner has not supplied this stage's scope. It inherits the contract and the checklist above.
+
+### Stage 4 — not yet defined
+
+The owner has not supplied this stage's scope. It inherits the contract and the checklist above.

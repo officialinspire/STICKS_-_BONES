@@ -25,11 +25,18 @@ export interface SceneProfile {
   readonly handTrack: TrackId | null;
   readonly handDuck: number;
   readonly handBedLevel: number;
+  /**
+   * Whether the hand's musical result cue (round won / lost or blocked) may play. Withheld where the hand ends
+   * inside a serious moment: Chapters 5 and 6 are deliberately music-free hands (the jungle; the rest area after
+   * the encounter), and Chapter 7's hand is the public confrontation with Vale (docs/STORY_SCRIPT.md §5:
+   * nothing playful during an emotionally serious card). The table sounds still play.
+   */
+  readonly resultCue: boolean;
 }
 
 export type StoryProfileId = 'prologue' | 'chapter-1' | 'chapter-2' | 'chapter-3' | 'chapter-4' | 'chapter-5' | 'chapter-6' | 'chapter-7' | 'epilogue';
 
-const p = (track: TrackId | null, duck: number, bed: BedId | null, bedLevel: number, handTrack: TrackId | null, handDuck: number, handBedLevel: number): SceneProfile => ({ track, duck, bed, bedLevel, handTrack, handDuck, handBedLevel });
+const p = (track: TrackId | null, duck: number, bed: BedId | null, bedLevel: number, handTrack: TrackId | null, handDuck: number, handBedLevel: number, resultCue = true): SceneProfile => ({ track, duck, bed, bedLevel, handTrack, handDuck, handBedLevel, resultCue });
 
 export const PROFILES: Readonly<Record<StoryProfileId, SceneProfile>> = {
   // Dream at the waterfall: no music at all; a very low cave bed so the knocks are the loudest thing.
@@ -44,12 +51,12 @@ export const PROFILES: Readonly<Record<StoryProfileId, SceneProfile>> = {
   // track stays (lower) through the hand, so nothing switches between dialogue and table.
   'chapter-4': p('promenade', 0.5, 'amb-promenade', 0.75, 'promenade', 0.35, 0.6),
   // Jungle camp: close and humid; no music.
-  'chapter-5': p(null, 0, 'amb-jungle', 0.85, null, 0, 0.6),
+  'chapter-5': p(null, 0, 'amb-jungle', 0.85, null, 0, 0.6, false),
   // Cave: the suspense bed, low so the water and the authored knocks stay the loudest sudden events, until the
   // cut to the entrance rest area (`music-off`). The hand is at the rest area: no music, the water bed only.
-  'chapter-6': p('threshold', 0.4, 'amb-cave', 0.75, null, 0, 0.5),
+  'chapter-6': p('threshold', 0.4, 'amb-cave', 0.75, null, 0, 0.5, false),
   // Corporate terrace: polished, uncomfortable murmur; the table track is thin and low for the hand.
-  'chapter-7': p(null, 0, 'amb-terrace', 0.8, 'gameplay', 0.35, 0.6),
+  'chapter-7': p(null, 0, 'amb-terrace', 0.8, 'gameplay', 0.35, 0.6, false),
   // Home patio after the case: the patio track returns softly.
   epilogue: p('menu', 0.4, 'amb-patio', 0.6, 'gameplay', 0.5, 0.45),
 };

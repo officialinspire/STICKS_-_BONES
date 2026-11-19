@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { RESULT_CUE_SAMPLE } from './manager';
+import { readFileSync } from 'node:fs';
+import { ACCENT_SAMPLES, RESULT_CUE_SAMPLE } from './manager';
 import { ALL_SAMPLES, MOTIF, sampleUrl, samplesFor, VARIANTS } from './sounds';
 import owner from '../assets/owner-audio.json';
 
@@ -7,6 +8,15 @@ describe('the sound bank the game asks for', () => {
   it('every variant, motif knock and result cue has a file in the build', () => {
     const wanted = [...Object.values(VARIANTS).flat(), ...MOTIF.knocks, MOTIF.beyond, ...Object.values(RESULT_CUE_SAMPLE)];
     for (const id of wanted) expect(sampleUrl(id), id).toBeTruthy();
+  });
+
+  it('every shipped sample is mapped to something the game plays, and every sound id has a caller', () => {
+    const mapped = new Set([...Object.values(VARIANTS).flat(), ...MOTIF.knocks, MOTIF.beyond, ...Object.values(RESULT_CUE_SAMPLE), ...Object.values(ACCENT_SAMPLES).flat()]);
+    expect(ALL_SAMPLES.filter((id) => !mapped.has(id))).toEqual([]); // nothing ships that never sounds
+    // UI sounds come from the click handler in main.ts (select / back / confirm); table sounds from table.ts.
+    const callers = ['src/main.ts', 'src/ui/table.ts'].map((f) => readFileSync(f, 'utf8')).join('\n');
+    for (const id of Object.keys(VARIANTS)) expect(new RegExp(`'${id}'`).test(callers), `no caller plays '${id}'`).toBe(true);
+    for (const id of ['tile-slide-1', 'tile-slide-2', 'tile-slide-3']) expect(ALL_SAMPLES).not.toContain(id); // retired: never triggered
   });
 
   it("the slam and the shuffle/deal are the owner's recordings; the retired stand-ins are gone", () => {

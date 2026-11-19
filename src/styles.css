@@ -1885,9 +1885,8 @@ summary:focus-visible {
   margin: 0 0 4px;
   font: 800 1.1rem var(--display);
 }
-.offline-sub {
-  margin: 14px 0 0;
-  font: 800 0.95rem var(--display);
+.offline-panel [hidden] {
+  display: none;
 }
 .offline-panel progress {
   display: block;

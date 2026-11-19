@@ -3,8 +3,8 @@
  * `npm run build` first), served from a GitHub-Pages-style subpath. Used by CI.
  *
  *  - The start screen loads from /STICKS_-_BONES/ with a clean console.
- *  - The manifest resolves inside the subpath; the service worker reaches
- *    "Quick Play is ready offline".
+ *  - The manifest resolves inside the subpath; after the menu, the whole-game
+ *    download completes and is verified: "Full game ready offline".
  *  - Every menu page fits in portrait, landscape, tablet and desktop viewports.
  *  - A game vs the computer is dealt and played through one complete hand.
  *  - Offline (server down + browser offline), the app restarts from cache.
@@ -27,7 +27,7 @@ if (!existsSync(join(dist, 'index.html'))) {
 const APP = '/STICKS_-_BONES/';
 const PORT = 5192;
 const ORIGIN = `http://localhost:${PORT}`;
-const TYPES: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.webp': 'image/webp', '.png': 'image/png', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
+const TYPES: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.webp': 'image/webp', '.png': 'image/png', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.mp4': 'video/mp4', '.woff2': 'font/woff2', '.txt': 'text/plain', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
 let down = false;
 const server = createServer((req, res) => {
   if (down) return void req.socket.destroy();
@@ -133,7 +133,7 @@ try {
   });
   check(manifest.start === APP && manifest.scope === APP, `manifest outside the subpath: ${JSON.stringify(manifest)}`);
   await enterMenu();
-  await page.waitForFunction(() => /Quick Play is ready offline/.test(document.querySelector('[data-region="offline-status"]')?.textContent ?? ''), null, { timeout: 90_000 }).catch(() => failures.push('offline status never became ready'));
+  await page.waitForFunction(() => /^✓ Full game ready offline/.test(document.querySelector('[data-region="offline-status"]')?.textContent ?? ''), null, { timeout: 120_000 }).catch(async () => failures.push(`offline status never reported the full game ready: "${await page.textContent('[data-region="offline-status"]').catch(() => '')}"`));
   await checkMenuViewports();
   await navigate('[data-go="setup"]');
   await page.click('.btn-start');

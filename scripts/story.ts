@@ -11,6 +11,10 @@
  *  E. Reduced motion: short simple fades, no text reveal, no establishing move.
  *  F. Orientation change and repeated navigation: no overflow, no errors, one director.
  *  G. Compositions: each staged moment from the brief, portrait 390×844 and landscape 844×390.
+ *  N. Chapter replay from the case file (Chapter 6): it starts at its first beat, plays its hand and the
+ *     insert to the end card, withholds the result cue (a serious hand), returns to the case file, and leaves
+ *     the case position, completed chapters, statistics and achievements exactly as they were; a double tap
+ *     on Replay opens ONE run.
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -20,6 +24,7 @@ import { createServer } from 'vite';
 import { insertLines, segments } from '../src/story/chapters.ts';
 import type { Scene } from '../src/story/parse.ts';
 import { STAGING } from '../src/story/staging.ts';
+import { showMenuItem } from './lib/menu-navigation';
 
 type Page = import('playwright').Page;
 const require = createRequire(import.meta.url);
@@ -605,6 +610,59 @@ try {
     check(!urls.some((u) => /resort-patio/.test(u)), 'M: the retired leisure-resort backdrop was requested');
     check(errors.length === 0, `M: page errors ${errors.join(' | ')}`);
     notes.push(`M: Chapter 3 and 7 hands over the corporate terrace (${seen.length} checks: portrait, landscape, rotated back), no patio behind them, no resort-patio request`);
+    await page.context().close();
+  }
+  // ---- N. Chapter replay: plays in full, counts nothing, changes nothing ----------------------------------
+  {
+    const { page, errors } = await newPage();
+    await toMenu(page);
+    const completed = ['prologue', 'chapter-1', 'chapter-2', 'chapter-3', 'chapter-4', 'chapter-5', 'chapter-6'];
+    await seed(page, { sceneId: 'chapter-7', part: 'pre', index: 2, completed });
+    await page.reload();
+    await page.click('.start-button');
+    await page.waitForSelector('[data-act="story"]');
+    const keys = ['sticks-and-bones.story', 'sticks-and-bones.stats', 'sticks-and-bones.achievements'];
+    const snap = () => page.evaluate((ks: string[]) => ks.map((k) => localStorage.getItem(k)), keys);
+    const before = await snap();
+    await page.click('[data-act="story"]');
+    await page.waitForSelector('.story-shell');
+    const replay = page.locator('[data-act="story-replay"][data-scene="chapter-6"]');
+    await showMenuItem(page, '[data-act="story-replay"][data-scene="chapter-6"]'); // the chapter list is paginated
+    await replay.dblclick(); // a double tap must open one run
+    await page.locator('.story-stage[data-scene="chapter-6"]:not([hidden])').first().waitFor({ timeout: 30_000 });
+    await waitState(page, 'presenting');
+    const first = await dstate(page);
+    const directors = await page.evaluate(() => document.querySelectorAll('.story-stage').length);
+    check(first?.scene === 'chapter-6' && first.index === 0 && directors === 1, `N: replay opened ${JSON.stringify(first)} with ${directors} stage(s)`);
+    const withheld0 = (await page.evaluate(`window.__sbAudio?.audio.stats.resultCuesWithheld ?? -1`)) as number;
+    const cues0 = (await page.evaluate(`window.__sbAudio?.audio.stats.resultCues ?? -1`)) as number;
+    const until = Date.now() + 240_000;
+    let outcome: string | null = null;
+    while (Date.now() < until) {
+      if (await page.locator('.end-card').count()) break;
+      if (await page.locator('[data-act="story-deal"]:visible').count()) {
+        await page.click('[data-act="story-deal"]');
+        await page.waitForSelector('.table-screen');
+        check(await playHandAtTable(page), 'N: the replayed hand did not finish');
+        outcome = await page.evaluate(() => document.querySelector('#results-title')?.textContent ?? null);
+        await page.click('dialog.results [data-act="story-hand-done"]');
+        await waitState(page, 'presenting');
+        continue;
+      }
+      await page.click('[data-act="story-next"]').catch(() => undefined);
+      await page.waitForTimeout(30);
+    }
+    const card = (await page.textContent('.end-card').catch(() => '')) ?? '';
+    const withheld = ((await page.evaluate(`window.__sbAudio?.audio.stats.resultCuesWithheld ?? -1`)) as number) - withheld0;
+    const cues = ((await page.evaluate(`window.__sbAudio?.audio.stats.resultCues ?? -1`)) as number) - cues0;
+    check(/End of Chapter 6/.test(card) && /Back to the case file/.test(card), `N: replay end card "${card.slice(0, 120)}"`);
+    check(withheld === 1 && cues === 0, `N: Chapter 6's replayed hand: ${cues} result cue(s), ${withheld} withheld (want none played)`);
+    await page.click('[data-act="story-onward"]');
+    await page.waitForSelector('.story-shell [data-act="story-continue"]', { timeout: 20_000 });
+    const after = await snap();
+    keys.forEach((k, i) => check(before[i] === after[i], `N: replay changed ${k}`));
+    check(errors.length === 0, `N: page errors ${errors.join(' | ')}`);
+    notes.push(`N: Chapter 6 replayed from the case file (double tap → one run, from beat 1): hand "${outcome}", insert, end card "Back to the case file"; result cue withheld; story position, completed chapters, statistics and achievements byte-identical afterwards`);
     await page.context().close();
   }
 } catch (e) {
