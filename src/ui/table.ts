@@ -204,7 +204,11 @@ export class TableScreen {
       // which WebKit reports as "ResizeObserver loop completed with undelivered notifications" (pwa § update).
       cancelAnimationFrame(boardFrame);
       boardFrame = requestAnimationFrame(() => {
-        if (this.#q('board')) this.#renderBoard();
+        if (!this.#q('board')) return;
+        // The board's markup is replaced: a player focused on an open end keeps focus on that same end.
+        const end = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('.end-slot.is-legal')?.dataset.end;
+        this.#renderBoard();
+        if (end) this.#root.querySelector<HTMLElement>(`.end-slot.is-legal[data-end="${end}"]`)?.focus({ preventScroll: true });
       });
     });
     this.#unsub.push(() => {

@@ -1172,14 +1172,18 @@ try {
       // (b) A held / repeating Enter: pressed during loading it starts nothing (only fresh presses count); pressed
       //     once ready it starts the credit once and can't skip it; Escape after arming skips.
       {
-        // Deterministic: hold one essential back 1.5 s from the FIRST load (a fresh context: nothing cached, no
-        // reload), so the press surely begins while the prompt is disabled.
-        const { ctx, page } = await intro('real', undefined, false, false, (p) =>
-          p.route('**/double-six-atlas*.webp', async (r: { continue(): Promise<void> }) => {
-            await new Promise((res) => setTimeout(res, 1500));
-            await r.continue();
-          }),
-        );
+        // Deterministic: hold one essential back 1.5 s on a reload, so the press surely begins while the prompt is
+        // disabled. Chromium and Firefox reload at once (while the first load is in flight: Firefox's in-memory
+        // image cache is shared across contexts, so a settled reload would get the atlas without asking the
+        // network). WebKit reloads only once settled: cancelling the dev server's module requests mid-flight makes
+        // it fail the next document's imports.
+        const { ctx, page } = await intro('real');
+        await page.route('**/double-six-atlas*.webp', async (r: { continue(): Promise<void> }) => {
+          await new Promise((res) => setTimeout(res, 1500));
+          await r.continue();
+        });
+        if (ENGINE === 'webkit') await settledReload(page);
+        else await page.reload();
         await page.waitForSelector('.start-button[disabled]');
         await page.keyboard.down('Enter');
         const until = Date.now() + 3500;
