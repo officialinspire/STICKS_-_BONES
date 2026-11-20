@@ -15,16 +15,14 @@
  *
  * Usage: npm run faults
  */
-import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
+import { engine, launchOptions } from './lib/engine';
 
 type Page = import('playwright').Page;
 type Route = { abort(code?: string): Promise<void>; continue(): Promise<void>; fulfill(o: { status: number; body?: string }): Promise<void> };
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright') as typeof import('playwright');
 const root = fileURLToPath(new URL('..', import.meta.url));
 const out = join(root, 'test-results/faults');
 mkdirSync(out, { recursive: true });
@@ -35,7 +33,7 @@ const check = (ok: boolean, msg: string) => ok || failures.push(msg);
 const server = await createServer({ root, logLevel: 'error', server: { port: 5186, strictPort: true } });
 await server.listen();
 const BASE = 'http://localhost:5186/';
-const browser = await chromium.launch();
+const browser = await engine.launch(launchOptions());
 
 async function newPage(o: { width?: number; height?: number } = {}) {
   const ctx = await browser.newContext({ viewport: { width: o.width ?? 390, height: o.height ?? 844 } });

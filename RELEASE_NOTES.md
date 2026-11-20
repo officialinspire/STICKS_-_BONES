@@ -1,6 +1,25 @@
 # STICKS & BONES — Release notes
 
-## 1.0.0-rc.2 (2026-11-17), not deployed
+## 1.0.0-rc.3 (2026-11-19), live release candidate
+
+Live at https://officialinspire.github.io/STICKS_-_BONES/ since 2026-11-19 (each deployment's build is recorded in
+`docs/RELEASE_PLAN.md`). New since rc.2:
+
+- **The whole game works offline**: one download saves everything (about 20 MB), checked file by file, with Retry,
+  progress and honest storage messages. The studio intro video plays offline too.
+- **Story help:** Finish hand with AI (labelled; the real result still moves the case on), a transcript of what
+  you've read, a short recap after Skip, and first-hand table tips you can turn off.
+- **Chapter 6** now has its own art for the rest area by the cave entrance.
+- **Evidence cards** in the case file, and a **title and credits** sequence at the end of the case.
+- **Firefox and Safari engines:** the whole release test set now runs in Firefox and WebKit as well as Chrome's
+  engine. That found and fixed: the full-game download not starting in Firefox until you answered its storage
+  prompt; a console error in Firefox while music streamed; keyboard focus getting lost when a table opened; the
+  Story scrolling sideways after rotating in WebKit; and the "Take over" button being hard to tap while the AI played.
+
+Still a release candidate: it hasn't been tried on real phones and tablets, nobody has listened through the sound,
+and the story hasn't been timed with first-time players (`docs/RELEASE_CHECKLIST.md`). Analytics stays off.
+
+## 1.0.0-rc.2 (2026-11-17), not deployed at the time
 
 New in this candidate:
 

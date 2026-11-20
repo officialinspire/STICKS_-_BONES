@@ -130,16 +130,36 @@ All are captured at DPR 2, with touch enabled below 1100 px.
 
 ## Browsers
 
-| Engine | Status |
-| --- | --- |
-| **Chromium** (Playwright build in this environment) | All of `qa`, `a11y`, `e2e` run and pass |
-| **Firefox** | **Not run.** No Firefox build is installed here, and this environment must not download Playwright browsers. Not claimed. |
-| **WebKit / Safari** | **Not run**, for the same reason. Not claimed. |
+Since Stage 4 every browser suite runs in **Chromium, Firefox and WebKit** (`SB_BROWSER`, `scripts/lib/engine.ts`);
+the exact builds and results of the latest run are in `docs/BUILD_STATUS.md` → "Stage 4 — release workflow". These are
+Playwright's headless engines under emulation. WebKit here is not Safari on iOS, and none of this is a real device.
 
-The suites take the browser from `playwright`, so running them under Firefox
-and WebKit on a machine that has them means changing the `chromium` import.
+## Release workflow (Stage 4)
+
+- **Run it:** `npm run release` (all engines; `--engines firefox`, `--suites smoke,e2e`, `--resume` to rerun only
+  what did not pass), or GitHub → Actions → **Release suites** → Run workflow (one job per engine; artifacts
+  `release-<engine>`).
+- **What it runs:** `check` and `audio:report` once; then per engine `smoke`, `release:sweep`, `e2e`, `qa`, `a11y`,
+  `story:e2e`, `story:route`, `story:sweep`, `faults`, `audio`, `matches`, `pwa`, `offline:tour`. Together they cover
+  every mode, full Story routes (all 21 chapter outcomes), save and update failures, cold offline starts, audio,
+  layout and accessibility, at portrait / short landscape / tablet / desktop sizes, large text, rotation and
+  background/resume.
+- **Report:** `test-results/release/report.md` and `report.json`: commit, Playwright, Node, OS, the browser builds
+  (from the launched browsers), each suite's result and time, and the checks an engine's harness could not perform.
+- **Adapting, never weakening:** where Playwright cannot do something in an engine, the suite calls `unsupported()`
+  and the report lists it; it is never counted as a pass. Current entries: DevTools-only emulation in Firefox and
+  WebKit (safe-area insets, storage quota override, stopping service workers, installability, and WebKit's browser
+  text size); WebKit's broken offline emulation during navigation (the origin is made unreachable instead, so the app
+  still has no network); layout-shift and long-task entries where the engine lacks them (reported as unmeasured,
+  never as 0); and WebKit's report of same-origin requests cancelled by a navigation, allowed only for exactly that
+  message on our own origin.
+- **Machine requirements:** Playwright 1.63.0 with its Chromium, Firefox and WebKit builds; `ffmpeg` and `numpy` for
+  `audio:report`; an **audio output device** (a PulseAudio null sink is enough). Headless Firefox cannot start an
+  AudioContext without one, which made every audio check fail before the sink was added.
 
 ## Real-device tests still needed (none of these happened)
+
+The short version to run is `docs/RELEASE_CHECKLIST.md` (devices, listening, pacing).
 
 - **iPhone (Safari, notch + home indicator):**
   - portrait and landscape safe areas;

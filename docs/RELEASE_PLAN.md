@@ -113,6 +113,24 @@ Status: see `docs/BUILD_STATUS.md` → "Stage 3 — owner art, evidence cards, c
 
 Status: **complete** (this note is shipped by a docs-only follow-up merge, verified the same way).
 
-### Stage 4 — not yet defined
+### Stage 4 — Release workflow, cross-engine testing, human gates, analytics status (2026-11-19)
 
-The owner has not supplied this stage's scope. It inherits the contract and the checklist above.
+Scope (owner): a repeatable release workflow covering full Story routes, all modes, save/update failures, offline
+cold start, audio, layout and accessibility, in Chromium, Firefox and WebKit where supported (adapted to engine
+capability, never weakened or silently skipped); portrait / short landscape / tablet / desktop, large text, rotation
+and background/resume; exact browsers and builds recorded (emulation is not real-device testing). A short
+real-device/listening checklist and a three-new-player timing sheet (reading and hand time separately); no invented
+human results, no stretched story; RC status kept until real-device, listening and pacing evidence exists. Analytics
+wired only from a verified INSPIRE contract, otherwise disabled and documented. Every release suite run, failures
+fixed, README/version/release notes/QA/story status/handoff reconciled with observed results.
+
+Status: see `docs/BUILD_STATUS.md` → "Stage 4 — release workflow".
+
+- [x] Review branch `claude/stage-4-release-workflow` from `main` (`467c8ef`).
+- [x] Status and results updated (`docs/BUILD_STATUS.md` → "Stage 4"; `docs/RELEASE_RUN.md`).
+- [x] All AGENTS-required checks plus `story:route`, `offline:tour`, `audio:report` and the new `release:sweep` run in
+      Chromium, Firefox and WebKit: 38 of 41 pass; 3 WebKit failures open (recorded, not fixed, not hidden).
+- [ ] Review branch pushed; CI green; merged into the latest `main`; Pages deployment; live `data-build`; startup.
+
+Status of the release: **1.0.0-rc.3, release candidate.** Not stable: WebKit has 3 open failures, and no
+real-device, listening or pacing evidence exists.

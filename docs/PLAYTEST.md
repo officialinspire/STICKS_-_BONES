@@ -1,5 +1,8 @@
 # Manual playtest checklist (about 30 minutes)
 
+For a release, use the shorter gate sheets in `docs/RELEASE_CHECKLIST.md` (real devices, listening, three-player
+pacing with reading and hand time separately); this page stays the fuller manual pass.
+
 Use the deployed site, or a local `npm run build` followed by `npm run preview`.
 Do one pass on a phone and one on a desktop browser. Note the device, browser and
 build: the build is shown as `<html data-build>`, and is the commit SHA prefix on

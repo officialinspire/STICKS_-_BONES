@@ -10,4 +10,8 @@ declare module 'playwright' {
   export type BrowserContext = any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   export const chromium: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  export const firefox: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  export const webkit: any;
 }

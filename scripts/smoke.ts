@@ -11,14 +11,12 @@
  */
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { createRequire } from 'node:module';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { showMenuItem } from './lib/menu-navigation';
+import { engine, HARNESS, launchOptions, unsupported } from './lib/engine';
 
 type Page = import('playwright').Page;
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright') as typeof import('playwright');
 const dist = fileURLToPath(new URL('../dist/', import.meta.url));
 if (!existsSync(join(dist, 'index.html'))) {
   console.error('smoke: dist/ is missing — run npm run build first');
@@ -46,7 +44,7 @@ await new Promise<void>((r) => server.listen(PORT, r));
 
 const failures: string[] = [];
 const check = (ok: boolean, msg: string) => ok || failures.push(msg);
-const browser = await chromium.launch();
+const browser = await engine.launch(launchOptions());
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
 const page: Page = await ctx.newPage();
 const problems: string[] = [];
@@ -163,7 +161,8 @@ try {
   check(finished, 'a hand vs the computer did not finish');
   // Offline restart from the cache.
   down = true;
-  await ctx.setOffline(true);
+  if (HARNESS.offlineNavigation) await ctx.setOffline(true);
+  else unsupported('smoke', 'browser-wide offline emulation during the offline restart', 'Playwright WebKit fails navigations under setOffline; the origin is unreachable instead (no network for the app)');
   await page.reload();
   await enterMenu();
   await page.evaluate(() => {

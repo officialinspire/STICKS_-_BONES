@@ -439,7 +439,13 @@ export class PwaController {
       this.#set({ full: j });
       return j;
     }
-    if (explicit) this.#autoTries = 0;
+    if (explicit) {
+      this.#autoTries = 0;
+      // Ask to keep the files on the player's own tap (while the tap still counts as a gesture), but never wait for
+      // the answer: Firefox shows a permission prompt and its promise stays pending until the player responds, so
+      // awaiting it left Download and Retry doing nothing for anyone who ignored or dismissed that prompt.
+      void navigator.storage?.persist?.().catch(() => false);
+    }
     const needed = Math.max(0, st.totalBytes - st.goodBytes);
     const storage = await this.#estimate();
     if (storage.free !== null && storage.free < needed * 1.1) {
@@ -447,7 +453,6 @@ export class PwaController {
       this.#set({ full: j, storage });
       return j;
     }
-    if (explicit) await navigator.storage?.persist?.().catch(() => false);
     this.#lastProgress = Date.now();
     this.#downloading = true;
     this.#set({ full: { kind: 'running', progress: { phase: 'download', done: st.good, total: st.totalFiles, bytesDone: st.goodBytes, bytesTotal: st.totalBytes } } });

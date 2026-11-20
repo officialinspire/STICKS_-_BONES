@@ -61,6 +61,11 @@ ORIGINALS = [
     ('Round Win Stinger (Alt).mp3', 'alternative', 'result-win'),
     ('Round Win Stinger (Alt)(1).mp3', 'duplicate', 'result-win'),
     ('Round Other (Musical Shrug).mp3', 'cue-source', 'result-other'),
+    # Uploaded 2026-11-19 (13bfd0a): candidates for the case-complete cue (brief: 6–10 s). Catalogued untouched; not
+    # built or wired until one is chosen by ear (then it goes in ENDINGS as 'cue-source'). Edited Take 1 is 8.5 s.
+    ('Sticks & Bones Epilogue Resolution (Edited Take 1).mp3', 'candidate', 'case-complete'),
+    ('Sticks & Bones Epilogue Resolution (Take 2).mp3', 'candidate', 'case-complete'),
+    ('Sticks & Bones Epilogue Resolution.mp3', 'candidate', 'case-complete'),
 ]
 SFX = {
     'tile-slam-owner-1': ('Clear Crisp Slap as Domino Is Slammed onto Table Take 1.mp3', 'emphatic slam (owner recording: a real domino slapped onto a table)'),

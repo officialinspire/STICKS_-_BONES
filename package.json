@@ -1,7 +1,7 @@
 {
   "name": "sticks-and-bones",
   "private": true,
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0-rc.3",
   "description": "STICKS & BONES — traditional Puerto Rican dominoes hosted by Roberto aka Cousin.",
   "type": "module",
   "engines": {
@@ -40,7 +40,9 @@
     "perf": "tsx scripts/perf.ts",
     "perf:story": "tsx scripts/story-perf.ts",
     "e2e": "tsx scripts/e2e.ts",
-    "ai:tournament": "tsx scripts/ai-tournament.ts"
+    "ai:tournament": "tsx scripts/ai-tournament.ts",
+    "release": "tsx scripts/release.ts",
+    "release:sweep": "tsx scripts/release-sweep.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

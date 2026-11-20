@@ -41,7 +41,7 @@ v0.2, committed to `main` by the owner as 242ee60). The general project log stay
 | | 2. Bounded music recovery after a gesture or reconnection | **Not done** |
 | | 3. AI worker resilience (error, messageerror, timeout, cancellation) | **Not done** |
 | | 4. PWA base-path build warning | **Rechecked and resolved:** the `new URL('../', import.meta.url)` resolver is deliberately runtime-resolved; marked `/* @vite-ignore */` with the reason, and the build no longer warns. The production-subpath behaviour is checked by `npm run smoke` and `npm run pwa`. |
-| | 5. Contradictory status docs and version labels | **Partly done:** this file plus the Stage 12 entries. **Still open:** package version 0.1.0 vs "1.0.0 release candidate" in `RELEASE_NOTES.md` / `RELEASE_HANDOFF.md` (see Next stage). |
+| | 5. Contradictory status docs and version labels | **Done (Stage 4):** package, README, release notes, changelog and handoff all say 1.0.0-rc.3, live, release candidate. |
 | **Stage 12: visual identity and responsive interface** | Design tokens with verified contrast (`src/ui/tokens.ts`, `docs/DESIGN.md`) | ✅ |
 | | Wordmark: vector master, monochrome, compact, accessible text; domino ampersand | ✅ |
 | | Fonts: Bricolage Grotesque + DM Sans, OFL verified and shipped, Spanish subset, metric fallbacks, tabular scores | ✅ |

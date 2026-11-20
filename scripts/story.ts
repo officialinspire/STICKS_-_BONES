@@ -30,7 +30,6 @@
  *     on Replay opens ONE run.
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
@@ -41,10 +40,9 @@ import { EVIDENCE } from '../src/story/evidence.ts';
 import { playerCaption } from '../src/story/captions.ts';
 import { showMenuItem } from './lib/menu-navigation';
 import { CREDITS } from '../src/story/credits.ts';
+import { engine, launchOptions } from './lib/engine';
 
 type Page = import('playwright').Page;
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright') as typeof import('playwright');
 const root = fileURLToPath(new URL('..', import.meta.url));
 const out = join(root, 'test-results/story');
 mkdirSync(out, { recursive: true });
@@ -58,7 +56,7 @@ const check = (ok: boolean, msg: string) => ok || failures.push(msg);
 const server = await createServer({ root, logLevel: 'error', server: { port: 5188, strictPort: true } });
 await server.listen();
 const BASE = 'http://localhost:5188/';
-const browser = await chromium.launch();
+const browser = await engine.launch(launchOptions());
 
 async function newPage(o: { width?: number; height?: number; reduce?: boolean; blockImages?: boolean; storySeed?: string } = {}) {
   const ctx = await browser.newContext({ viewport: { width: o.width ?? 390, height: o.height ?? 844 }, reducedMotion: o.reduce ? 'reduce' : 'no-preference', deviceScaleFactor: 2 });
@@ -328,7 +326,8 @@ try {
       if (m.castVisible) check(m.castUp <= 1.6, `G ${vp.name} ${name}: cast portrait upscaled ×${m.castUp} (blurry)`);
       check(m.faceCover <= 1, `G ${vp.name} ${name}: the dialogue panel covers the speaker's face by ${m.faceCover.toFixed(0)}px`);
       check(m.underBar <= 1, `G ${vp.name} ${name}: the speaker's head is under the scene bar by ${m.underBar}px`);
-      check(m.intoControls <= 0, `G ${vp.name} ${name}: the speaker reaches below the dialogue panel by ${m.intoControls}px`);
+      // 0.01 px: Firefox lays out in 1/60 px units, so equal edges can differ by float noise (1.5e-5 px measured).
+      check(m.intoControls <= 0.01, `G ${vp.name} ${name}: the speaker reaches below the dialogue panel by ${m.intoControls}px`);
       if (id === 'chapter-6' && name === 'cave-accepted-hand') check(m.env === 'env.rest-area', `G: chapter 6 rest-area beat shows ${m.env}, expected env.rest-area (never the ancient platform)`);
       // The resort and the confrontation are the approved corporate terrace (never the retired leisure patio).
       if (id === 'chapter-3' || id === 'chapter-7') check(m.env === 'env.executive-terrace', `G ${vp.name} ${name}: ${id} shows ${m.env}, not the corporate terrace`);

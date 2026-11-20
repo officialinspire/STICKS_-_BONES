@@ -13,7 +13,6 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PNG } from 'pngjs';
@@ -22,12 +21,21 @@ import { countBlobs } from './lib/raster.ts';
 import { getAsset } from '../src/assets/index.ts';
 import { bustBox, stageFor } from '../src/render/stage.ts';
 import { showMenuItem } from './lib/menu-navigation';
+import { engine, ENGINE, isWebkitNavigationCancel, launchOptions, unsupported } from './lib/engine';
+
+/**
+ * Reload once the page's own requests have settled. None of these tests means to interrupt a load (they reload
+ * mid-hand or mid-dialogue, which is app state, not network); a reload that cancels the dev server's module requests
+ * mid-flight makes WebKit fail the next document's imports ("Importing a module script failed"), dev server only.
+ */
+async function settledReload(page: Page): Promise<void> {
+  await page.waitForLoadState('networkidle').catch(() => undefined);
+  await page.reload();
+}
 
 type Page = import('playwright').Page;
 type Ctx = { message: string; type(): string; text(): string };
 
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright') as typeof import('playwright');
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const outDir = process.argv[2] ?? join(root, 'test-results/e2e');
@@ -41,23 +49,23 @@ const check = (ok: boolean, msg: string) => {
 const server = await createServer({ root, logLevel: 'error', server: { port: 5199, strictPort: true } });
 await server.listen();
 const BASE = 'http://localhost:5199/';
-const browser = await chromium.launch();
+const browser = await engine.launch(launchOptions());
 
 async function newPage(viewport: { width: number; height: number }, dsf = 1, opts: { blockedImages?: boolean } = {}): Promise<Page> {
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: dsf });
   const page = await ctx.newPage();
-  page.on('pageerror', (e: Ctx) => failures.push(`page error: ${e.message}`));
+  page.on('pageerror', (e: Ctx) => (isWebkitNavigationCancel('e2e', e.message) || failures.push(`page error: ${e.message}`)));
   page.on('console', (m: Ctx) => {
     // When a test deliberately blocks images, the browser's own load errors are expected.
     if (opts.blockedImages && /Failed to load resource/.test(m.text())) return;
-    if (m.type() === 'error') failures.push(`console error: ${m.text()}`);
+    if (m.type() === 'error' && !isWebkitNavigationCancel('e2e', m.text())) failures.push(`console error: ${m.text()}`);
   });
   return page;
 }
 
 /** Load the app and pass the start screen (and the studio intro, if any) to reach the menu. */
 async function enterMenu(page: Page, reload = false) {
-  if (reload) await page.reload();
+  if (reload) await settledReload(page);
   else await page.goto(BASE);
   await page.click('.start-button');
   // The studio credit: Skip arms once the start gesture is released (the gesture itself can't skip).
@@ -175,8 +183,13 @@ async function playRound(page: Page, label: string, opts: { checkHidden?: boolea
     if (await legal.count()) {
       if (!(await tryClick(legal.first()))) continue;
       const slots = page.locator('.end-slot.is-legal');
+      // The rule: a SELECTED legal tile shows at least one legal end. (A click can land on a tile the computer's
+      // move just re-rendered away — WebKit is slow enough to show it — so the selection is checked, not assumed.)
+      await slots.first().waitFor({ timeout: 1500 }).catch(() => undefined);
       const n = await slots.count();
-      check(n >= 1, `${label}: selecting a legal tile showed no legal end`);
+      const selected = (await page.locator('.hand-tile.is-selected').count()) > 0;
+      check(n >= 1 || !selected, `${label}: selecting a legal tile showed no legal end`);
+      if (!n) continue;
       if (await tryClick(opts.preferTail || actions % 2 ? slots.last() : slots.first())) actions++;
       continue;
     }
@@ -337,9 +350,12 @@ try {
     await page.screenshot({ path: join(outDir, `${label}-results.png`) });
     const title = await page.textContent('#results-title');
     const longest = await page.evaluate(() => Math.max(0, ...(window as unknown as { __lt: number[] }).__lt));
+    // Long-task entries exist only where the engine implements them: elsewhere the figure is unmeasured, not 0 ms.
+    const ltMeasurable = (await page.evaluate(() => (PerformanceObserver.supportedEntryTypes ?? []).includes('longtask'))) as boolean;
+    if (!ltMeasurable) unsupported('e2e', `main-thread long tasks during play (${label})`, `${ENGINE} does not implement the longtask performance entry`);
     const stats = await page.evaluate(() => (window as unknown as { __sb: { session: { stats: { aiDecisions: number; staleDiscarded: number } } } }).__sb.session.stats);
     check(longest < 250, `${label}: main thread blocked for ${longest.toFixed(0)} ms`);
-    notes.push(`${label}: round finished after ${actions} human actions, ${stats.aiDecisions} AI decisions, longest main-thread task ${longest.toFixed(0)} ms — "${title}"`);
+    notes.push(`${label}: round finished after ${actions} human actions, ${stats.aiDecisions} AI decisions, longest main-thread task ${ltMeasurable ? `${longest.toFixed(0)} ms` : 'not measurable in this engine'} — "${title}"`);
     await page.click('[data-act="next-hand"], [data-act="new-match"]');
     await page.waitForTimeout(300);
     const meta = await page.textContent('.score-meta');
@@ -792,7 +808,7 @@ try {
     // 6d. Reduced motion: no effects, no slam, static art; controls unchanged.
     const ctx = await browser.newContext({ viewport: { width: 1366, height: 900 }, reducedMotion: 'reduce' });
     const p4 = await ctx.newPage();
-    p4.on('pageerror', (e: { message: string }) => failures.push(`page error: ${e.message}`));
+    p4.on('pageerror', (e: { message: string }) => (isWebkitNavigationCancel('e2e', e.message) || failures.push(`page error: ${e.message}`)));
     await p4.addInitScript(() => {
       const w = window as unknown as { __fx: number; __slam: number };
       w.__fx = 0;
@@ -884,13 +900,13 @@ try {
         const w = window as unknown as { __rej: string[]; __maxMedia: number; __menus: number; __sbAudio: { audio: { scene: string; playing: string | null; unlocked: boolean; levels: { muted: boolean }; activeSfx(): number; activeSfxIds(): string[] }; backend: { playingCount(): number } } };
         return { rej: w.__rej, maxMedia: w.__maxMedia, menus: w.__menus, scene: w.__sbAudio.audio.scene, playing: w.__sbAudio.audio.playing, count: w.__sbAudio.backend.playingCount(), muted: w.__sbAudio.audio.levels.muted, sfx: w.__sbAudio.audio.activeSfx(), sfxIds: w.__sbAudio.audio.activeSfxIds(), unlocked: w.__sbAudio.audio.unlocked };
       });
-    const intro = async (route: 'ok' | '404' | 'hang' | 'none' | 'reject' | 'real' | 'real-sound-refused', vp = { width: 390, height: 844 }, mobile = false, reduced = false) => {
+    const intro = async (route: 'ok' | '404' | 'hang' | 'none' | 'reject' | 'real' | 'real-sound-refused', vp = { width: 390, height: 844 }, mobile = false, reduced = false, beforeGoto?: (page: Page) => Promise<void>) => {
       const ctx = await browser.newContext({ viewport: vp, reducedMotion: reduced ? 'reduce' : 'no-preference', ...(mobile ? { isMobile: true, hasTouch: true } : {}) });
       await ctx.addInitScript('window.__name = (f) => f;'); // tsx wraps named inner functions in page callbacks
       const page = await ctx.newPage();
-      page.on('pageerror', (e: { message: string }) => failures.push(`page error: ${e.message}`));
+      page.on('pageerror', (e: { message: string }) => (isWebkitNavigationCancel('e2e', e.message) || failures.push(`page error: ${e.message}`)));
       page.on('console', (m: Ctx) => {
-        if (m.type() === 'error' && !(route !== 'ok' && /Failed to load resource|404/.test(m.text()))) failures.push(`console error: ${m.text()}`);
+        if (m.type() === 'error' && !(route !== 'ok' && /Failed to load resource|404/.test(m.text())) && !isWebkitNavigationCancel('e2e', m.text())) failures.push(`console error: ${m.text()}`);
       });
       await page.addInitScript(INSTRUMENT);
       // 'real': the bundled INSPIRE credit (assets/video/inspiresoftwareintro.mp4). 'none': the video is missing.
@@ -911,6 +927,7 @@ try {
         if (route === '404') return r.fulfill({ status: 404, body: '' });
         /* hang: never answer */
       });
+      if (beforeGoto) await beforeGoto(page);
       await page.goto(BASE);
       await page.waitForSelector('.start-button');
       return { ctx, page };
@@ -936,7 +953,7 @@ try {
       const back = await probe(page);
       check(hidden.count === 0 && back.playing === 'menu' && back.count === 1, `background/foreground: hidden ${hidden.count}, back ${back.playing}/${back.count}`);
       // Reload: back to the start screen, silent until a new gesture.
-      await page.reload();
+      await settledReload(page);
       await page.waitForSelector('.start-button');
       const reloaded = await probe(page);
       check(reloaded.count === 0 && reloaded.scene === 'init', 'reload: audio playing before the start gesture');
@@ -1006,7 +1023,7 @@ try {
     {
       const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
       const page = await ctx.newPage();
-      page.on('pageerror', (e: { message: string }) => failures.push(`page error: ${e.message}`));
+      page.on('pageerror', (e: { message: string }) => (isWebkitNavigationCancel('e2e', e.message) || failures.push(`page error: ${e.message}`)));
       let portraitTries = 0;
       let tilesDown = true;
       await page.route('**/cousin-portrait-atlas*.webp', (r: { abort(): Promise<void>; continue(): Promise<void> }) => (++portraitTries <= 2 ? r.abort() : r.continue()));
@@ -1027,7 +1044,7 @@ try {
       notes.push(`init: progress shown while loading; Cousin's portrait failed twice then loaded on retry 3; tiles failed → "${status}" with Try again; Try again → Ready. Cold ready ${coldMs} ms (incl. backoff)`);
       // Warm: everything from the HTTP cache. Ready as soon as decoding finishes — no artificial wait.
       const t1 = Date.now();
-      await page.reload();
+      await settledReload(page);
       await page.waitForFunction(() => !(document.querySelector('.start-button') as HTMLButtonElement).disabled, null, { timeout: 15000 }).then((h: { dispose(): unknown }) => h.dispose());
       const warmMs = Date.now() - t1;
       check(warmMs < 4000 && (await page.textContent('.start-status')) === 'Ready.', `init: warm start took ${warmMs} ms`);
@@ -1039,7 +1056,7 @@ try {
     for (const reduced of [false, true]) {
       const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: reduced ? 'reduce' : 'no-preference' });
       const page = await ctx.newPage();
-      page.on('pageerror', (e: { message: string }) => failures.push(`page error: ${e.message}`));
+      page.on('pageerror', (e: { message: string }) => (isWebkitNavigationCancel('e2e', e.message) || failures.push(`page error: ${e.message}`)));
       await page.addInitScript(INSTRUMENT);
       await page.addInitScript(() => ((window as unknown as { __sbIntroVideo: null }).__sbIntroVideo = null)); // the text credit
       await page.goto(BASE);
@@ -1155,13 +1172,18 @@ try {
       // (b) A held / repeating Enter: pressed during loading it starts nothing (only fresh presses count); pressed
       //     once ready it starts the credit once and can't skip it; Escape after arming skips.
       {
+        // Deterministic: hold one essential back 1.5 s on a reload, so the press surely begins while the prompt is
+        // disabled. Chromium and Firefox reload at once (while the first load is in flight: Firefox's in-memory
+        // image cache is shared across contexts, so a settled reload would get the atlas without asking the
+        // network). WebKit reloads only once settled: cancelling the dev server's module requests mid-flight makes
+        // it fail the next document's imports.
         const { ctx, page } = await intro('real');
-        // Deterministic: hold one essential back 1.5 s, so the press surely begins while the prompt is disabled.
         await page.route('**/double-six-atlas*.webp', async (r: { continue(): Promise<void> }) => {
           await new Promise((res) => setTimeout(res, 1500));
           await r.continue();
         });
-        await page.reload();
+        if (ENGINE === 'webkit') await settledReload(page);
+        else await page.reload();
         await page.waitForSelector('.start-button[disabled]');
         await page.keyboard.down('Enter');
         const until = Date.now() + 3500;
@@ -1212,7 +1234,7 @@ try {
       {
         const { ctx, page } = await intro('real', { width: 844, height: 390 }, false, true);
         await page.evaluate(() => localStorage.setItem('sticks-and-bones.settings', JSON.stringify({ format: 'sticks-and-bones/settings', version: 3, data: { audio: { master: 0.8, music: 0.6, sfx: 0.8, voice: 0.9, ambience: 0.5, muted: true, ambienceOn: true } } })));
-        await page.reload();
+        await settledReload(page);
         await page.waitForSelector('.start-button:not([disabled])');
         await page.click('.start-button');
         await page.waitForSelector('video');
@@ -1546,7 +1568,7 @@ try {
     check(!!r1 && r1.counts.tiles >= 1 && r1.counts.hands === 1 && !!r1.unlocked['learn-first-tile'] && !!r1.unlocked['learn-hand'], `achievements after one hand: ${JSON.stringify(r1?.counts)}`);
     check(!JSON.stringify(r1).match(/t[0-6][0-6]/), 'achievements record must hold no tile ids');
     // Reload with the hand over: the restored table must not count the hand again.
-    await page.reload();
+    await settledReload(page);
     await enterMenu(page);
     await page.click('[data-act="resume"]');
     await page.waitForSelector('.table-screen');

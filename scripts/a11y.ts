@@ -26,10 +26,10 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { showMenuItem } from './lib/menu-navigation';
+import { engine, HARNESS, launchOptions, unsupported } from './lib/engine';
 
 type Page = import('playwright').Page;
 const require = createRequire(import.meta.url);
-const { chromium } = require('playwright') as typeof import('playwright');
 const AXE = require.resolve('axe-core/axe.min.js');
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -42,7 +42,7 @@ const check = (ok: boolean, msg: string) => ok || failures.push(msg);
 const server = await createServer({ root, logLevel: 'error', server: { port: 5196, strictPort: true } });
 await server.listen();
 const BASE = 'http://localhost:5196/';
-const browser = await chromium.launch();
+const browser = await engine.launch(launchOptions());
 
 async function newPage(o: { width?: number; height?: number; reducedMotion?: 'reduce' | 'no-preference' } = {}) {
   const ctx = await browser.newContext({ viewport: { width: o.width ?? 390, height: o.height ?? 844 }, reducedMotion: o.reducedMotion ?? 'no-preference' });
@@ -462,6 +462,10 @@ try {
     { width: 390, height: 844, insets: { top: 47, bottom: 34, left: 0, right: 0 } },
     { width: 844, height: 390, insets: { top: 0, bottom: 21, left: 47, right: 47 } },
   ]) {
+    if (!HARNESS.cdp) {
+      unsupported('a11y', `safe-area insets ${vp.width}×${vp.height} (notch / home indicator)`, 'inset emulation is a DevTools (Chromium) feature; real-device checklist item 11');
+      continue;
+    }
     const page = await newPage({ width: vp.width, height: vp.height });
     const cdp = await page.context().newCDPSession(page);
     await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: vp.insets });

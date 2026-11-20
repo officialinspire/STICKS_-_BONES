@@ -38,6 +38,15 @@ missing input** is either (a) the owner's permission for a session to read
 `qa/analytics-safety.mjs`), confirming that it is the INSPIRE contract to follow,
 or (b) the five inputs below supplied directly.
 
+**Re-checked in Stage 4 (2026-11-19):** the request described the INSPIRE contract/project as authorized, so this
+session asked to attach `officialinspire/SPIRITBALL` read-only. The session's permission policy refused it again
+(classified as access outside the session's scope), and no contract, key, consent API or event list has been added
+to this repository. Nothing was inferred, copied or guessed, and the adapter stays **disabled**. What this stage did
+instead (no data leaves the device): the de-duplication tests now cover a repeated assist as well as starts, chapter
+and case completions and resumes, and a test proves dialogue, captions, hidden hands, the stock, RNG state, seeds
+and personal fields are dropped from every Story event. To unblock: allow this repository's sessions to read
+`officialinspire/SPIRITBALL` (or add it to the session), or supply the five inputs below.
+
 ## Inputs the owner must supply to turn it on
 
 1. **Service and client contract:** endpoint or SDK, and the key / project /

@@ -12,16 +12,14 @@
  * (docs/PLAYTEST.md) establish human pacing.
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 import { insertLines, segments, type Outcome } from '../src/story/chapters.ts';
 import { playerCaption } from '../src/story/captions.ts';
 import type { Scene } from '../src/story/parse.ts';
+import { engine, launchOptions } from './lib/engine';
 
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright') as typeof import('playwright');
 const root = fileURLToPath(new URL('..', import.meta.url));
 const out = join(root, 'test-results/story-route');
 mkdirSync(out, { recursive: true });
@@ -33,7 +31,7 @@ const ORDER = ['prologue', 'chapter-1', 'chapter-2', 'chapter-3', 'chapter-4', '
 
 const server = await createServer({ root, logLevel: 'error', server: { port: 5202, strictPort: true } });
 await server.listen();
-const browser = await chromium.launch();
+const browser = await engine.launch(launchOptions());
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
 await ctx.addInitScript('window.__name = (f) => f; window.__sbStoryFast = true; window.__sbIntroVideo = null;');
 const page = await ctx.newPage();

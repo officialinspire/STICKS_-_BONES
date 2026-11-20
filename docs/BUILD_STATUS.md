@@ -2379,3 +2379,93 @@ through this environment's proxy).
   measured sound, seam and loop.
 - Supplied but intentionally unused: the worker and representative portraits (optional; the script plays both as
   text and off-camera voices).
+
+## Stage 4 — release workflow, three engines, human gates, analytics status (2026-11-19)
+
+Release plan Stage 4 (`docs/RELEASE_PLAN.md`); branch `claude/stage-4-release-workflow` from `main` `467c8ef`.
+
+### Completed
+- **Release workflow:** `npm run release` (all engines; `--engines`, `--suites`, `--resume`, `--rerun`) and the
+  **Release suites** GitHub workflow (manual; one job per engine, with a virtual sound card). It runs `check` and
+  `audio:report` once, then `smoke`, `release:sweep`, `e2e`, `qa`, `a11y`, `story:e2e`, `story:route`,
+  `story:sweep`, `faults`, `audio`, `matches`, `pwa` and `offline:tour` per engine, and writes
+  `test-results/release/report.{md,json}` with the exact browser builds, Playwright, Node, OS, each result's commit
+  and every check an engine could not perform.
+- **Every suite engine-aware** (`scripts/lib/engine.ts`, `SB_BROWSER`). Gaps are recorded with `unsupported()`, never
+  counted as passes: DevTools-only emulation (safe areas, quota override, stopping workers, installability, WebKit's
+  browser text size); WebKit's broken offline emulation during navigation (the origin is made unreachable instead);
+  layout-shift and long-task entries where missing (reported unmeasured, not 0); WebKit's reports of same-origin
+  requests cancelled by navigation and of failed service-worker loads (only those exact, stackless messages).
+- **`release:sweep`** (new): every mode (Draw, Block, Partnership vs the computer, two players, Story) × 5 viewports
+  (320×568, 390×844, 568×320, 768×1024, 1366×768; touch on phones/tablets) × 100/130 % text, with a real move,
+  rotation and background/resume in each of the 50 cells, on the production build from the Pages subpath.
+- **Human gates:** `docs/RELEASE_CHECKLIST.md` — real-device checklist (4 devices × 11 checks), listening checklist,
+  three-player timing sheet with reading and hand time separated (from the `story:<scene>:<phase>` measures). No
+  results are filled in: none exist.
+- **Analytics:** still disabled. Attaching `officialinspire/SPIRITBALL` was refused by the session permission
+  policy; nothing was inferred. De-duplication tests now cover repeated assists; a test proves dialogue, captions,
+  hands, stock, RNG state, seeds and personal fields never pass the sanitizer.
+- **Docs reconciled:** 1.0.0-rc.3 (package, README, release notes, changelog, handoff, QA, story status, AGENTS).
+
+### Defects found by running Firefox and WebKit, fixed
+| Engine | Defect | Fix | Regression test |
+| --- | --- | --- | --- |
+| Firefox | Download / Retry never started: `downloadAll` awaited `navigator.storage.persist()`, which Firefox keeps pending until its prompt is answered | persistence is requested on the tap but not awaited | `pwa` step 7 models an unanswered prompt in every engine (fails without the fix in Chromium too) |
+| Firefox | console error while music streamed: the worker intercepted media range requests it couldn't answer and Firefox reported the element's normal cancellation as a failed load | uncached range requests left to the browser while online; a previous build's copy still counts as held | `release:sweep` (range-serving server) in Firefox; `pwa` step 12 in Firefox |
+| Firefox | opening a table left focus nowhere; Tab resumed past the legal tiles and left the page | the table heading takes focus when focus was lost | `a11y` keyboard section in Firefox |
+| WebKit | 133 px of sideways scroll after rotating back to portrait in Story (a figure's SVG image box) | `.story-stage { overflow-x: clip }` | `story:e2e` § F in WebKit |
+| WebKit | "Take over" rebuilt on every assisted move (a tap could miss) | controls re-render only the part that changed | `story:e2e` § O in WebKit |
+| Firefox | the board re-render moved out of the resize callback (an attempt at WebKit's ResizeObserver message, below) replaced the end-slot button keyboard focus had just moved to, so Enter did nothing | the deferred render restores focus to the same end | `a11y` keyboard section in Firefox (fails without) |
+
+Harness defects fixed on the way (not app bugs): the story Continue tap that only completes a reveal; Firefox's
+1/60-px float noise in one geometry check; a selection race in `e2e`; reloads that cancelled the dev server's module
+requests (WebKit then failed the next document's imports; e2e reloads now settle first, except the held-atlas test
+in Chromium and Firefox, whose image cache is shared across contexts); an instance-level `navigator.storage` fake that WebKit
+drops (now on the prototype); a missing audio output device (headless Firefox can't start an AudioContext without
+one; a PulseAudio null sink is now part of the workflow).
+
+### Commands run and results
+
+Final run: `npm run release -- --resume --rerun check,smoke,release:sweep,e2e,qa,a11y` on `e73ca18`, resuming earlier
+results; the full table with each result's commit and every unsupported check is `docs/RELEASE_RUN.md` (a copy of
+`test-results/release/report.md`). Machine: Playwright 1.63.0, Node 22.23.4, Linux x64; **Chromium 153.0.8010.12,
+Firefox 155.0, WebKit 26.6** (headless, emulated viewports/touch/text; not devices).
+
+| | `check` | `audio:report` | smoke | release:sweep | e2e | qa | a11y | story:e2e | story:route | story:sweep | faults | audio | matches | pwa | offline:tour |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| (once) | pass | pass | | | | | | | | | | | | | |
+| Chromium | | | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
+| Firefox | | | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass | pass |
+| WebKit | | | pass | pass | **fail** | pass | pass | pass | pass | pass | pass | pass | pass | **fail** | **fail** |
+
+**38 of 41 pass.** Commits: `check`, every Firefox and WebKit suite except Firefox `story:e2e` (`222977d`), and Chromium
+smoke/release:sweep/e2e/qa/a11y ran on `e73ca18`; Chromium story:e2e…offline:tour and `audio:report` on `8941289`.
+The only app change between those commits is the end-slot focus restore (exercised by every rerun table suite);
+everything else is test harness. The three WebKit failures are the open items below. `check` on `e73ca18`: 556 unit
+tests in 48 files, `assets:verify`, the production build within every byte budget.
+
+### Owner uploads on `main` during the stage (unblocked, not wired)
+`13bfd0a` added three "Sticks & Bones Epilogue Resolution" MP3s (artist tag officialinspire) at the repository root,
+which `assets:verify` rejects. They were moved byte-identically to `assets/audio/originals/` and catalogued by
+`scripts/build-owner-audio.py` as **case-complete candidates** (bytes, SHA-256, decoded-audio hash, loudness):
+"Edited Take 1" 8.5 s (inside the 6–10 s brief), "Take 2" 75.3 s, the original 97.2 s. None is built or served yet:
+choosing one is a listening decision, and wiring it changes the reprise (and `story:e2e` § Q's missing-file check),
+so it belongs to the next audio stage (add it to `ENDINGS`). `check` and `smoke` pass with the catalogue; the runtime
+build is unchanged.
+
+### Open (not fixed in this stage)
+- **WebKit `offline:tour`:** in WebKit (Playwright 26.6 on Linux), offline after a cold relaunch, the table music did
+  not start in the Chapter 3 and Chapter 7 hands (Chapters 1–2 fine; Chromium and Firefox fine everywhere). The same
+  happens with `main`'s original service worker (Chapter 7), so it predates this stage. Media logging showed
+  `play()` rejected with AbortError and a `stalled` element; a retry and longer sampling did not change the outcome,
+  so neither was kept. Needs a check on real Safari (iOS and macOS) before it can be called an engine artifact or an
+  app defect.
+- **WebKit `pwa`:** "ResizeObserver loop completed with undelivered notifications" during the update step. Deferring
+  the board re-render to the next frame did not remove it (its source is another observer); the deferral is kept
+  because it is now exercised in all three engines. A benign, spec-defined notice, but reported, not filtered.
+- **WebKit `e2e`:** one page error, "Importing a module script failed", remains in WebKit on the dev server (hundreds
+  of individual modules; reloads now wait for them, which removed the others). Every other e2e check passes in
+  WebKit, and WebKit's production-build suites (`smoke`, `release:sweep`, `pwa`) pass, but the error is unexplained
+  and is reported, not filtered.
+- Real devices, listening and pacing: no human results exist (`docs/RELEASE_CHECKLIST.md`). The build stays a
+  release candidate.

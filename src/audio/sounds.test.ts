@@ -50,7 +50,11 @@ describe('the sound bank the game asks for', () => {
   });
 
   it('every upload is catalogued once; the two Stinger (Alt) copies are recorded as one recording', () => {
-    expect(owner.originals).toHaveLength(13);
+    expect(owner.originals).toHaveLength(16);
+    // The three Epilogue Resolution uploads (2026-11-19) are case-complete candidates: catalogued, never built or served.
+    const candidates = owner.originals.filter((o) => o.role === 'candidate');
+    expect(candidates.map((o) => o.for)).toEqual(['case-complete', 'case-complete', 'case-complete']);
+    expect(ALL_SAMPLES.some((id) => id.startsWith('case-complete'))).toBe(false);
     const dup = owner.originals.find((o) => o.role === 'duplicate')!;
     const of = owner.originals.find((o) => o.file === dup.duplicateOf)!;
     expect(dup.decodedPcmSha256).toBe(of.decodedPcmSha256);

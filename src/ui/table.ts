@@ -132,7 +132,7 @@ export class TableScreen {
     r.innerHTML = `
       <div class="privacy-cover" data-region="cover" hidden></div>
       <div class="table-screen" data-region="table">
-        <h1 class="sr-only">STICKS &amp; BONES — the table</h1>
+        <h1 class="sr-only" tabindex="-1" data-region="table-title">STICKS &amp; BONES — the table</h1>
         <header class="hud">
           <button type="button" class="btn-ghost" data-act="pause" aria-label="Pause — rules, settings, restart, leave">❚❚<span class="pause-text"> Pause</span></button>
           <div class="scoreboard" data-region="scores"></div>
@@ -189,6 +189,7 @@ export class TableScreen {
     });
     let lastFit = -1;
     let rowsFrame = 0;
+    let boardFrame = 0;
     this.#ro = new ResizeObserver(() => {
       // Next frame, outside the observer callback: the row change resizes the observed board.
       cancelAnimationFrame(rowsFrame);
@@ -199,7 +200,20 @@ export class TableScreen {
       if (w === lastWidth && fit === lastFit) return;
       lastWidth = w;
       lastFit = fit;
-      this.#renderBoard();
+      // Next frame as well: re-rendering the board inside the callback can resize the element being observed,
+      // which WebKit reports as "ResizeObserver loop completed with undelivered notifications" (pwa § update).
+      cancelAnimationFrame(boardFrame);
+      boardFrame = requestAnimationFrame(() => {
+        if (!this.#q('board')) return;
+        // The board's markup is replaced: a player focused on an open end keeps focus on that same end.
+        const end = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('.end-slot.is-legal')?.dataset.end;
+        this.#renderBoard();
+        if (end) this.#root.querySelector<HTMLElement>(`.end-slot.is-legal[data-end="${end}"]`)?.focus({ preventScroll: true });
+      });
+    });
+    this.#unsub.push(() => {
+      cancelAnimationFrame(rowsFrame);
+      cancelAnimationFrame(boardFrame);
     });
     this.#ro.observe(this.#q('board-wrap'));
     // Cousin: compact bust on small screens, full figure on wide ones; same stable stage either way.
@@ -239,6 +253,12 @@ export class TableScreen {
     const table = assetUrl('table.weathered');
     if (table) r.style.setProperty('--table-image', `url("${table}")`);
     this.render();
+    // The screen changed under the player's focus (the Deal button, the Story's deal card, Resume are gone): start
+    // keyboard and screen-reader navigation at the table's heading. Without this, Chromium restarts Tab from the
+    // top of the page but Firefox continues from where the removed button was — past the hand's legal tiles — and
+    // then leaves the page. A cover or dialog that took focus during the first render keeps it.
+    const a = document.activeElement;
+    if (!a || a === document.body || !a.isConnected) this.#q('table-title')?.focus({ preventScroll: true });
   }
 
   destroy(): void {
@@ -463,17 +483,30 @@ export class TableScreen {
       : `${hasDraw ? `<button type="button" class="btn" data-act="draw" ${c.draw.enabled ? '' : 'disabled'} aria-describedby="reason-0">Draw</button>` : ''}
         <button type="button" class="btn" data-act="pass" ${c.pass.enabled ? '' : 'disabled'} aria-describedby="reason-${hasDraw && reasons.length > 1 ? 1 : 0}">Pass</button>
         <div class="reasons">${reasons.map((r, i) => `<p id="reason-${i}" class="reason">${esc(r)}</p>`).join('')}${this.#status ? `<p class="status" role="status">${esc(this.#status)}</p>` : ''}</div>`;
-    this.#q('controls').innerHTML = `
-      <div class="actions">
-        ${actions}
-      </div>
-      <div class="view-tools">
+    const tools = `
         <button type="button" class="btn-ghost small" data-act="sort">${esc(SORT_LABELS[this.#sort])}</button>
         ${ends}
         <button type="button" class="btn-ghost small" data-act="zoom-out" aria-label="Zoom board out" ${this.#unit <= unitFloor() ? 'disabled' : ''}>−</button>
-        <button type="button" class="btn-ghost small" data-act="zoom-in" aria-label="Zoom board in" ${this.#unit >= UNIT_MAX ? 'disabled' : ''}>+</button>
-      </div>`;
+        <button type="button" class="btn-ghost small" data-act="zoom-in" aria-label="Zoom board in" ${this.#unit >= UNIT_MAX ? 'disabled' : ''}>+</button>`;
+    // Each part is rewritten only when its own markup changes, so a button the player is pressing is not replaced
+    // under the finger by an unrelated update (while "Finish hand with AI" plays, every move used to rebuild
+    // "Take over" — a tap whose press and release landed on two different copies did nothing).
+    const box = this.#q('controls');
+    let actionsEl = box.querySelector<HTMLElement>(':scope > .actions');
+    let toolsEl = box.querySelector<HTMLElement>(':scope > .view-tools');
+    if (!actionsEl || !toolsEl) {
+      box.innerHTML = '<div class="actions"></div><div class="view-tools"></div>';
+      actionsEl = box.querySelector<HTMLElement>(':scope > .actions')!;
+      toolsEl = box.querySelector<HTMLElement>(':scope > .view-tools')!;
+    }
+    for (const [el, html] of [[actionsEl, actions], [toolsEl, tools]] as const) {
+      if (this.#partHtml.get(el) === html) continue;
+      el.innerHTML = html;
+      this.#partHtml.set(el, html);
+    }
   }
+  /** The markup each controls part was last rendered with (see #renderControls). */
+  #partHtml = new WeakMap<HTMLElement, string>();
 
   #renderHand(v: SeatView): void {
     const el = this.#q('hand');
