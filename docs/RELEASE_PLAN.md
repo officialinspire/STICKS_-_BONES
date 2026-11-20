@@ -127,4 +127,10 @@ fixed, README/version/release notes/QA/story status/handoff reconciled with obse
 Status: see `docs/BUILD_STATUS.md` → "Stage 4 — release workflow".
 
 - [x] Review branch `claude/stage-4-release-workflow` from `main` (`467c8ef`).
-- [ ] End-of-stage checklist (above).
+- [x] Status and results updated (`docs/BUILD_STATUS.md` → "Stage 4"; `docs/RELEASE_RUN.md`).
+- [x] All AGENTS-required checks plus `story:route`, `offline:tour`, `audio:report` and the new `release:sweep` run in
+      Chromium, Firefox and WebKit: 38 of 41 pass; 3 WebKit failures open (recorded, not fixed, not hidden).
+- [ ] Review branch pushed; CI green; merged into the latest `main`; Pages deployment; live `data-build`; startup.
+
+Status of the release: **1.0.0-rc.3, release candidate.** Not stable: WebKit has 3 open failures, and no
+real-device, listening or pacing evidence exists.
