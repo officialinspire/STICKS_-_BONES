@@ -45,7 +45,9 @@ and the three-player timing sheet (reading and hand time measured separately).
 4. **Analytics** — disabled. The INSPIRE contract (`officialinspire/SPIRITBALL`) could not be read by these
    sessions (attach refused by the session permission policy); no key, consent API or event mapping was supplied.
    See `docs/ANALYTICS.md` for the five inputs.
-5. **Missing media** — case-complete music and foley (wired, silent until supplied), the optional chapter-card cue,
+5. **Missing media** — the case-complete cue is wired but silent: three candidate recordings were uploaded on
+   2026-11-19 ("Epilogue Resolution", catalogued untouched; "Edited Take 1" is 8.5 s) and one needs choosing by ear;
+   case-complete foley is still missing; the optional chapter-card cue,
    recorded domino foley for pick-up/place/slide/draw, the contractor speaker recording (caption-only by design).
 6. **Known platform limits** — iOS has no install prompt and keeps separate storage for home-screen apps; Firefox
    desktop does not install PWAs; private modes may disable offline storage; Firefox asks before keeping storage

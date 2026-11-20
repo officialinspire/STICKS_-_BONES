@@ -2444,6 +2444,15 @@ The only app change between those commits is the end-slot focus restore (exercis
 everything else is test harness. The three WebKit failures are the open items below. `check` on `e73ca18`: 556 unit
 tests in 48 files, `assets:verify`, the production build within every byte budget.
 
+### Owner uploads on `main` during the stage (unblocked, not wired)
+`13bfd0a` added three "Sticks & Bones Epilogue Resolution" MP3s (artist tag officialinspire) at the repository root,
+which `assets:verify` rejects. They were moved byte-identically to `assets/audio/originals/` and catalogued by
+`scripts/build-owner-audio.py` as **case-complete candidates** (bytes, SHA-256, decoded-audio hash, loudness):
+"Edited Take 1" 8.5 s (inside the 6–10 s brief), "Take 2" 75.3 s, the original 97.2 s. None is built or served yet:
+choosing one is a listening decision, and wiring it changes the reprise (and `story:e2e` § Q's missing-file check),
+so it belongs to the next audio stage (add it to `ENDINGS`). `check` and `smoke` pass with the catalogue; the runtime
+build is unchanged.
+
 ### Open (not fixed in this stage)
 - **WebKit `offline:tour`:** in WebKit (Playwright 26.6 on Linux), offline after a cold relaunch, the table music did
   not start in the Chapter 3 and Chapter 7 hands (Chapters 1–2 fine; Chromium and Firefox fine everywhere). The same
