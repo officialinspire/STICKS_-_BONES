@@ -900,7 +900,7 @@ try {
         const w = window as unknown as { __rej: string[]; __maxMedia: number; __menus: number; __sbAudio: { audio: { scene: string; playing: string | null; unlocked: boolean; levels: { muted: boolean }; activeSfx(): number; activeSfxIds(): string[] }; backend: { playingCount(): number } } };
         return { rej: w.__rej, maxMedia: w.__maxMedia, menus: w.__menus, scene: w.__sbAudio.audio.scene, playing: w.__sbAudio.audio.playing, count: w.__sbAudio.backend.playingCount(), muted: w.__sbAudio.audio.levels.muted, sfx: w.__sbAudio.audio.activeSfx(), sfxIds: w.__sbAudio.audio.activeSfxIds(), unlocked: w.__sbAudio.audio.unlocked };
       });
-    const intro = async (route: 'ok' | '404' | 'hang' | 'none' | 'reject' | 'real' | 'real-sound-refused', vp = { width: 390, height: 844 }, mobile = false, reduced = false) => {
+    const intro = async (route: 'ok' | '404' | 'hang' | 'none' | 'reject' | 'real' | 'real-sound-refused', vp = { width: 390, height: 844 }, mobile = false, reduced = false, beforeGoto?: (page: Page) => Promise<void>) => {
       const ctx = await browser.newContext({ viewport: vp, reducedMotion: reduced ? 'reduce' : 'no-preference', ...(mobile ? { isMobile: true, hasTouch: true } : {}) });
       await ctx.addInitScript('window.__name = (f) => f;'); // tsx wraps named inner functions in page callbacks
       const page = await ctx.newPage();
@@ -927,6 +927,7 @@ try {
         if (route === '404') return r.fulfill({ status: 404, body: '' });
         /* hang: never answer */
       });
+      if (beforeGoto) await beforeGoto(page);
       await page.goto(BASE);
       await page.waitForSelector('.start-button');
       return { ctx, page };
@@ -1171,15 +1172,14 @@ try {
       // (b) A held / repeating Enter: pressed during loading it starts nothing (only fresh presses count); pressed
       //     once ready it starts the credit once and can't skip it; Escape after arming skips.
       {
-        const { ctx, page } = await intro('real');
-        // Deterministic: hold one essential back 1.5 s, so the press surely begins while the prompt is disabled.
-        await page.route('**/double-six-atlas*.webp', async (r: { continue(): Promise<void> }) => {
-          await new Promise((res) => setTimeout(res, 1500));
-          await r.continue();
-        });
-        // Reload only once the first load has settled: a reload that cancels the dev server's module requests
-        // mid-flight makes WebKit fail the next document's imports (dev-server only; production is a few chunks).
-        await settledReload(page);
+        // Deterministic: hold one essential back 1.5 s from the FIRST load (a fresh context: nothing cached, no
+        // reload), so the press surely begins while the prompt is disabled.
+        const { ctx, page } = await intro('real', undefined, false, false, (p) =>
+          p.route('**/double-six-atlas*.webp', async (r: { continue(): Promise<void> }) => {
+            await new Promise((res) => setTimeout(res, 1500));
+            await r.continue();
+          }),
+        );
         await page.waitForSelector('.start-button[disabled]');
         await page.keyboard.down('Enter');
         const until = Date.now() + 3500;
