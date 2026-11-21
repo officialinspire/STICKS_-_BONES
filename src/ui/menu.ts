@@ -326,6 +326,7 @@ export function renderMenu(root: HTMLElement, initial: Partial<MenuChoice>, h: M
         ` }, { title: 'Layout fixtures', html: `<div class="dev-fixtures"><span>Layout fixtures:</span>
           <button type="button" class="btn-ghost small" data-fixture="max-board">Max board</button>
           <button type="button" class="btn-ghost small" data-fixture="max-hand">21-tile hand</button>
+          <button type="button" class="btn-ghost small" data-fixture="draw-hand">Long draw</button>
           <button type="button" class="btn-ghost small" data-fixture="both-ends">Both ends</button>
           <button type="button" class="btn-ghost small" data-fixture="match-point">Match point</button>
           <button type="button" class="btn-ghost small" data-fixture="match-point-solo">Match point (solo)</button>

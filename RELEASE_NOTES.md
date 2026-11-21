@@ -1,5 +1,12 @@
 # STICKS & BONES — Release notes
 
+## Update (2026-11-21), from mobile playtesting
+
+- **Draw button always reachable:** on phones held upright, drawing a long run of tiles no longer pushes the Draw
+  button under the board.
+- **Movie-style credits:** the end credits now roll up the screen like a film. Tap to pause, tap again to carry on,
+  or Skip. With reduced motion turned on they're a still list you can scroll.
+
 ## 1.0.0-rc.3 (2026-11-19), live release candidate
 
 Live at https://officialinspire.github.io/STICKS_-_BONES/ since 2026-11-19 (each deployment's build is recorded in

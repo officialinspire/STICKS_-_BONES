@@ -102,7 +102,7 @@ v0.2, committed to `main` by the owner as 242ee60). The general project log stay
 | | Evidence list: verbatim on-screen captions of six approved evidence beats, shown only once reached (no spoilers, no new save field) | ✅ |
 | **Stage 3 (2026-11-19)** | Evidence as paginated inspection cards over the owner's blank card art, text code-rendered (exact captions), every glyph on the paper at 320×568 → desktop | ✅ |
 | | Chapter 6's cut to the entrance rest area and its hand use the owner's rest-area art (both orientations) | ✅ |
-| | Epilogue: "Title and credits" → wordmark reprise + paginated credits from verified provenance → Case file; cancellable, reduced-motion instant, writes nothing | ✅ |
+| | Epilogue: "Title and credits" → wordmark reprise + paginated credits from verified provenance → Case file; cancellable, reduced-motion instant, writes nothing (credits became a rolling film reel on 2026-11-21: tap/Space pauses, Skip/Escape leaves, reduced motion shows a still scrolling list) | ✅ |
 | | Case-complete cue and foley through AudioManager (honest fallback until supplied) | ✅ wiring; **files missing** |
 | | Version alignment (package vs release notes) | ☐ |
 | | Representative human playtest timing (target 90–110 min, under 120) | ☐ |
