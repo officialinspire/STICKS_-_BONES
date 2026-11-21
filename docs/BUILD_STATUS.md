@@ -2505,8 +2505,8 @@ the Draw button became hidden/blocked; (2) the credits should roll like film cre
 | --- | --- |
 | `npm run check` | pass (byte budgets within limits) |
 | `npm run e2e` | first run 2 failures (above); after the fix: pass |
-| `npm run qa` | pass (re-run after the 72 px floor: see below) |
-| `npm run a11y` | pass (re-run after the 72 px floor: see below) |
+| `npm run qa` | pass; re-run after the 72 px floor: pass (0 failures, 0 comfort warnings) |
+| `npm run a11y` | pass; re-run after the 72 px floor: pass (0 failures) |
 | `npm run story:e2e` | pass |
 | `npm run smoke` | pass |
 
