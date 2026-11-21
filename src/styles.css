@@ -1626,6 +1626,12 @@ label.check {
     --board-min: 96px;
   }
 }
+/* 568-px phones (iPhone SE class): the first-hand tip and a full hand still fit without scrolling. */
+@media (orientation: portrait) and (max-height: 600px) {
+  .table-screen {
+    --board-min: 72px;
+  }
+}
 /* Home menu: fits a 360 × 800 phone without page scroll. */
 @media (max-width: 480px) {
   .scene {

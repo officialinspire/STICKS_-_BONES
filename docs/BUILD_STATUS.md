@@ -2469,3 +2469,46 @@ build is unchanged.
   and is reported, not filtered.
 - Real devices, listening and pacing: no human results exist (`docs/RELEASE_CHECKLIST.md`). The build stays a
   release candidate.
+
+## Mobile playtest fixes — Draw reachable on long hands; rolling credits (2026-11-21)
+
+The owner played on a phone and reported two things: (1) in portrait, after drawing many tiles the hand grew and
+the Draw button became hidden/blocked; (2) the credits should roll like film credits instead of paging.
+
+### Completed
+- **Draw button covered (defect).** `.board-wrap` had `min-height: 150px` on the element while its `.play` grid row
+  was `minmax(0, 1fr)`; once the hand switched to two rows (≥ 640 px tall) the row shrank below 150 px and the board
+  overflowed onto the controls, covering Draw. The minimum now lives on the row (`minmax(var(--board-min, 150px),
+  1fr)`; 96 px on portrait screens ≤ 700 px tall, 72 px ≤ 600 px), `.board-wrap` has `min-height: 0`, and
+  `#layoutHandRows` falls back to one scrolling row when two rows would make the table taller than the screen.
+- **Rolling credits.** `src/ui/credits.ts` now renders the wordmark, "Case complete." and every credit from
+  `src/story/credits.ts` on one reel that scrolls up at about 38 px/s (Web Animations, linear). A tap on the reel or
+  Space pauses/resumes; "Skip credits" (own header row) or Escape leaves; at the end "Back to the case file" appears
+  focused. Reduced motion: a still, scrollable list with the Back button in its own row. Still presentation-only:
+  writes nothing, achievements notices stay held while it is up, the case-complete cue is unchanged.
+- Dev fixture `draw-hand` (14-tile hand, nothing fits the open 6s, 10 in the boneyard) and a "Long draw" dev button.
+
+### Tests
+- `e2e` § 4b (new): at 390×664, 375×667, 360×640 and 320×568, Draw is hit-tested (`elementFromPoint` at its centre)
+  and tapped after every draw, at least 4 draws (hand up to 18). **Fails before the fix** (Draw covered at 390×664
+  after the hand went to two rows), passes after.
+- `story:e2e` § Q rewritten for the reel: the reel moves, Back is not visible until the end, a tap pauses (position
+  stable) and resumes, Back appears focused within 10 s (dev quick roll), every credit line present; reduced
+  motion: no movement, the last line scrolls into view, no line passes under Skip; Escape leaves with the save and
+  achievements unchanged.
+- The first full `e2e` run caught a regression from the row minimum: at 320×568 the first-hand tip pushed "Hide tips"
+  18 px below the screen. Fixed by the 72 px floor ≤ 600 px tall. The same run reported one "main thread blocked
+  553 ms" in `draw2-ai-easy-390`; it did not recur on the re-run.
+
+### Commands run and results (Chromium)
+| Command | Result |
+| --- | --- |
+| `npm run check` | pass (byte budgets within limits) |
+| `npm run e2e` | first run 2 failures (above); after the fix: pass |
+| `npm run qa` | pass (re-run after the 72 px floor: see below) |
+| `npm run a11y` | pass (re-run after the 72 px floor: see below) |
+| `npm run story:e2e` | pass |
+| `npm run smoke` | pass |
+
+Not run for this change: Firefox/WebKit suites and `npm run release` (the Stage 4 open WebKit items are unchanged).
+Real devices remain untested by these sessions; the owner's phone report is the only device evidence.
