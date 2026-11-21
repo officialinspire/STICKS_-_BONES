@@ -4,6 +4,18 @@ Details per stage are in [docs/BUILD_STATUS.md](docs/BUILD_STATUS.md) and
 [docs/STORY_BUILD_STATUS.md](docs/STORY_BUILD_STATUS.md). Release notes for players:
 [RELEASE_NOTES.md](RELEASE_NOTES.md).
 
+## Unreleased — 2026-11-21 (after mobile playtesting)
+
+### Changed
+- Epilogue credits are a film-style rolling reel (the wordmark, "Case complete." and every credit roll up the
+  screen; tap or Space pauses; Skip credits / Escape leaves; "Back to the case file" appears at the end). Reduced
+  motion shows the same credits as a still, scrollable list.
+
+### Fixed
+- Phone portrait: after drawing many tiles the hand grew into two rows and the board covered the Draw button
+  (at 640–700 px tall screens). The board's minimum height now sits on its grid row (smaller on short portrait
+  screens), and the hand falls back to one scrolling row when two rows would not fit.
+
 ## 1.0.0-rc.3 — 2026-11-19 (release candidate; live)
 
 ### Added

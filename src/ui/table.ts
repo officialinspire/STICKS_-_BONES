@@ -570,10 +570,17 @@ export class TableScreen {
     const n = scroller.children.length;
     const tileW = parseFloat(getComputedStyle(scroller).getPropertyValue('--hand-w')) || 42;
     const perRow = Math.max(1, Math.floor((scroller.clientWidth - 8 + 6) / (tileW + 6)));
-    const two = n > perRow && window.innerHeight >= 640 && window.innerHeight > window.innerWidth * 0.9;
+    let two = n > perRow && window.innerHeight >= 640 && window.innerHeight > window.innerWidth * 0.9;
     scroller.classList.toggle('two-rows', two);
     if (two) scroller.style.setProperty('--hand-cols', String(Math.ceil(n / 2)));
-    else scroller.style.removeProperty('--hand-cols');
+    // Two rows only if they fit: a long hand (many draws) must never push Draw / Pass or the board off the screen.
+    // If the table would have to scroll, keep one row that scrolls sideways instead.
+    const screen = this.#root.querySelector<HTMLElement>('.table-screen');
+    if (two && screen && screen.scrollHeight > screen.clientHeight + 1) {
+      two = false;
+      scroller.classList.remove('two-rows');
+    }
+    if (!two) scroller.style.removeProperty('--hand-cols');
     this.#handEdges();
   }
 

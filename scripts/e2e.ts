@@ -574,6 +574,33 @@ try {
     await p2.context().close();
   }
 
+  // 4b. A long draw on real phone heights (browser bars included): the hand grows past one row and Draw / Pass
+  //     must stay on screen and tappable — the board never slides over them (found on a phone, 2026-11-21).
+  for (const vp of [{ width: 390, height: 664 }, { width: 375, height: 667 }, { width: 360, height: 640 }, { width: 320, height: 568 }]) {
+    const page = await newPage(vp, 1);
+    await startMatch(page, { fixture: 'draw-hand' });
+    let draws = 0;
+    for (let i = 0; i < 8; i++) {
+      const st = await page.evaluate(() => {
+        const d = document.querySelector<HTMLButtonElement>('[data-act="draw"]');
+        if (!d) return null;
+        d.scrollIntoView({ block: 'nearest' });
+        const r = d.getBoundingClientRect();
+        const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return { disabled: d.disabled, tappable: !!top && (top === d || d.contains(top)), hit: top ? `${top.tagName}.${String((top as HTMLElement).className).slice(0, 24)}` : 'nothing', tiles: document.querySelectorAll('.hand-tile').length };
+      });
+      check(!!st && st.tappable, `long draw ${vp.width}×${vp.height}: Draw is covered or off screen after ${draws} draw(s) (${st?.tiles} tiles; a tap lands on ${st?.hit})`);
+      if (!st || st.disabled || !st.tappable) break;
+      await page.click('[data-act="draw"]');
+      draws++;
+      await page.waitForTimeout(250);
+    }
+    check(draws >= 4, `long draw ${vp.width}×${vp.height}: only ${draws} draw(s) made`);
+    await page.screenshot({ path: join(outDir, `long-draw-${vp.width}x${vp.height}.png`) });
+    if (draws >= 4) notes.push(`long draw ${vp.width}×${vp.height}: ${draws} draws (hand up to ${14 + draws - 1} tiles), Draw tappable after each`);
+    await page.context().close();
+  }
+
   // 5. Keyboard-only placement with a both-ends choice, Escape, and confirmations.
   {
     const page = await newPage({ width: 390, height: 844 });

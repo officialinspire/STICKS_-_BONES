@@ -21,8 +21,8 @@
  *     Finish hand with AI and the table tip are on screen and keyboard-reachable.
  *  Q. Evidence cards, title reprise, credits: the case file's Evidence shows ONLY reached items as cards, each
  *     with the exact approved caption, every glyph on the card art's paper (320×568 at 130 % text, 568×320,
- *     1366×768); the epilogue's "Title and credits" shows the wordmark reprise and paginated credits (every line
- *     reachable), focus on Back, a tap finishes the reveal, reduced motion skips it, Escape returns to the case
+ *     1366×768); the epilogue's "Title and credits" is a rolling reel (every credit in it, it moves, a tap pauses
+ *     it, Back appears at the end), a still scrollable list under reduced motion, Escape returns to the case
  *     file, nothing in the save changes, and the case-complete cue falls back honestly (no file supplied).
  *  N. Chapter replay from the case file (Chapter 6): it starts at its first beat, plays its hand and the
  *     insert to the end card, withholds the result cue (a serious hand), returns to the case file, and leaves
@@ -906,23 +906,51 @@ try {
       const missing0 = (await page.evaluate(`window.__sbAudio?.audio.stats.caseCompleteMissing ?? -1`)) as number;
       await page.click('.end-card [data-act="story-onward"]');
       await page.waitForSelector('.credits-screen');
-      const st = await page.evaluate(() => ({ reveal: document.querySelector<HTMLElement>('.credits-screen')!.dataset.reveal, focus: (document.activeElement as HTMLElement | null)?.dataset.act, title: !!document.querySelector('.credits-screen .wordmark'), done: document.querySelector('.credits-end')?.textContent ?? '' }));
-      check(st.reveal === (reduce ? 'done' : 'play') && st.focus === 'credits-done' && st.title && /Case complete\./.test(st.done), `Q credits ${vp.width}×${vp.height}: ${JSON.stringify(st)}`);
+      const st = await page.evaluate(() => ({ motion: document.querySelector<HTMLElement>('.credits-screen')!.dataset.motion, state: document.querySelector<HTMLElement>('.credits-screen')!.dataset.state, focus: (document.activeElement as HTMLElement | null)?.className ?? '', title: !!document.querySelector('.credits-screen .wordmark'), done: document.querySelector('.roll-complete')?.textContent ?? '', endShown: !!document.querySelector<HTMLElement>('.roll-end')!.checkVisibility?.() }));
+      check(st.motion === (reduce ? 'still' : 'roll') && st.state === (reduce ? 'still' : 'rolling') && /credits-skip/.test(st.focus) && st.title && /Case complete\./.test(st.done) && st.endShown === reduce, `Q credits ${vp.width}×${vp.height}: ${JSON.stringify(st)}`);
       const missing = ((await page.evaluate(`window.__sbAudio?.audio.stats.caseCompleteMissing ?? -1`)) as number) - missing0;
       check(missing === 1, `Q credits: the case-complete cue should report its missing file once (${missing})`);
-      await page.waitForTimeout(1500); // the seeded save's earlier-games notice is queued: it must wait for the Case file
-      check((await page.locator('.ach-toast').count()) === 0, `Q credits ${vp.width}×${vp.height}: an achievement notice covers the reprise`);
-      await page.screenshot({ path: join(out, `credits-${vp.width}x${vp.height}.png`) });
-      if (!reduce) {
-        await page.mouse.click(5, vp.height - 5);
-        check((await page.getAttribute('.credits-screen', 'data-reveal')) === 'done', 'Q credits: a tap did not finish the reveal');
-      }
+      // Every verified credit line is in the reel (whatever it is doing, so screen readers get all of them).
       for (const pg of CREDITS) for (const l of pg.lines) {
-        const sel = `.credit:has(.credit-name:text-is(${JSON.stringify(l.name)})):has(.credit-role:text-is(${JSON.stringify(l.role)}))`;
-        await showMenuItem(page, sel);
-        const b = await page.locator(sel).first().boundingBox();
-        check(!!b && b.y >= -1 && b.y + b.height <= vp.height + 1, `Q credits ${vp.width}×${vp.height}: "${l.role}" not on screen`);
+        const sel = `.roll-line:has(.roll-name:text-is(${JSON.stringify(l.name)})):has(.roll-role:text-is(${JSON.stringify(l.role)}))`;
+        check((await page.locator(sel).count()) === 1, `Q credits: "${l.role} — ${l.name}" is not in the reel`);
       }
+      const y = () => page.evaluate(() => document.querySelector('.roll-reel')!.getBoundingClientRect().top);
+      if (!reduce) {
+        // It rolls upward; a tap on the reel pauses it, another resumes; at the end the way back appears, focused.
+        const y0 = await y();
+        await page.waitForTimeout(400);
+        const y1 = await y();
+        check(y1 < y0 - 2, `Q credits: the reel is not rolling (${y0} → ${y1})`);
+        await page.click('.roll-viewport');
+        await page.waitForTimeout(150); // a Web Animation's pause takes effect on the next frame
+        const p0 = await y();
+        await page.waitForTimeout(400);
+        check((await page.getAttribute('.credits-screen', 'data-state')) === 'paused' && Math.abs((await y()) - p0) < 1, 'Q credits: a tap did not pause the reel');
+        await page.screenshot({ path: join(out, `credits-${vp.width}x${vp.height}-rolling.png`) });
+        check(!(await page.locator('.roll-end button').isVisible()), 'Q credits: the way back shows before the reel ends');
+        await page.click('.roll-viewport');
+        await page.locator('.roll-end button').waitFor({ state: 'visible', timeout: 10_000 });
+        const ended = await page.evaluate(() => ({ state: document.querySelector<HTMLElement>('.credits-screen')!.dataset.state, focus: (document.activeElement as HTMLElement | null)?.textContent ?? '' }));
+        check(ended.state === 'ended' && /Back to the case file/.test(ended.focus), `Q credits: end of the reel ${JSON.stringify(ended)}`);
+      } else {
+        // Still: nothing moves, and the last credit can be scrolled into view.
+        const s0 = await y();
+        await page.waitForTimeout(400);
+        check(Math.abs((await y()) - s0) < 1, 'Q credits: the reel moved under reduced motion');
+        const last = page.locator('.roll-line').last();
+        await last.scrollIntoViewIfNeeded();
+        const b = await last.boundingBox();
+        check(!!b && b.y >= -1 && b.y + b.height <= vp.height + 1, `Q credits ${vp.width}×${vp.height}: the last credit can't be brought on screen`);
+        // Nothing scrolls under Skip: every credit line ends up below its row.
+        const skipBottom = (await page.locator('.credits-skip').boundingBox())!.y + (await page.locator('.credits-skip').boundingBox())!.height;
+        await page.locator('.roll-viewport').evaluate((v: Element) => (v.scrollTop = v.scrollHeight / 2));
+        const under = await page.evaluate((y: number) => [...document.querySelectorAll('.roll-line, .roll-h')].some((el) => { const r = el.getBoundingClientRect(); const vr = document.querySelector('.roll-viewport')!.getBoundingClientRect(); return r.bottom > vr.top + 1 && r.top < y - 1 && r.top >= vr.top - 1; }), skipBottom);
+        check(!under, 'Q credits: scrolled credits pass under Skip');
+      }
+      await page.waitForTimeout(800); // the seeded save's earlier-games notice is queued: it must wait for the Case file
+      check((await page.locator('.ach-toast').count()) === 0, `Q credits ${vp.width}×${vp.height}: an achievement notice covers the credits`);
+      await page.screenshot({ path: join(out, `credits-${vp.width}x${vp.height}.png`) });
       await page.keyboard.press('Escape');
       await page.waitForSelector('.story-shell [data-act="story-continue"], .story-shell [data-act="story-new"]', { timeout: 10_000 });
       check(!(await page.locator('.credits-screen').count()), 'Q credits: Escape did not return to the case file');
@@ -930,7 +958,7 @@ try {
       check(errors.length === 0, `Q credits: page errors ${errors.join(' | ')}`);
       await page.context().close();
     }
-    notes.push(`Q: Evidence cards show the ${reached.length} reached items only, each the exact approved caption with every glyph on the card's paper at 320×568 (130 % text), 568×320 and 1366×768; the epilogue's "Title and credits" shows the wordmark reprise and ${CREDITS.reduce((n, p) => n + p.lines.length, 0)} credit lines across ${CREDITS.length} pages, all reachable, focus on Back, a tap finishes the reveal, reduced motion skips it, Escape returns to the case file with the save and achievements unchanged; the case-complete cue reports its file missing and nothing else plays`);
+    notes.push(`Q: Evidence cards show the ${reached.length} reached items only, each the exact approved caption with every glyph on the card's paper at 320×568 (130 % text), 568×320 and 1366×768; the epilogue's "Title and credits" rolls the wordmark, "Case complete." and all ${CREDITS.reduce((n, p) => n + p.lines.length, 0)} credit lines up the screen (focus on Skip; a tap pauses and resumes; Back appears focused at the end); reduced motion shows a still, scrollable list; Escape returns to the case file with the save and achievements unchanged; the case-complete cue reports its file missing and nothing else plays`);
   }
 } catch (e) {
   failures.push(`exception: ${(e as Error).stack ?? e}`);

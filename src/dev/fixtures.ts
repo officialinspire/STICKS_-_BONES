@@ -5,7 +5,7 @@
 import { chain, complement, craft } from '../engine/testing/craft';
 import type { MatchState } from '../engine/state';
 
-export type FixtureId = 'max-board' | 'max-hand' | 'both-ends' | 'match-point' | 'match-point-solo';
+export type FixtureId = 'max-board' | 'max-hand' | 'draw-hand' | 'both-ends' | 'match-point' | 'match-point-solo';
 
 export const FIXTURES: Record<FixtureId, { label: string; build: () => MatchState; opponent?: 'ai' }> = {
   'max-board': {
@@ -29,6 +29,18 @@ export const FIXTURES: Record<FixtureId, { label: string; build: () => MatchStat
       const opp = ['t30'];
       const mine = complement(line.map((l) => l[0]), opp);
       return craft({ mode: 'draw2', humanSeats: [0, 1], hands: [mine, opp], line, stock: [], turn: 0, opener: 1 });
+    },
+  },
+  'draw-hand': {
+    label: 'Long draw: 14 tiles, nothing fits the 6s, boneyard of 10 (keep drawing)',
+    build: () => {
+      // The 6|6 on the table; every other 6 is in the boneyard, so the player draws until one comes up.
+      const sixes = ['t61', 't62', 't63', 't64', 't65', 't60'];
+      const others = complement(['t66', ...sixes]); // the 21 tiles without a 6
+      const mine = others.slice(0, 14);
+      const opp = others.slice(14, 17);
+      const stock = [...others.slice(17), ...sixes];
+      return craft({ mode: 'draw2', humanSeats: [0, 1], hands: [mine, opp], line: [['t66', 6, 6]], stock, turn: 0, opener: 1 });
     },
   },
   'match-point': {
